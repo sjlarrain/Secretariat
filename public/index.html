@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Secretariat Config Mock</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Secretariat Configuration (Mock)</h1>
+        <p>Deploy-ready UI for Render. This is a mock settings panel in plain JavaScript.</p>
+      </header>
+
+      <section class="card">
+        <div class="status-row">
+          <span id="status-dot" class="dot"></span>
+          <p id="status-text">Checking service...</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Environment Settings</h2>
+        <form id="config-form" class="grid"></form>
+        <div class="actions">
+          <button id="save-btn" type="button">Save mock config</button>
+          <button id="reload-btn" type="button" class="secondary">Reload</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

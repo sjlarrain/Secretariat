@@ -22,6 +22,7 @@ venv/
 *.nix
 *.toml
 *.lock
+!yarn.lock
 *.replit
 *.ipynb
 *.env
@@ -29,6 +30,8 @@ venv/
 
 secrets.py
 test.py
+admin_password.txt
+data/config.json
 
 # Special
 context.md

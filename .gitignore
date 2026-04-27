@@ -1,0 +1,34 @@
+# Usual
+
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+build/
+dist/
+output/
+files/
+venv/
+
+
+*.exe
+*.pptx
+*.ppt
+*.xls
+*.xlsx
+*.db
+*.db-journal
+*.csv
+*.pdf
+*.nix
+*.toml
+*.lock
+*.replit
+*.ipynb
+*.env
+
+
+secrets.py
+test.py
+
+# Special
+context.md

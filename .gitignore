@@ -1,37 +1,21 @@
-# Usual
+# Dependencies
+node_modules/
 
-__pycache__/
-.ipynb_checkpoints/
-.vscode/
-build/
+# Build output
 dist/
-output/
-files/
-venv/
+admin/dist/
+backend/dist/
 
-
-*.exe
-*.pptx
-*.ppt
-*.xls
-*.xlsx
-*.db
-*.db-journal
-*.csv
-*.pdf
-*.nix
-*.toml
-*.lock
-!yarn.lock
-*.replit
-*.ipynb
+# Environment
+.env
 *.env
 
-
-secrets.py
-test.py
-admin_password.txt
+# Runtime data
+data/accounts.json
 data/config.json
 
-# Special
-context.md
+# Misc
+.vscode/
+__pycache__/
+*.lock
+.ipynb_checkpoints/

@@ -1,0 +1,62 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0f0f0f;
+  color: #e8e8e8;
+  min-height: 100vh;
+}
+
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-secondary { background: #374151; color: #e8e8e8; }
+.btn-ghost { background: transparent; color: #9ca3af; border: 1px solid #374151; }
+
+input, select {
+  background: #1a1a1a;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  color: #e8e8e8;
+  padding: 8px 12px;
+  font-size: 14px;
+  width: 100%;
+}
+input:focus, select:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+
+.card {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.badge-google { background: #1e3a5f; color: #60a5fa; }
+.badge-calendar { background: #14532d; color: #4ade80; }
+.badge-tasks { background: #451a03; color: #fb923c; }
+.badge-default { background: #1e1b4b; color: #a78bfa; }
+
+.error-msg { color: #f87171; font-size: 14px; margin-top: 8px; }
+.success-msg { color: #4ade80; font-size: 14px; margin-top: 8px; }

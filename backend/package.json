@@ -1,0 +1,30 @@
+{
+  "name": "secretariat-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@googleapis/calendar": "latest",
+    "@googleapis/tasks": "latest",
+    "@kapso/whatsapp-cloud-api": "latest",
+    "@upstash/qstash": "latest",
+    "chrono-node": "^2.7.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "express-session": "^1.17.0",
+    "google-auth-library": "latest",
+    "googleapis": "^171.4.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/express-session": "latest",
+    "@types/node": "latest",
+    "rimraf": "latest",
+    "tsx": "latest",
+    "typescript": "^5.0.0"
+  }
+}

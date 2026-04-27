@@ -1,15 +1,12 @@
 {
   "name": "secretariat",
   "version": "1.0.0",
-  "private": true,
-  "description": "Starter package for Render deployment",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "echo \"No build step configured\""
+    "build": "cd admin && npm install && npm run build && cd ../backend && npm install && npm run build",
+    "start": "node backend/dist/index.js",
+    "dev": "cd backend && npm run dev"
   },
   "engines": {
-    "node": ">=18"
-  },
-  "packageManager": "yarn@1.22.22"
+    "node": ">=20"
+  }
 }

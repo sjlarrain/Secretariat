@@ -10,6 +10,10 @@ import adminRouter from './admin/api';
 
 const app = express();
 
+// Render terminates TLS at its load balancer — trust the X-Forwarded-Proto header
+// so that secure session cookies are set correctly over HTTPS
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -21,6 +25,7 @@ app.use(
     cookie: {
       secure: env.NODE_ENV === 'production',
       httpOnly: true,
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     },
   })

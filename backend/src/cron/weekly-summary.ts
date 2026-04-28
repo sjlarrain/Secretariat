@@ -6,11 +6,12 @@ import { sendMessage } from '../kapso/client';
 import { whitelistedNumbers } from '../env';
 
 export async function fireWeeklySummary(): Promise<void> {
-  const settings = getSettings();
+  const settings = await getSettings();
   if (!settings.weeklySummary.enabled) return;
 
-  const calAccounts = getAllAccounts().filter((a) => a.type === 'calendar');
-  const taskAccounts = getAllAccounts().filter((a) => a.type === 'tasks');
+  const allAccounts = await getAllAccounts();
+  const calAccounts = allAccounts.filter((a) => a.type === 'calendar');
+  const taskAccounts = allAccounts.filter((a) => a.type === 'tasks');
 
   const allEvents = (
     await Promise.all(calAccounts.map((acc) => getWeekEvents(acc, settings.timezone)))

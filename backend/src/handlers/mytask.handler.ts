@@ -5,7 +5,7 @@ import { formatDate } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 
 export async function mytaskHandler(_parsed: ParsedCommand, from: string): Promise<void> {
-  const account = resolveAccount('tasks');
+  const account = await resolveAccount('tasks');
   if (!account) {
     await sendMessage(from, '❌ No Google Tasks account connected. Visit the admin panel.');
     return;

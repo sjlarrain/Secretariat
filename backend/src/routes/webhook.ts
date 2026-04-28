@@ -13,14 +13,33 @@ import { menuHandler } from '../handlers/menu.handler';
 
 const router = Router();
 
+// Dedup: track recently processed message IDs for 5 minutes
+// Prevents duplicate processing when Kapso retries while the server is waking up
+const seenMessageIds = new Map<string, number>();
+const DEDUP_TTL_MS = 5 * 60 * 1000;
+
+function isDuplicate(messageId: string | null): boolean {
+  if (!messageId) return false;
+  const now = Date.now();
+  // Clean up expired entries
+  for (const [id, ts] of seenMessageIds) {
+    if (now - ts > DEDUP_TTL_MS) seenMessageIds.delete(id);
+  }
+  if (seenMessageIds.has(messageId)) return true;
+  seenMessageIds.set(messageId, now);
+  return false;
+}
+
 router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, res: Response) => {
   // Always return 200 — Kapso retries on non-200
   res.status(200).json({ ok: true });
 
   const from = (req as WebhookRequest).senderPhone;
   const text = (req as WebhookRequest).webhookText;
+  const messageId = (req as WebhookRequest).messageId;
 
   if (!text?.trim()) return;
+  if (isDuplicate(messageId)) return;
 
   try {
     const result = parseCommand(text);

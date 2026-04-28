@@ -7,9 +7,9 @@ import { sendMessage } from '../kapso/client';
 
 export async function taskHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags } = parsed;
-  const settings = getSettings();
+  const settings = await getSettings();
 
-  const account = resolveAccount('tasks');
+  const account = await resolveAccount('tasks');
   if (!account) {
     await sendMessage(from, '❌ No Google Tasks account connected. Visit the admin panel.');
     return;

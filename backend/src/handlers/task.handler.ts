@@ -32,8 +32,8 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
       notes: flags['notes'],
     });
 
-    const duePart = dueDate ? ` due ${formatDate(dueDate)}` : '';
-    await sendMessage(from, `✅ Task created: *${flags['title']}*${duePart}`);
+    const dueLine = dueDate ? `\n📅 Due ${formatDate(dueDate)}` : '';
+    await sendMessage(from, `✅ *Task created*\n📌 ${flags['title']}${dueLine}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Could not create task: ${msg}`);

@@ -8,6 +8,8 @@ import { taskHandler } from '../handlers/task.handler';
 import { reminderHandler } from '../handlers/reminder.handler';
 import { mytaskHandler } from '../handlers/mytask.handler';
 import { myscheduleHandler } from '../handlers/myschedule.handler';
+import { ideasHandler } from '../handlers/ideas.handler';
+import { menuHandler } from '../handlers/menu.handler';
 
 const router = Router();
 
@@ -34,6 +36,9 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
       case 'start':
         await startHandler(data, from);
         break;
+      case 'menu':
+        await menuHandler(data, from);
+        break;
       case 'schedule':
         await scheduleHandler(data, from);
         break;
@@ -48,6 +53,9 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
         break;
       case 'myschedule':
         await myscheduleHandler(data, from);
+        break;
+      case 'ideas':
+        await ideasHandler(data, from);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

@@ -14,6 +14,10 @@ const envSchema = z.object({
   KAPSO_PHONE_NUMBER_ID: z.string().min(1, 'KAPSO_PHONE_NUMBER_ID is required'),
   WHITELISTED_NUMBERS: z.string().min(1, 'WHITELISTED_NUMBERS is required'),
 
+  // Upstash Redis
+  UPSTASH_REDIS_REST_URL: z.string().url('UPSTASH_REDIS_REST_URL must be a valid URL'),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1, 'UPSTASH_REDIS_REST_TOKEN is required'),
+
   // QStash
   QSTASH_TOKEN: z.string().min(1, 'QSTASH_TOKEN is required'),
   QSTASH_CURRENT_SIGNING_KEY: z.string().min(1, 'QSTASH_CURRENT_SIGNING_KEY is required'),

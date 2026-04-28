@@ -19,11 +19,11 @@ export async function mytaskHandler(_parsed: ParsedCommand, from: string): Promi
       return;
     }
 
-    const lines = ['📋 *Your pending tasks:*\n'];
-    for (const task of tasks) {
-      const due = task.dueDate ? ` — due ${formatDate(task.dueDate)}` : ' — no due date';
-      lines.push(`• ${task.title}${due}`);
-    }
+    const lines = [`📋 *Pending tasks* (${tasks.length})\n`];
+    tasks.forEach((task, i) => {
+      const due = task.dueDate ? `📅 ${formatDate(task.dueDate)}` : '_no due date_';
+      lines.push(`*${i + 1}.* ${task.title}\n    ${due}`);
+    });
 
     await sendMessage(from, lines.join('\n'));
   } catch (err) {

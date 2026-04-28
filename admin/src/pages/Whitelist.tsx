@@ -12,23 +12,43 @@ export default function Whitelist() {
     });
   }, []);
 
-  if (loading) return <p style={{ color: '#9ca3af' }}>Loading…</p>;
+  if (loading) {
+    return (
+      <div className="loading-wrap">
+        <span className="spinner" />
+        Loading…
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Whitelisted Numbers</h2>
-      <p style={{ color: '#9ca3af', fontSize: 14, marginBottom: 24 }}>
-        Only these numbers can send commands to the bot.
-      </p>
+    <div style={{ maxWidth: 520 }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>Whitelist</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
+          Only these numbers can send commands to the bot.
+        </p>
+      </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
+      {/* Numbers */}
+      <div className="card" style={{ marginBottom: 12 }}>
         {numbers.length === 0 ? (
-          <p style={{ color: '#9ca3af' }}>No whitelisted numbers.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No whitelisted numbers configured.</p>
         ) : (
-          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {numbers.map((n) => (
               <li key={n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 15, flex: 1 }}>{n}</span>
+                <span style={{ fontSize: 15 }}>📱</span>
+                <span style={{
+                  fontFamily: "'SF Mono', 'Fira Code', Consolas, monospace",
+                  fontSize: 14,
+                  flex: 1,
+                  color: 'var(--text)',
+                  letterSpacing: '0.03em',
+                }}>
+                  {n}
+                </span>
                 <span className="badge badge-default">owner</span>
               </li>
             ))}
@@ -36,14 +56,22 @@ export default function Whitelist() {
         )}
       </div>
 
-      <div className="card" style={{ background: '#1a1200', borderColor: '#422006' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, color: '#fb923c', marginBottom: 8 }}>
-          How to change whitelisted numbers
-        </h3>
-        <p style={{ fontSize: 13, color: '#9ca3af', lineHeight: 1.6 }}>
-          In v1, the whitelist is configured via the <code style={{ background: '#222', padding: '1px 6px', borderRadius: 4 }}>WHITELISTED_NUMBERS</code> environment variable.
-          Update it in your Render dashboard and redeploy to add or remove numbers.
-          Format: comma-separated E.164 numbers, e.g. <code style={{ background: '#222', padding: '1px 6px', borderRadius: 4 }}>+15550000000,+56987654321</code>
+      {/* Info box */}
+      <div className="card" style={{
+        background: 'rgba(249,115,22,0.04)',
+        borderColor: 'rgba(249,115,22,0.15)',
+        borderLeft: '3px solid var(--orange)',
+      }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 14 }}>⚙️</span>
+          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--orange)' }}>
+            How to change the whitelist
+          </span>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65 }}>
+          Update the <code>WHITELISTED_NUMBERS</code> environment variable in your Render dashboard, then redeploy.
+          Format: comma-separated E.164 numbers, e.g.{' '}
+          <code>+15550000000,+56987654321</code>
         </p>
       </div>
     </div>

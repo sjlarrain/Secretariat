@@ -8,7 +8,13 @@ export interface CommandDefinition {
 export const COMMANDS: Record<string, CommandDefinition> = {
   start: {
     name: '/start',
-    description: 'Show all available commands and their flags',
+    description: 'Wake up the bot',
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
+  menu: {
+    name: '/menu',
+    description: 'Show all available commands and syntax',
     acceptedFlags: [],
     requiredFlags: [],
   },
@@ -39,6 +45,12 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   myschedule: {
     name: '/myschedule',
     description: "Retrieve and display today's calendar events",
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
+  ideas: {
+    name: '/ideas',
+    description: 'Save or list your ideas. `/ideas <text>` to save, `/ideas` to list all.',
     acceptedFlags: [],
     requiredFlags: [],
   },

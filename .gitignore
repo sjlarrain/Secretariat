@@ -16,6 +16,7 @@ data/config.json
 
 # Misc
 .vscode/
+.claude/
 __pycache__/
 *.lock
 .ipynb_checkpoints/

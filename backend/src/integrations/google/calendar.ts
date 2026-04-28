@@ -20,7 +20,7 @@ async function getCalendarClient(account: ConnectedAccount) {
       refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
       expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
     });
-    saveAccount(account);
+    await saveAccount(account);
   }
 
   return google.calendar({ version: 'v3', auth: client });

@@ -5,10 +5,10 @@ import { sendMessage } from '../kapso/client';
 import { whitelistedNumbers } from '../env';
 
 export async function fireMorningDigest(): Promise<void> {
-  const settings = getSettings();
+  const settings = await getSettings();
   if (!settings.morningDigest.enabled) return;
 
-  const calAccounts = getAllAccounts().filter((a) => a.type === 'calendar');
+  const calAccounts = (await getAllAccounts()).filter((a) => a.type === 'calendar');
   const allEvents = (
     await Promise.all(calAccounts.map((acc) => getTodayEvents(acc, settings.timezone)))
   ).flat();

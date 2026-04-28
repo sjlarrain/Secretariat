@@ -19,7 +19,7 @@ async function getTasksClient(account: ConnectedAccount) {
       refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
       expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
     });
-    saveAccount(account);
+    await saveAccount(account);
   }
 
   return google.tasks({ version: 'v1', auth: client });

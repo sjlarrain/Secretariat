@@ -7,11 +7,11 @@ import { sendMessage } from '../kapso/client';
 
 export async function scheduleHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags, extraArgs } = parsed;
-  const settings = getSettings();
+  const settings = await getSettings();
   const timezone = settings.timezone;
 
   const alias = flags['using'];
-  const account = resolveAccount('calendar', alias);
+  const account = await resolveAccount('calendar', alias);
 
   if (!account) {
     await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');

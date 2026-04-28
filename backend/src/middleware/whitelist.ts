@@ -14,11 +14,12 @@ const { normalizeWebhook } = require('@kapso/whatsapp-cloud-api/server') as {
 export interface WebhookExtras {
   senderPhone: string;
   webhookText: string | null;
+  messageId: string | null;
 }
 
 export type WebhookRequest = Request & WebhookExtras;
 
-// Parses the Kapso webhook payload and attaches sender + message text to the request
+// Parses the Kapso webhook payload and attaches sender + message text + message ID to the request
 export function extractWebhookData(req: Request, _res: Response, next: NextFunction) {
   try {
     const events = normalizeWebhook(req.body);
@@ -29,9 +30,14 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
     (req as WebhookRequest).senderPhone = phone;
     (req as WebhookRequest).webhookText =
       message?.type === 'text' ? (message.text?.body ?? null) : null;
+    // Extract WhatsApp message ID from the raw payload for deduplication
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as WebhookRequest).messageId =
+      (req.body as any)?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id ?? null;
   } catch {
     (req as WebhookRequest).senderPhone = '';
     (req as WebhookRequest).webhookText = null;
+    (req as WebhookRequest).messageId = null;
   }
   next();
 }

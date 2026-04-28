@@ -1,10 +1,6 @@
-import fs from 'fs';
-import path from 'path';
+import { Redis } from '@upstash/redis';
 import { env } from '../env';
 import { encrypt, decrypt } from '../utils/encrypt';
-
-// NOTE: Render free tier has ephemeral storage — data written here is lost on redeploy/restart.
-// Re-connect accounts after each redeploy. A future version should use Upstash Redis or a database.
 
 export interface ConnectedAccount {
   id: string;
@@ -31,12 +27,8 @@ export interface Settings {
   };
 }
 
-interface StoreData {
-  accounts: ConnectedAccount[];
-  settings: Settings;
-}
-
-const STORE_PATH = path.join(__dirname, '../../../../data/accounts.json');
+const ACCOUNTS_KEY = 'secretariat:accounts';
+const SETTINGS_KEY = 'secretariat:settings';
 
 const DEFAULT_SETTINGS: Settings = {
   timezone: 'America/Santiago',
@@ -44,62 +36,51 @@ const DEFAULT_SETTINGS: Settings = {
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
 };
 
-function ensureDir() {
-  const dir = path.dirname(STORE_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
+let _redis: Redis | null = null;
 
-function readStore(): StoreData {
-  ensureDir();
-  if (!fs.existsSync(STORE_PATH)) {
-    return { accounts: [], settings: DEFAULT_SETTINGS };
+function getRedis(): Redis {
+  if (!_redis) {
+    _redis = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
   }
-  try {
-    const raw = fs.readFileSync(STORE_PATH, 'utf8');
-    return JSON.parse(raw) as StoreData;
-  } catch {
-    return { accounts: [], settings: DEFAULT_SETTINGS };
-  }
+  return _redis;
 }
 
-function writeStore(data: StoreData) {
-  ensureDir();
-  fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), 'utf8');
+export async function getAllAccounts(): Promise<ConnectedAccount[]> {
+  const data = await getRedis().get<ConnectedAccount[]>(ACCOUNTS_KEY);
+  return data ?? [];
 }
 
-export function getAllAccounts(): ConnectedAccount[] {
-  return readStore().accounts;
+export async function getAccount(id: string): Promise<ConnectedAccount | undefined> {
+  const accounts = await getAllAccounts();
+  return accounts.find((a) => a.id === id);
 }
 
-export function getAccount(id: string): ConnectedAccount | undefined {
-  return readStore().accounts.find((a) => a.id === id);
-}
-
-export function saveAccount(account: ConnectedAccount) {
-  const store = readStore();
-  const idx = store.accounts.findIndex((a) => a.id === account.id);
+export async function saveAccount(account: ConnectedAccount): Promise<void> {
+  const accounts = await getAllAccounts();
+  const idx = accounts.findIndex((a) => a.id === account.id);
   if (idx >= 0) {
-    store.accounts[idx] = account;
+    accounts[idx] = account;
   } else {
-    store.accounts.push(account);
+    accounts.push(account);
   }
-  writeStore(store);
+  await getRedis().set(ACCOUNTS_KEY, accounts);
 }
 
-export function deleteAccount(id: string) {
-  const store = readStore();
-  store.accounts = store.accounts.filter((a) => a.id !== id);
-  writeStore(store);
+export async function deleteAccount(id: string): Promise<void> {
+  const accounts = await getAllAccounts();
+  await getRedis().set(ACCOUNTS_KEY, accounts.filter((a) => a.id !== id));
 }
 
-export function getSettings(): Settings {
-  return readStore().settings;
+export async function getSettings(): Promise<Settings> {
+  const data = await getRedis().get<Settings>(SETTINGS_KEY);
+  return data ?? DEFAULT_SETTINGS;
 }
 
-export function saveSettings(settings: Settings) {
-  const store = readStore();
-  store.settings = settings;
-  writeStore(store);
+export async function saveSettings(settings: Settings): Promise<void> {
+  await getRedis().set(SETTINGS_KEY, settings);
 }
 
 export function encryptTokens(tokens: object): string {

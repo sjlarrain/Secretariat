@@ -2,17 +2,36 @@ import { Request, Response, NextFunction } from 'express';
 import { whitelistedNumbers } from '../env';
 import { sendMessage } from '../kapso/client';
 
-// Attaches sender phone number extracted from Kapso webhook payload
-export function extractSender(req: Request, _res: Response, next: NextFunction) {
+// require() works around the package-exports subpath limitation in CommonJS moduleResolution
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { normalizeWebhook } = require('@kapso/whatsapp-cloud-api/dist/server.cjs') as {
+  normalizeWebhook: (payload: unknown) => {
+    messages: Array<{ from: string; type: string; text?: { body: string } }>;
+    statuses: unknown[];
+  };
+};
+
+export interface WebhookExtras {
+  senderPhone: string;
+  webhookText: string | null;
+}
+
+export type WebhookRequest = Request & WebhookExtras;
+
+// Parses the Kapso webhook payload and attaches sender + message text to the request
+export function extractWebhookData(req: Request, _res: Response, next: NextFunction) {
   try {
-    const body = req.body;
-    const entry = body?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const message = change?.value?.messages?.[0];
-    const from: string = message?.from ?? '';
-    (req as Request & { senderPhone: string }).senderPhone = from ? `+${from}` : '';
+    const events = normalizeWebhook(req.body);
+    const message = events.messages?.[0];
+    const raw = message?.from ?? '';
+    // Meta sends phone numbers without '+', normalize to E.164
+    const phone = raw ? (raw.startsWith('+') ? raw : `+${raw}`) : '';
+    (req as WebhookRequest).senderPhone = phone;
+    (req as WebhookRequest).webhookText =
+      message?.type === 'text' ? (message.text?.body ?? null) : null;
   } catch {
-    (req as Request & { senderPhone: string }).senderPhone = '';
+    (req as WebhookRequest).senderPhone = '';
+    (req as WebhookRequest).webhookText = null;
   }
   next();
 }
@@ -22,7 +41,7 @@ export async function whitelistMiddleware(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const phone = (req as Request & { senderPhone: string }).senderPhone;
+  const phone = (req as WebhookRequest).senderPhone;
 
   if (!phone || !whitelistedNumbers.includes(phone)) {
     if (phone) {

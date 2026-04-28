@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { parseCommand } from '../parser/command.parser';
-import { extractSender, whitelistMiddleware } from '../middleware/whitelist';
+import { extractWebhookData, whitelistMiddleware, WebhookRequest } from '../middleware/whitelist';
 import { sendMessage } from '../kapso/client';
 import { startHandler } from '../handlers/start.handler';
 import { scheduleHandler } from '../handlers/schedule.handler';
@@ -11,24 +11,16 @@ import { myscheduleHandler } from '../handlers/myschedule.handler';
 
 const router = Router();
 
-type ExtendedRequest = Request & { senderPhone: string };
-
-router.post('/', extractSender, whitelistMiddleware, async (req: Request, res: Response) => {
+router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, res: Response) => {
   // Always return 200 — Kapso retries on non-200
   res.status(200).json({ ok: true });
 
-  const from = (req as ExtendedRequest).senderPhone;
+  const from = (req as WebhookRequest).senderPhone;
+  const text = (req as WebhookRequest).webhookText;
+
+  if (!text?.trim()) return;
 
   try {
-    const entry = req.body?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const message = change?.value?.messages?.[0];
-
-    if (!message || message.type !== 'text') return;
-
-    const text: string = message.text?.body ?? '';
-    if (!text.trim()) return;
-
     const result = parseCommand(text);
 
     if (!result.success || !result.data) {

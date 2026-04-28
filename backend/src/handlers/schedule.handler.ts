@@ -43,7 +43,7 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
 
     await sendMessage(
       from,
-      `✅ Event created: *${flags['title']}* on ${formatDate(startDatetime)} at ${formatTime(startDatetime)}`
+      `✅ *Event scheduled*\n📌 ${flags['title']}\n📅 ${formatDate(startDatetime)} at ${formatTime(startDatetime)}`
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

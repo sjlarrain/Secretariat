@@ -27,10 +27,10 @@ export async function myscheduleHandler(_parsed: ParsedCommand, from: string): P
     }
 
     const today = new Date();
-    const lines = [`📅 *Today — ${formatDate(today, true)}:*\n`];
+    const lines = [`📅 *Today — ${formatDate(today, true)}*\n`];
     for (const event of allEvents) {
       const alias = calendarAccounts.length > 1 ? ` _(${event.calendarAlias})_` : '';
-      lines.push(`${formatTime(event.start)} — ${event.title}${alias}`);
+      lines.push(`🕐 ${formatTime(event.start)}  ${event.title}${alias}`);
     }
 
     await sendMessage(from, lines.join('\n'));

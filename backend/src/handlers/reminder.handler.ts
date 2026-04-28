@@ -6,7 +6,7 @@ import { sendMessage } from '../kapso/client';
 
 export async function reminderHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags } = parsed;
-  const settings = getSettings();
+  const settings = await getSettings();
 
   const date = parseDate(flags['for'], settings.timezone);
   if (!date) {

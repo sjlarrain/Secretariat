@@ -6,8 +6,8 @@ import { formatDate, formatTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 
 export async function myscheduleHandler(_parsed: ParsedCommand, from: string): Promise<void> {
-  const settings = getSettings();
-  const calendarAccounts = getAllAccounts().filter((a) => a.type === 'calendar');
+  const settings = await getSettings();
+  const calendarAccounts = (await getAllAccounts()).filter((a) => a.type === 'calendar');
 
   if (calendarAccounts.length === 0) {
     await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');

@@ -46,10 +46,10 @@ router.get('/google/callback', async (req: Request, res: Response) => {
 
   try {
     const tokens = await exchangeCode(code);
-    const existingAccounts = getAllAccounts();
+    const existingAccounts = await getAllAccounts();
     const isFirstOfType = !existingAccounts.some((a) => a.type === pending.type);
 
-    saveAccount({
+    await saveAccount({
       id: uuidv4(),
       alias: pending.alias,
       provider: 'google',

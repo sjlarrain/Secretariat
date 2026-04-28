@@ -41,8 +41,8 @@ router.post('/logout', (req: Request, res: Response) => {
 });
 
 // --- Accounts ---
-router.get('/accounts', requireAuth, (_req, res) => {
-  const accounts = getAllAccounts().map((a) => ({
+router.get('/accounts', requireAuth, async (_req, res) => {
+  const accounts = (await getAllAccounts()).map((a) => ({
     id: a.id,
     alias: a.alias,
     provider: a.provider,
@@ -52,13 +52,13 @@ router.get('/accounts', requireAuth, (_req, res) => {
   res.json({ accounts });
 });
 
-router.delete('/accounts/:id', requireAuth, (req, res) => {
-  deleteAccount(String(req.params.id));
+router.delete('/accounts/:id', requireAuth, async (req, res) => {
+  await deleteAccount(String(req.params.id));
   res.json({ ok: true });
 });
 
-router.patch('/accounts/:id', requireAuth, (req, res) => {
-  const account = getAccount(String(req.params.id));
+router.patch('/accounts/:id', requireAuth, async (req, res) => {
+  const account = await getAccount(String(req.params.id));
   if (!account) {
     res.status(404).json({ error: 'Account not found' });
     return;
@@ -68,11 +68,12 @@ router.patch('/accounts/:id', requireAuth, (req, res) => {
 
   if (body.alias) account.alias = body.alias;
   if (body.isDefault === true) {
-    setDefault(account.id);
-    return res.json({ ok: true });
+    await setDefault(account.id);
+    res.json({ ok: true });
+    return;
   }
 
-  saveAccount(account);
+  await saveAccount(account);
   res.json({ ok: true });
 });
 
@@ -96,13 +97,13 @@ router.delete('/whitelist/:number', requireAuth, (_req, res) => {
 });
 
 // --- Settings ---
-router.get('/settings', requireAuth, (_req, res) => {
-  res.json(getSettings());
+router.get('/settings', requireAuth, async (_req, res) => {
+  res.json(await getSettings());
 });
 
 router.put('/settings', requireAuth, async (req, res) => {
   const body = req.body as Parameters<typeof saveSettings>[0];
-  const current = getSettings();
+  const current = await getSettings();
   const next = { ...current, ...body };
 
   // Handle morning digest cron
@@ -144,7 +145,7 @@ router.put('/settings', requireAuth, async (req, res) => {
     }
   }
 
-  saveSettings(next);
+  await saveSettings(next);
   res.json({ ok: true, settings: next });
 });
 

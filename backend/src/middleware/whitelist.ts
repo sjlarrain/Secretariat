@@ -4,7 +4,7 @@ import { sendMessage } from '../kapso/client';
 
 // require() works around the package-exports subpath limitation in CommonJS moduleResolution
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { normalizeWebhook } = require('@kapso/whatsapp-cloud-api/dist/server.cjs') as {
+const { normalizeWebhook } = require('@kapso/whatsapp-cloud-api/server') as {
   normalizeWebhook: (payload: unknown) => {
     messages: Array<{ from: string; type: string; text?: { body: string } }>;
     statuses: unknown[];

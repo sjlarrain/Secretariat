@@ -13,11 +13,11 @@ Send a command from WhatsApp and Secretariat handles the rest:
 | Command | What it does |
 |---------|-------------|
 | `/schedule` | Creates an event on Google Calendar |
-| `/myschedule` | Shows today's calendar events |
+| `/myschedule` | Shows calendar events for a given day (defaults to today) |
 | `/task` | Creates a task in Google Tasks |
 | `/mytask` | Lists your pending tasks |
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
-| `/ideas` | Saves an idea or lists all saved ideas |
+| `/ideas` | Saves ideas, lists them, filters by project |
 | `/menu` | Shows all commands and syntax |
 | `/start` | Wakes up the bot (useful after Render cold start) |
 
@@ -164,40 +164,47 @@ NODE_ENV=production
 
 ## Command reference
 
+All commands support short flags: `-t` (`--title`), `-f` (`--for`), `-a` (`--at`), `-i` (`--invite`), `-u` (`--using`), `-n` (`--notes`), `-p` (`--project`). The title can also be written directly after the command without a flag.
+
 All commands must be sent from a whitelisted WhatsApp number.
 
 ### `/schedule` — Create a calendar event
 
 ```
-/schedule --title <name> --for <date> --at <HH:MM> [--invite <emails>] [--notes <text>] [--using <alias>]
+/schedule <title> --for <date> --at <HH:MM> [--invite <emails>] [--notes <text>] [--using <alias>]
+/schedule --title <name> -f <date> -a <HH:MM>
 ```
 
 ```
-/schedule --title Breakfast with Hernan --for tomorrow --at 09:00
-/schedule --title Board review --for 22-05-2026 @18:00 --invite ana@company.com,luis@company.com
+/schedule Breakfast with Hernan -f tomorrow -a 09:00
+/schedule Board review -f 22-05-2026 @18:00 -i ana@company.com,luis@company.com
 ```
 
 - `--for` accepts `DD-MM-YYYY`, `tomorrow`, `next monday`, `next week`, etc.
 - `@HH:MM` is a shorthand for `--at HH:MM`
 - `--using` selects a named account alias; omit to use the default calendar
 
-### `/myschedule` — Today's events
+### `/myschedule` — Calendar events for any day
 
 ```
-/myschedule
+/myschedule                    → today
+/myschedule next monday        → next Monday
+/myschedule tomorrow           → tomorrow
+/myschedule -f 02-06-2026      → specific date
 ```
 
-Lists all calendar events for today, sorted by start time, across all connected accounts.
+Lists calendar events for the given day, sorted by start time, across all connected accounts. Defaults to today if no date is provided.
 
 ### `/task` — Create a Google Task
 
 ```
-/task --title <name> [--for <date>] [--notes <text>]
+/task <name> [--for <date>] [--notes <text>]
+/task -t <name> -f <date> -n <notes>
 ```
 
 ```
-/task --title Call Isabel
-/task --title Send quarterly report --for next friday --notes include Q1 numbers
+/task Call Isabel
+/task Send quarterly report -f next friday -n include Q1 numbers
 ```
 
 ### `/mytask` — List pending tasks
@@ -211,12 +218,13 @@ Lists all incomplete tasks sorted by due date.
 ### `/reminder` — Set a WhatsApp reminder
 
 ```
-/reminder --title <text> --for <date> --at <HH:MM>
+/reminder <text> --for <date> --at <HH:MM>
+/reminder <text> -f <date> -a <HH:MM>
 ```
 
 ```
-/reminder --title Call the doctor --for tomorrow --at 09:00
-/reminder --title Submit invoice --for next monday @17:00
+/reminder Call the doctor -f tomorrow -a 09:00
+/reminder Submit invoice -f next monday @17:00
 ```
 
 The reminder fires as a WhatsApp message at the scheduled time, delivered by QStash.
@@ -224,16 +232,21 @@ The reminder fires as a WhatsApp message at the scheduled time, delivered by QSt
 ### `/ideas` — Save or list ideas
 
 ```
-/ideas <text>        # save an idea
-/ideas               # list all saved ideas
+/ideas <text>                  → save idea to default project
+/ideas <text> -p <project>     → save to a specific project (auto-created if new)
+/ideas                         → list all ideas
+/ideas -p                      → list all projects
+/ideas -p <project>            → list ideas in that project
 ```
 
 ```
 /ideas Build a habit tracker
-/ideas
+/ideas Launch website -p Work
+/ideas -p
+/ideas -p Work
 ```
 
-Ideas are stored in Upstash Redis and persist across restarts.
+Ideas are stored in Upstash Redis and persist across restarts. Deleted ideas go to a **trash can** in the admin panel and are permanently removed after 30 days.
 
 ### `/menu` — Show command list
 
@@ -261,6 +274,7 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set which is the default; disconnect accounts |
 | **Whitelist** | View allowed WhatsApp numbers (edit via `WHITELISTED_NUMBERS` env var and redeploy) |
 | **Digests** | Enable/configure morning digest (time, days of week) and weekly summary (day, time, timezone) |
+| **Ideas** | Folder-style view of all ideas by project; create, edit, delete, reassign; Trash with 30-day auto-purge |
 
 ---
 

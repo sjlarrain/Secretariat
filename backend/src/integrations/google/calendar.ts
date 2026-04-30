@@ -56,13 +56,12 @@ export async function createEvent(
   };
 }
 
-export async function getTodayEvents(account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
+export async function getEventsForDate(account: ConnectedAccount, date: Date, timezone: string): Promise<CalendarEvent[]> {
   const cal = await getCalendarClient(account);
 
-  const now = new Date();
-  const startOfDay = new Date(now);
+  const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(now);
+  const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
   const res = await cal.events.list({
@@ -81,6 +80,10 @@ export async function getTodayEvents(account: ConnectedAccount, timezone: string
     end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
     calendarAlias: account.alias,
   }));
+}
+
+export async function getTodayEvents(account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
+  return getEventsForDate(account, new Date(), timezone);
 }
 
 export async function getWeekEvents(account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {

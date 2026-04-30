@@ -44,8 +44,8 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   myschedule: {
     name: '/myschedule',
-    description: "Retrieve and display today's calendar events",
-    acceptedFlags: [],
+    description: "Retrieve and display calendar events for a given day (defaults to today)",
+    acceptedFlags: ['for'],
     requiredFlags: [],
   },
   ideas: {

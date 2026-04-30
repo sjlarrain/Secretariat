@@ -50,8 +50,8 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   ideas: {
     name: '/ideas',
-    description: 'Save or list your ideas. `/ideas <text>` to save, `/ideas` to list all.',
-    acceptedFlags: [],
+    description: 'Save or list your ideas. `/ideas <text>` to save, `/ideas` to list all, `/ideas --project` to list projects.',
+    acceptedFlags: ['project'],
     requiredFlags: [],
   },
 };

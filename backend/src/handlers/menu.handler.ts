@@ -28,8 +28,11 @@ const MENU = `🤖 *Secretariat — Commands*
   --at      HH:MM _(required)_
 
 💡 *Ideas*
-*/ideas* text — Save an idea
-*/ideas* — List all ideas`;
+*/ideas* text — Save an idea (goes to default project)
+*/ideas* text --project Name — Save to a specific project
+*/ideas* — List all ideas
+*/ideas* --project — List your projects
+*/ideas* --project Name — List ideas in that project`;
 
 export async function menuHandler(_parsed: ParsedCommand, from: string): Promise<void> {
   await sendMessage(from, MENU);

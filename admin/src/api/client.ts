@@ -33,6 +33,20 @@ export const api = {
   getSettings: () => request<Settings>('/settings'),
   saveSettings: (settings: Settings) =>
     request('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+
+  getProjects: () => request<{ projects: Project[] }>('/projects'),
+  createProject: (name: string) =>
+    request<{ project: Project }>('/projects', { method: 'POST', body: JSON.stringify({ name }) }),
+  renameProject: (id: number, name: string) =>
+    request(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteProject: (id: number) => request(`/projects/${id}`, { method: 'DELETE' }),
+
+  getIdeas: () => request<{ ideas: Idea[] }>('/ideas'),
+  createIdea: (text: string, projectId: number) =>
+    request<{ idea: Idea }>('/ideas', { method: 'POST', body: JSON.stringify({ text, projectId }) }),
+  updateIdea: (id: number, data: { text?: string; projectId?: number }) =>
+    request(`/ideas/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteIdea: (id: number) => request(`/ideas/${id}`, { method: 'DELETE' }),
 };
 
 export interface Account {
@@ -41,6 +55,22 @@ export interface Account {
   provider: 'google';
   type: 'calendar' | 'tasks';
   isDefault: boolean;
+}
+
+export interface Project {
+  id: number;
+  name: string;
+  createdAt: string;
+  isDefault: boolean;
+  ideaCount: number;
+}
+
+export interface Idea {
+  id: number;
+  text: string;
+  createdAt: string;
+  projectId: number;
+  updatedAt?: string;
 }
 
 export interface DigestConfig {

@@ -5,6 +5,8 @@ export interface FlagDefinition {
   alias?: string;
   type: FlagType;
   required: boolean;
+  /** If true, the flag can be used with no value (parser sets it to empty string '') */
+  optional?: boolean;
   description: string;
 }
 
@@ -45,5 +47,12 @@ export const FLAGS: Record<string, FlagDefinition> = {
     type: 'string',
     required: false,
     description: 'Optional notes or description',
+  },
+  project: {
+    name: '--project',
+    type: 'string',
+    required: false,
+    optional: true,
+    description: 'Project folder — omit value to list all projects, provide name to filter or assign',
   },
 };

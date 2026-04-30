@@ -21,6 +21,10 @@ import {
   updateProject,
   deleteProject,
   getDefaultProject,
+  getTrashedIdeas,
+  restoreIdea,
+  permanentlyDeleteIdea,
+  emptyTrash,
 } from '../integrations/local/ideas';
 
 const router = Router();
@@ -215,9 +219,35 @@ router.patch('/ideas/:id', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Trash routes before /:id to avoid Express matching "trash" as an id
+router.get('/ideas/trash', requireAuth, async (_req, res) => {
+  const ideas = await getTrashedIdeas();
+  res.json({ ideas });
+});
+
+router.delete('/ideas/trash', requireAuth, async (_req, res) => {
+  await emptyTrash();
+  res.json({ ok: true });
+});
+
+// Soft delete → trash
 router.delete('/ideas/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const ok = await deleteIdea(id);
+  if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
+  res.json({ ok: true });
+});
+
+router.post('/ideas/:id/restore', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const ok = await restoreIdea(id);
+  if (!ok) { res.status(404).json({ error: 'Idea not found in trash' }); return; }
+  res.json({ ok: true });
+});
+
+router.delete('/ideas/:id/permanent', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const ok = await permanentlyDeleteIdea(id);
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
 });

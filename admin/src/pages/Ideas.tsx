@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, Project, Idea } from '../api/client';
 
-type View = 'all' | number; // 'all' or a project id
+type View = 'all' | 'trash' | number; // 'all', 'trash', or a project id
 
 export default function IdeasPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [trashed, setTrashed] = useState<Idea[]>([]);
   const [view, setView] = useState<View>('all');
   const [loading, setLoading] = useState(true);
 
@@ -32,13 +33,25 @@ export default function IdeasPage() {
 
   async function load() {
     setLoading(true);
-    const [pRes, iRes] = await Promise.all([api.getProjects(), api.getIdeas()]);
+    const [pRes, iRes, tRes] = await Promise.all([
+      api.getProjects(),
+      api.getIdeas(),
+      api.getTrashedIdeas(),
+    ]);
     setProjects(pRes.projects);
     setIdeas(iRes.ideas);
+    setTrashed(tRes.ideas);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
+
+  // Refresh trash when switching to trash view (triggers server-side auto-purge)
+  useEffect(() => {
+    if (view === 'trash') {
+      api.getTrashedIdeas().then((res) => setTrashed(res.ideas));
+    }
+  }, [view]);
 
   function flash(message: string, isErr = false) {
     if (isErr) { setErr(message); setMsg(''); }
@@ -47,12 +60,13 @@ export default function IdeasPage() {
   }
 
   const defaultProject = projects.find((p) => p.isDefault);
+  const activeProject = typeof view === 'number' ? projects.find((p) => p.id === view) : null;
 
   const visibleIdeas = view === 'all'
     ? ideas
-    : ideas.filter((i) => i.projectId === view);
-
-  const activeProject = view !== 'all' ? projects.find((p) => p.id === view) : null;
+    : typeof view === 'number'
+      ? ideas.filter((i) => i.projectId === view)
+      : [];
 
   // --- Idea actions ---
   async function handleCreateIdea(e: React.FormEvent) {
@@ -60,7 +74,7 @@ export default function IdeasPage() {
     if (!newText.trim()) return;
     setSaving(true);
     try {
-      const pid = newProjectId ?? (view !== 'all' ? view : defaultProject?.id ?? 1);
+      const pid = newProjectId ?? (typeof view === 'number' ? view : defaultProject?.id ?? 1);
       const res = await api.createIdea(newText.trim(), pid);
       setIdeas((prev) => [...prev, res.idea]);
       setProjects((prev) => prev.map((p) => p.id === pid ? { ...p, ideaCount: p.ideaCount + 1 } : p));
@@ -88,7 +102,6 @@ export default function IdeasPage() {
         ? { ...i, text: editText, projectId: editProjectId, updatedAt: new Date().toISOString() }
         : i
       ));
-      // Update project counts if project changed
       if (original.projectId !== editProjectId) {
         setProjects((prev) => prev.map((p) => {
           if (p.id === original.projectId) return { ...p, ideaCount: Math.max(0, p.ideaCount - 1) };
@@ -104,7 +117,7 @@ export default function IdeasPage() {
   }
 
   async function handleDeleteIdea(id: number) {
-    if (!confirm('Delete this idea?')) return;
+    if (!confirm('Move this idea to trash?')) return;
     try {
       const idea = ideas.find((i) => i.id === id);
       await api.deleteIdea(id);
@@ -114,9 +127,50 @@ export default function IdeasPage() {
           ? { ...p, ideaCount: Math.max(0, p.ideaCount - 1) }
           : p
         ));
+        setTrashed((prev) => [...prev, { ...idea, deletedAt: new Date().toISOString() }]);
       }
     } catch {
       flash('Failed to delete idea.', true);
+    }
+  }
+
+  async function handleRestore(id: number) {
+    try {
+      await api.restoreIdea(id);
+      const idea = trashed.find((i) => i.id === id);
+      setTrashed((prev) => prev.filter((i) => i.id !== id));
+      if (idea) {
+        const restored = { ...idea, deletedAt: undefined };
+        setIdeas((prev) => [...prev, restored]);
+        setProjects((prev) => prev.map((p) => p.id === idea.projectId
+          ? { ...p, ideaCount: p.ideaCount + 1 }
+          : p
+        ));
+      }
+      flash('Idea restored.');
+    } catch {
+      flash('Failed to restore idea.', true);
+    }
+  }
+
+  async function handlePermanentDelete(id: number) {
+    if (!confirm('Permanently delete this idea? This cannot be undone.')) return;
+    try {
+      await api.permanentlyDeleteIdea(id);
+      setTrashed((prev) => prev.filter((i) => i.id !== id));
+    } catch {
+      flash('Failed to delete idea.', true);
+    }
+  }
+
+  async function handleEmptyTrash() {
+    if (!confirm(`Permanently delete all ${trashed.length} idea${trashed.length !== 1 ? 's' : ''} in trash? This cannot be undone.`)) return;
+    try {
+      await api.emptyTrash();
+      setTrashed([]);
+      flash('Trash emptied.');
+    } catch {
+      flash('Failed to empty trash.', true);
     }
   }
 
@@ -159,7 +213,6 @@ export default function IdeasPage() {
     try {
       await api.deleteProject(id);
       if (view === id) setView('all');
-      // Move ideas locally
       const defId = defaultProject?.id ?? 1;
       setIdeas((prev) => prev.map((i) => i.projectId === id ? { ...i, projectId: defId } : i));
       setProjects((prev) => {
@@ -202,19 +255,13 @@ export default function IdeasPage() {
         <button
           onClick={() => setView('all')}
           style={{
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
+            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
             padding: '9px 14px',
             background: view === 'all' ? '#151e30' : 'transparent',
-            border: 'none',
-            borderBottom: '1px solid var(--border)',
+            border: 'none', borderBottom: '1px solid var(--border)',
             color: view === 'all' ? '#fff' : 'var(--text-muted)',
-            fontSize: 13,
-            fontWeight: view === 'all' ? 600 : 400,
-            cursor: 'pointer',
-            textAlign: 'left',
+            fontSize: 13, fontWeight: view === 'all' ? 600 : 400,
+            cursor: 'pointer', textAlign: 'left',
           }}
         >
           <span style={{ opacity: 0.6 }}>🗂</span>
@@ -224,24 +271,18 @@ export default function IdeasPage() {
             background: view === 'all' ? 'rgba(59,130,246,0.2)' : '#1c1c1c',
             color: view === 'all' ? 'var(--blue-bright)' : 'var(--text-dim)',
             padding: '1px 6px', borderRadius: 99,
-          }}>
-            {ideas.length}
-          </span>
+          }}>{ideas.length}</span>
         </button>
 
         {/* Project list */}
         <div style={{ padding: '6px 0' }}>
           <div style={{
-            padding: '6px 14px 4px',
-            fontSize: 10, fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: '0.08em',
-            color: 'var(--text-dim)',
-          }}>
-            Projects
-          </div>
+            padding: '6px 14px 4px', fontSize: 10, fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)',
+          }}>Projects</div>
 
           {projects.map((p) => (
-            <div key={p.id} style={{ position: 'relative' }}>
+            <div key={p.id}>
               {renamingId === p.id ? (
                 <div style={{ padding: '4px 10px', display: 'flex', gap: 4 }}>
                   <input
@@ -254,69 +295,38 @@ export default function IdeasPage() {
                     style={{ fontSize: 12, padding: '4px 8px' }}
                     autoFocus
                   />
-                  <button
-                    className="btn-ghost"
-                    style={{ fontSize: 11, padding: '4px 8px' }}
-                    onClick={() => handleRenameProject(p.id)}
-                  >
-                    ✓
-                  </button>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => handleRenameProject(p.id)}>✓</button>
                 </div>
               ) : (
                 <button
                   onClick={() => setView(p.id)}
                   style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                     padding: '8px 14px',
                     background: view === p.id ? '#151e30' : 'transparent',
                     border: 'none',
                     color: view === p.id ? '#fff' : 'var(--text-muted)',
-                    fontSize: 13,
-                    fontWeight: view === p.id ? 600 : 400,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'background 0.1s, color 0.1s',
+                    fontSize: 13, fontWeight: view === p.id ? 600 : 400,
+                    cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s, color 0.1s',
                   }}
                 >
                   <span style={{ opacity: 0.5, fontSize: 13 }}>📁</span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.name}
-                  </span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                   <span style={{
                     fontSize: 11, fontWeight: 600,
                     background: view === p.id ? 'rgba(59,130,246,0.2)' : '#1c1c1c',
                     color: view === p.id ? 'var(--blue-bright)' : 'var(--text-dim)',
                     padding: '1px 6px', borderRadius: 99, flexShrink: 0,
-                  }}>
-                    {p.ideaCount}
-                  </span>
+                  }}>{p.ideaCount}</span>
                 </button>
               )}
-
-              {/* Hover actions for project (rename / delete) */}
               {view === p.id && renamingId !== p.id && (
-                <div style={{
-                  display: 'flex', gap: 2,
-                  padding: '0 8px 6px',
-                }}>
-                  <button
-                    className="btn-ghost"
-                    style={{ fontSize: 10, padding: '2px 8px', flex: 1 }}
-                    onClick={() => { setRenamingId(p.id); setRenameValue(p.name); }}
-                  >
-                    Rename
-                  </button>
+                <div style={{ display: 'flex', gap: 2, padding: '0 8px 6px' }}>
+                  <button className="btn-ghost" style={{ fontSize: 10, padding: '2px 8px', flex: 1 }}
+                    onClick={() => { setRenamingId(p.id); setRenameValue(p.name); }}>Rename</button>
                   {!p.isDefault && (
-                    <button
-                      className="btn-danger"
-                      style={{ fontSize: 10, padding: '2px 8px' }}
-                      onClick={() => handleDeleteProject(p.id, p.name)}
-                    >
-                      ✕
-                    </button>
+                    <button className="btn-danger" style={{ fontSize: 10, padding: '2px 8px' }}
+                      onClick={() => handleDeleteProject(p.id, p.name)}>✕</button>
                   )}
                 </div>
               )}
@@ -325,7 +335,7 @@ export default function IdeasPage() {
         </div>
 
         {/* New project form */}
-        <div style={{ padding: '8px 10px 12px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '8px 10px 10px', borderTop: '1px solid var(--border)' }}>
           <form onSubmit={handleCreateProject} style={{ display: 'flex', gap: 4 }}>
             <input
               value={newProjectName}
@@ -333,181 +343,215 @@ export default function IdeasPage() {
               placeholder="New project…"
               style={{ fontSize: 12, padding: '5px 8px' }}
             />
-            <button
-              type="submit"
-              className="btn-ghost"
-              style={{ fontSize: 11, padding: '5px 8px', flexShrink: 0 }}
-              disabled={addingProject || !newProjectName.trim()}
-            >
-              +
-            </button>
+            <button type="submit" className="btn-ghost" style={{ fontSize: 11, padding: '5px 8px', flexShrink: 0 }}
+              disabled={addingProject || !newProjectName.trim()}>+</button>
           </form>
+        </div>
+
+        {/* Trash folder */}
+        <div style={{ borderTop: '1px solid var(--border)', padding: '6px 0 8px' }}>
+          <button
+            onClick={() => setView('trash')}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 14px',
+              background: view === 'trash' ? 'rgba(239,68,68,0.08)' : 'transparent',
+              border: 'none',
+              color: view === 'trash' ? 'var(--red)' : 'var(--text-muted)',
+              fontSize: 13, fontWeight: view === 'trash' ? 600 : 400,
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <span style={{ opacity: 0.6, fontSize: 13 }}>🗑</span>
+            <span style={{ flex: 1 }}>Trash</span>
+            {trashed.length > 0 && (
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                background: view === 'trash' ? 'rgba(239,68,68,0.15)' : '#1c1c1c',
+                color: view === 'trash' ? 'var(--red)' : 'var(--text-dim)',
+                padding: '1px 6px', borderRadius: 99,
+              }}>{trashed.length}</span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* ── Right: Ideas list ─────────────────────────── */}
+      {/* ── Right: Ideas / Trash ──────────────────────── */}
       <div style={{ flex: 1, minWidth: 0 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>
-              {view === 'all' ? 'All ideas' : (activeProject?.name ?? 'Project')}
+              {view === 'trash' ? 'Trash' : view === 'all' ? 'All ideas' : (activeProject?.name ?? 'Project')}
             </h2>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
-              {visibleIdeas.length} idea{visibleIdeas.length !== 1 ? 's' : ''}
-              {view === 'all' && ` across ${projects.length} project${projects.length !== 1 ? 's' : ''}`}
+              {view === 'trash'
+                ? `${trashed.length} item${trashed.length !== 1 ? 's' : ''} · auto-deleted after 30 days`
+                : `${visibleIdeas.length} idea${visibleIdeas.length !== 1 ? 's' : ''}${view === 'all' ? ` across ${projects.length} project${projects.length !== 1 ? 's' : ''}` : ''}`
+              }
             </p>
           </div>
+          {view === 'trash' && trashed.length > 0 && (
+            <button className="btn-danger" style={{ fontSize: 12 }} onClick={handleEmptyTrash}>
+              Empty trash
+            </button>
+          )}
         </div>
 
         {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
         {err && <p className="error-msg" style={{ marginBottom: 14 }}>✕ {err}</p>}
 
-        {/* New idea form */}
-        <form
-          onSubmit={handleCreateIdea}
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 16,
-            marginBottom: 16,
-            display: 'flex',
-            gap: 10,
-            alignItems: 'flex-end',
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <label className="field-label">New idea</label>
-            <input
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-              placeholder="What's the idea?"
-            />
-          </div>
-          {view === 'all' && (
-            <div style={{ width: 160 }}>
-              <label className="field-label">Project</label>
-              <select
-                value={newProjectId ?? defaultProject?.id ?? ''}
-                onChange={(e) => setNewProjectId(Number(e.target.value))}
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+        {/* ── Trash view ── */}
+        {view === 'trash' ? (
+          trashed.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 32, marginBottom: 14 }}>🗑</div>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Trash is empty</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Deleted ideas appear here for 30 days.</div>
             </div>
-          )}
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={saving || !newText.trim()}
-            style={{ flexShrink: 0 }}
-          >
-            {saving ? 'Saving…' : 'Add idea'}
-          </button>
-        </form>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {trashed.map((idea) => {
+                const project = projects.find((p) => p.id === idea.projectId);
+                const deletedAt = idea.deletedAt ? new Date(idea.deletedAt) : null;
+                const daysLeft = deletedAt
+                  ? Math.max(0, 30 - Math.floor((Date.now() - deletedAt.getTime()) / 86400000))
+                  : null;
 
-        {/* Ideas list */}
-        {visibleIdeas.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-            <div style={{ fontSize: 32, marginBottom: 14 }}>💡</div>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>No ideas here yet</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              Add one above or send <code>/ideas your idea</code> from WhatsApp.
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {visibleIdeas.map((idea) => {
-              const project = projects.find((p) => p.id === idea.projectId);
-              const isEditing = editingId === idea.id;
-
-              return (
-                <div
-                  key={idea.id}
-                  className="card"
-                  style={{ padding: '14px 18px' }}
-                >
-                  {isEditing ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <input
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') setEditingId(null);
-                        }}
-                        autoFocus
-                      />
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <div style={{ flex: 1 }}>
-                          <label className="field-label">Project</label>
-                          <select
-                            value={editProjectId}
-                            onChange={(e) => setEditProjectId(Number(e.target.value))}
-                          >
-                            {projects.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 18 }}>
-                          <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => handleSaveEdit(idea.id)}>
-                            Save
-                          </button>
-                          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingId(null)}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
+                return (
+                  <div key={idea.id} className="card" style={{ padding: '14px 18px', opacity: 0.85 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, lineHeight: 1.45 }}>{idea.text}</div>
+                        <div style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                          {idea.text}
+                        </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                          {view === 'all' && project && (
+                          {project && (
                             <span style={{
-                              fontSize: 11, color: 'var(--blue-bright)',
-                              background: 'var(--blue-dim)',
-                              border: '1px solid rgba(96,165,250,0.15)',
+                              fontSize: 11, color: 'var(--text-dim)',
+                              background: '#1a1a1a', border: '1px solid var(--border)',
                               padding: '1px 7px', borderRadius: 99,
-                              fontWeight: 500,
-                            }}>
-                              📁 {project.name}
+                            }}>📁 {project.name}</span>
+                          )}
+                          {daysLeft !== null && (
+                            <span style={{ fontSize: 11, color: daysLeft <= 3 ? 'var(--red)' : 'var(--text-dim)' }}>
+                              {daysLeft === 0 ? 'Deletes today' : `${daysLeft}d left`}
                             </span>
                           )}
-                          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                            {new Date(idea.updatedAt ?? idea.createdAt).toLocaleDateString('en-GB', {
-                              day: 'numeric', month: 'short', year: 'numeric',
-                            })}
-                            {idea.updatedAt ? ' · edited' : ''}
-                          </span>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button
-                          className="btn-ghost"
-                          style={{ fontSize: 12 }}
-                          onClick={() => startEdit(idea)}
-                        >
-                          Edit
+                        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => handleRestore(idea.id)}>
+                          Restore
                         </button>
-                        <button
-                          className="btn-danger"
-                          style={{ fontSize: 12 }}
-                          onClick={() => handleDeleteIdea(idea.id)}
-                        >
-                          Delete
+                        <button className="btn-danger" style={{ fontSize: 12 }} onClick={() => handlePermanentDelete(idea.id)}>
+                          Delete forever
                         </button>
                       </div>
                     </div>
-                  )}
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : (
+          <>
+            {/* New idea form */}
+            <form
+              onSubmit={handleCreateIdea}
+              style={{
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16,
+                display: 'flex', gap: 10, alignItems: 'flex-end',
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <label className="field-label">New idea</label>
+                <input value={newText} onChange={(e) => setNewText(e.target.value)} placeholder="What's the idea?" />
+              </div>
+              {view === 'all' && (
+                <div style={{ width: 160 }}>
+                  <label className="field-label">Project</label>
+                  <select
+                    value={newProjectId ?? defaultProject?.id ?? ''}
+                    onChange={(e) => setNewProjectId(Number(e.target.value))}
+                  >
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                 </div>
-              );
-            })}
-          </div>
+              )}
+              <button type="submit" className="btn-primary" disabled={saving || !newText.trim()} style={{ flexShrink: 0 }}>
+                {saving ? 'Saving…' : 'Add idea'}
+              </button>
+            </form>
+
+            {/* Ideas list */}
+            {visibleIdeas.length === 0 ? (
+              <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <div style={{ fontSize: 32, marginBottom: 14 }}>💡</div>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>No ideas here yet</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  Add one above or send <code>/ideas your idea</code> from WhatsApp.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {visibleIdeas.map((idea) => {
+                  const project = projects.find((p) => p.id === idea.projectId);
+                  const isEditing = editingId === idea.id;
+
+                  return (
+                    <div key={idea.id} className="card" style={{ padding: '14px 18px' }}>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <input value={editText} onChange={(e) => setEditText(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Escape') setEditingId(null); }} autoFocus />
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ flex: 1 }}>
+                              <label className="field-label">Project</label>
+                              <select value={editProjectId} onChange={(e) => setEditProjectId(Number(e.target.value))}>
+                                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, marginTop: 18 }}>
+                              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => handleSaveEdit(idea.id)}>Save</button>
+                              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingId(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, lineHeight: 1.45 }}>{idea.text}</div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                              {view === 'all' && project && (
+                                <span style={{
+                                  fontSize: 11, color: 'var(--blue-bright)',
+                                  background: 'var(--blue-dim)', border: '1px solid rgba(96,165,250,0.15)',
+                                  padding: '1px 7px', borderRadius: 99, fontWeight: 500,
+                                }}>📁 {project.name}</span>
+                              )}
+                              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                                {new Date(idea.updatedAt ?? idea.createdAt).toLocaleDateString('en-GB', {
+                                  day: 'numeric', month: 'short', year: 'numeric',
+                                })}
+                                {idea.updatedAt ? ' · edited' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => startEdit(idea)}>Edit</button>
+                            <button className="btn-danger" style={{ fontSize: 12 }} onClick={() => handleDeleteIdea(idea.id)}>Delete</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

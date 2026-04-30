@@ -47,6 +47,11 @@ export const api = {
   updateIdea: (id: number, data: { text?: string; projectId?: number }) =>
     request(`/ideas/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteIdea: (id: number) => request(`/ideas/${id}`, { method: 'DELETE' }),
+
+  getTrashedIdeas: () => request<{ ideas: Idea[] }>('/ideas/trash'),
+  emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
+  restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
+  permanentlyDeleteIdea: (id: number) => request(`/ideas/${id}/permanent`, { method: 'DELETE' }),
 };
 
 export interface Account {
@@ -71,6 +76,7 @@ export interface Idea {
   createdAt: string;
   projectId: number;
   updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface DigestConfig {

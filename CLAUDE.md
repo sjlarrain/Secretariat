@@ -14,12 +14,13 @@ Every commit must follow this format:
 - `scope` is the component changed: `backend`, `admin`, `ops`, `ideas`, `parser`, `cron`, `docs`, or a handler name.
 - Description is lowercase, imperative, concise (50 chars max).
 
+The message is a single line — no body, no bullet points, no co-author.
+
 **Examples:**
 ```
-[v1.1.4] backend: add delete sub-command to ideas handler
+[v1.1.4] ideas: projects support + admin Ideas page
 [v1.2.1] admin: add activity log page
 [v1.1.3] docs: add README and commit convention
-[v1.1.2] backend: wire ideas handler into webhook router
 ```
 
 **Before committing:** run `git log --oneline -5` to confirm the last patch number used.

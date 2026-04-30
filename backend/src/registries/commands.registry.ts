@@ -22,19 +22,19 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     name: '/schedule',
     description: 'Create a calendar event on Google Calendar',
     acceptedFlags: ['title', 'for', 'at', 'invite', 'using', 'notes'],
-    requiredFlags: ['title', 'for', 'at'],
+    requiredFlags: ['for', 'at'],
   },
   task: {
     name: '/task',
     description: 'Create a task in Google Tasks',
     acceptedFlags: ['title', 'for', 'notes'],
-    requiredFlags: ['title'],
+    requiredFlags: [],
   },
   reminder: {
     name: '/reminder',
     description: 'Set a reminder — fires back as a WhatsApp message at the scheduled time',
     acceptedFlags: ['title', 'for', 'at'],
-    requiredFlags: ['title', 'for', 'at'],
+    requiredFlags: ['for', 'at'],
   },
   mytask: {
     name: '/mytask',

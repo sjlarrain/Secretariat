@@ -6,8 +6,14 @@ import { parseDate, formatDate } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 
 export async function taskHandler(parsed: ParsedCommand, from: string): Promise<void> {
-  const { flags } = parsed;
+  const { flags, extraArgs } = parsed;
   const settings = await getSettings();
+
+  const title = flags['title'] || extraArgs.join(' ').trim();
+  if (!title) {
+    await sendMessage(from, '❌ Missing title. Use --title or write it right after /task.');
+    return;
+  }
 
   const account = await resolveAccount('tasks');
   if (!account) {
@@ -27,13 +33,13 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
 
   try {
     await createTask(account, {
-      title: flags['title'],
+      title,
       dueDate,
       notes: flags['notes'],
     });
 
     const dueLine = dueDate ? `\n📅 Due ${formatDate(dueDate)}` : '';
-    await sendMessage(from, `✅ *Task created*\n📌 ${flags['title']}${dueLine}`);
+    await sendMessage(from, `✅ *Task created*\n📌 ${title}${dueLine}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Could not create task: ${msg}`);

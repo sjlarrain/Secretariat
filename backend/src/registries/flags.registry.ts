@@ -3,6 +3,8 @@ export type FlagType = 'string' | 'date' | 'time' | 'email-list' | 'account-alia
 export interface FlagDefinition {
   name: string;
   alias?: string;
+  /** Single-letter shorthand e.g. 't' makes -t equivalent to --title */
+  shortAlias?: string;
   type: FlagType;
   required: boolean;
   /** If true, the flag can be used with no value (parser sets it to empty string '') */
@@ -13,12 +15,14 @@ export interface FlagDefinition {
 export const FLAGS: Record<string, FlagDefinition> = {
   title: {
     name: '--title',
+    shortAlias: 't',
     type: 'string',
     required: false,
     description: 'Name of the event, task, or reminder',
   },
   for: {
     name: '--for',
+    shortAlias: 'f',
     type: 'date',
     required: false,
     description: 'Date — DD-MM-YYYY or natural language (tomorrow, next monday)',
@@ -26,30 +30,35 @@ export const FLAGS: Record<string, FlagDefinition> = {
   at: {
     name: '--at',
     alias: '@',
+    shortAlias: 'a',
     type: 'time',
     required: false,
     description: 'Time in HH:MM format (24h)',
   },
   invite: {
     name: '--invite',
+    shortAlias: 'i',
     type: 'email-list',
     required: false,
     description: 'Comma-separated email addresses to invite',
   },
   using: {
     name: '--using',
+    shortAlias: 'u',
     type: 'account-alias',
     required: false,
     description: 'Named account alias (e.g. GG) — uses default if omitted',
   },
   notes: {
     name: '--notes',
+    shortAlias: 'n',
     type: 'string',
     required: false,
     description: 'Optional notes or description',
   },
   project: {
     name: '--project',
+    shortAlias: 'p',
     type: 'string',
     required: false,
     optional: true,

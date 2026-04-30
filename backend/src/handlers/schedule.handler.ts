@@ -10,6 +10,12 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
   const settings = await getSettings();
   const timezone = settings.timezone;
 
+  const title = flags['title'] || extraArgs.join(' ').trim();
+  if (!title) {
+    await sendMessage(from, '❌ Missing title. Use --title or write it right after /schedule.');
+    return;
+  }
+
   const alias = flags['using'];
   const account = await resolveAccount('calendar', alias);
 
@@ -29,11 +35,10 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
 
   const attendees: string[] = [];
   if (flags['invite']) attendees.push(...flags['invite'].split(',').map((e) => e.trim()));
-  if (extraArgs[0]?.includes('@')) attendees.push(extraArgs[0].trim());
 
   try {
     await createEvent(account, {
-      title: flags['title'],
+      title,
       startDatetime,
       endDatetime,
       attendees,
@@ -43,7 +48,7 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
 
     await sendMessage(
       from,
-      `✅ *Event scheduled*\n📌 ${flags['title']}\n📅 ${formatDate(startDatetime)} at ${formatTime(startDatetime)}`
+      `✅ *Event scheduled*\n📌 ${title}\n📅 ${formatDate(startDatetime)} at ${formatTime(startDatetime)}`
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

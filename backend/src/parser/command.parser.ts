@@ -38,8 +38,8 @@ export function parseCommand(raw: string): ParseResult {
   const flags: Record<string, string> = {};
 
   let i = 1;
-  // Collect positional args before any flag
-  while (i < tokens.length && !tokens[i].startsWith('--') && !tokens[i].startsWith('@')) {
+  // Collect positional args before any flag (-- or - or @)
+  while (i < tokens.length && !tokens[i].startsWith('--') && !tokens[i].startsWith('-') && !tokens[i].startsWith('@')) {
     extraArgs.push(tokens[i]);
     i++;
   }
@@ -55,12 +55,19 @@ export function parseCommand(raw: string): ParseResult {
       continue;
     }
 
+    // Resolve flag key from --long or -s (short)
+    let flagKey: string | null = null;
     if (token.startsWith('--')) {
-      const flagName = token.slice(2).toLowerCase();
-      const flagKey = findFlagKey(flagName);
+      flagKey = findFlagKeyByLong(token.slice(2).toLowerCase());
+    } else if (/^-[a-z]$/.test(token)) {
+      flagKey = findFlagKeyByShort(token.slice(1));
+    }
 
-      if (!flagKey || !commandDef.acceptedFlags.includes(flagKey)) {
-        const accepted = commandDef.acceptedFlags.map((f) => FLAGS[f].name).join(', ');
+    if (flagKey !== null) {
+      if (!commandDef.acceptedFlags.includes(flagKey)) {
+        const accepted = commandDef.acceptedFlags
+          .map((f) => `${FLAGS[f].name}${FLAGS[f].shortAlias ? ` (-${FLAGS[f].shortAlias})` : ''}`)
+          .join(', ');
         return {
           success: false,
           error: `Unknown flag "${token}" for /${commandName}.\nAccepted: ${accepted || 'none'}`,
@@ -69,7 +76,7 @@ export function parseCommand(raw: string): ParseResult {
 
       i++;
       const valueParts: string[] = [];
-      while (i < tokens.length && !tokens[i].startsWith('--') && !tokens[i].startsWith('@')) {
+      while (i < tokens.length && !tokens[i].startsWith('--') && !(/^-[a-z]$/.test(tokens[i])) && !tokens[i].startsWith('@')) {
         valueParts.push(tokens[i]);
         i++;
       }
@@ -86,7 +93,7 @@ export function parseCommand(raw: string): ParseResult {
       continue;
     }
 
-    // Unknown positional after flags started — skip gracefully
+    // Unknown token after flags started — skip gracefully
     i++;
   }
 
@@ -128,9 +135,16 @@ function tokenize(text: string): string[] {
   return tokens;
 }
 
-function findFlagKey(flagName: string): string | null {
+function findFlagKeyByLong(flagName: string): string | null {
   for (const [key, def] of Object.entries(FLAGS)) {
     if (def.name === `--${flagName}`) return key;
+  }
+  return null;
+}
+
+function findFlagKeyByShort(shortChar: string): string | null {
+  for (const [key, def] of Object.entries(FLAGS)) {
+    if (def.shortAlias === shortChar) return key;
   }
   return null;
 }

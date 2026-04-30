@@ -5,8 +5,14 @@ import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/
 import { sendMessage } from '../kapso/client';
 
 export async function reminderHandler(parsed: ParsedCommand, from: string): Promise<void> {
-  const { flags } = parsed;
+  const { flags, extraArgs } = parsed;
   const settings = await getSettings();
+
+  const title = flags['title'] || extraArgs.join(' ').trim();
+  if (!title) {
+    await sendMessage(from, '❌ Missing title. Use --title or write it right after /reminder.');
+    return;
+  }
 
   const date = parseDate(flags['for'], settings.timezone);
   if (!date) {
@@ -26,13 +32,13 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
 
   try {
     await scheduleOnce('/internal/reminder/fire', delaySeconds, {
-      title: flags['title'],
+      title,
       phoneNumber: from,
     });
 
     await sendMessage(
       from,
-      `⏰ *Reminder set*\n📌 ${flags['title']}\n📅 ${formatDate(target)} at ${formatTime(target)}`
+      `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target)} at ${formatTime(target)}`
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

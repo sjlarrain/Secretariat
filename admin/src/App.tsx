@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Whitelist from './pages/Whitelist';
 import Digests from './pages/Digests';
+import Ideas from './pages/Ideas';
 import { api } from './api/client';
 
 const NAV_LINKS = [
@@ -11,6 +12,7 @@ const NAV_LINKS = [
   { to: '/accounts', label: 'Accounts', icon: '🔗' },
   { to: '/whitelist', label: 'Whitelist', icon: '📱' },
   { to: '/digests', label: 'Digests', icon: '⏰' },
+  { to: '/ideas', label: 'Ideas', icon: '💡' },
 ];
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -130,6 +132,7 @@ export default function App() {
         <Route path="/accounts" element={<Layout><Accounts /></Layout>} />
         <Route path="/whitelist" element={<Layout><Whitelist /></Layout>} />
         <Route path="/digests" element={<Layout><Digests /></Layout>} />
+        <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

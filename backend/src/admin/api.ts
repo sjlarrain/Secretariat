@@ -11,6 +11,17 @@ import {
 import { setDefault } from '../integrations/registry';
 import { scheduleCron, deleteSchedule } from '../qstash/client';
 import { whitelistedNumbers } from '../env';
+import {
+  getIdeas,
+  addIdea,
+  updateIdea,
+  deleteIdea,
+  getProjects,
+  findOrCreateProject,
+  updateProject,
+  deleteProject,
+  getDefaultProject,
+} from '../integrations/local/ideas';
 
 const router = Router();
 
@@ -147,6 +158,68 @@ router.put('/settings', requireAuth, async (req, res) => {
 
   await saveSettings(next);
   res.json({ ok: true, settings: next });
+});
+
+// --- Projects ---
+router.get('/projects', requireAuth, async (_req, res) => {
+  const [projects, ideas] = await Promise.all([getProjects(), getIdeas()]);
+  const withCounts = projects.map((p) => ({
+    ...p,
+    ideaCount: ideas.filter((i) => i.projectId === p.id).length,
+  }));
+  res.json({ projects: withCounts });
+});
+
+router.post('/projects', requireAuth, async (req, res) => {
+  const { name } = req.body as { name?: string };
+  if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+  const project = await findOrCreateProject(name);
+  res.json({ project });
+});
+
+router.patch('/projects/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { name } = req.body as { name?: string };
+  if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+  const ok = await updateProject(id, name);
+  if (!ok) { res.status(404).json({ error: 'Project not found' }); return; }
+  res.json({ ok: true });
+});
+
+router.delete('/projects/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await deleteProject(id);
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  res.json({ ok: true });
+});
+
+// --- Ideas ---
+router.get('/ideas', requireAuth, async (_req, res) => {
+  const ideas = await getIdeas();
+  res.json({ ideas });
+});
+
+router.post('/ideas', requireAuth, async (req, res) => {
+  const { text, projectId } = req.body as { text?: string; projectId?: number };
+  if (!text?.trim()) { res.status(400).json({ error: 'text is required' }); return; }
+  const pid = projectId ?? (await getDefaultProject()).id;
+  const idea = await addIdea(text, pid);
+  res.json({ idea });
+});
+
+router.patch('/ideas/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { text, projectId } = req.body as { text?: string; projectId?: number };
+  const ok = await updateIdea(id, { text, projectId });
+  if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
+  res.json({ ok: true });
+});
+
+router.delete('/ideas/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const ok = await deleteIdea(id);
+  if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
+  res.json({ ok: true });
 });
 
 // --- Google OAuth start (proxy from admin panel) ---

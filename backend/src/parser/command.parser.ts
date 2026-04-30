@@ -75,6 +75,10 @@ export function parseCommand(raw: string): ParseResult {
       }
 
       if (valueParts.length === 0) {
+        if (FLAGS[flagKey]?.optional) {
+          flags[flagKey] = '';
+          continue;
+        }
         return { success: false, error: `Flag "${token}" requires a value.` };
       }
 

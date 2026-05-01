@@ -29,12 +29,12 @@ export function combineDateAndTime(date: Date, timeStr: string): Date {
 }
 
 // Formats a Date for WhatsApp display (e.g. "22 Apr" or "Tue 22 Apr")
-export function formatDate(date: Date, includeDay = false): string {
-  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+export function formatDate(date: Date, includeDay = false, timezone = 'America/Santiago'): string {
+  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', timeZone: timezone };
   if (includeDay) opts.weekday = 'short';
   return date.toLocaleDateString('en-GB', opts);
 }
 
-export function formatTime(date: Date): string {
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+export function formatTime(date: Date, timezone = 'America/Santiago'): string {
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone });
 }

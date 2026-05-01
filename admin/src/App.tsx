@@ -5,6 +5,7 @@ import Accounts from './pages/Accounts';
 import Whitelist from './pages/Whitelist';
 import Digests from './pages/Digests';
 import Ideas from './pages/Ideas';
+import Commands from './pages/Commands';
 import { api } from './api/client';
 
 const NAV_LINKS = [
@@ -13,6 +14,7 @@ const NAV_LINKS = [
   { to: '/whitelist', label: 'Whitelist', icon: '📱' },
   { to: '/digests', label: 'Digests', icon: '⏰' },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
+  { to: '/commands', label: 'Commands', icon: '📖' },
 ];
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -56,7 +58,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.2px' }}>
               Secretariat
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.1</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.2</div>
           </div>
         </div>
 
@@ -133,6 +135,7 @@ export default function App() {
         <Route path="/whitelist" element={<Layout><Whitelist /></Layout>} />
         <Route path="/digests" element={<Layout><Digests /></Layout>} />
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
+        <Route path="/commands" element={<Layout><Commands /></Layout>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Account, Settings } from '../api/client';
+import { api, Account, Settings, DashboardData } from '../api/client';
 
 interface StatCardProps {
   label: string;
@@ -36,18 +36,29 @@ function StatCard({ label, value, sub, icon, accent, accentDim }: StatCardProps)
   );
 }
 
+function formatEventTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function formatTaskDue(iso: string | null) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [whitelist, setWhitelist] = useState<string[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.getAccounts(), api.getSettings(), api.getWhitelist()])
-      .then(([a, s, w]) => {
+    Promise.all([api.getAccounts(), api.getSettings(), api.getWhitelist(), api.getDashboard()])
+      .then(([a, s, w, d]) => {
         setAccounts(a.accounts);
         setSettings(s);
         setWhitelist(w.numbers);
+        setDashboard(d);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -70,6 +81,17 @@ export default function Dashboard() {
     : settings?.weeklySummary.enabled
     ? `Weekly on ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][settings.weeklySummary.day]}`
     : 'No digest configured';
+
+  const sectionHeader = (icon: string, title: string) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+      <span style={{ fontSize: 15 }}>{icon}</span>
+      <h3 style={{ fontSize: 14, fontWeight: 600 }}>{title}</h3>
+    </div>
+  );
+
+  const emptyState = (text: string) => (
+    <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{text}</p>
+  );
 
   return (
     <div>
@@ -109,33 +131,75 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Quick Start */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <span style={{ fontSize: 15 }}>🚀</span>
-          <h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick Start</h3>
+      {/* Bottom sections */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+        {/* Today's events */}
+        <div className="card">
+          {sectionHeader('📅', 'Today')}
+          {!dashboard || dashboard.events.length === 0
+            ? emptyState('No events today.')
+            : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {dashboard.events.map((e, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, color: 'var(--blue-bright)',
+                      background: 'var(--blue-dim)', padding: '2px 7px', borderRadius: 6,
+                      flexShrink: 0, marginTop: 1,
+                    }}>
+                      {formatEventTime(e.start)}
+                    </span>
+                    <span style={{ fontSize: 13, lineHeight: 1.4 }}>{e.title}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          }
         </div>
-        <ol style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[
-            <>Go to <a href="/accounts">Accounts</a> and connect your Google Calendar and Tasks</>,
-            <>Go to <a href="/digests">Digests</a> to enable morning digest and weekly summary</>,
-            <>Send <code>/start</code> from WhatsApp to wake the bot, then <code>/menu</code> to see all commands</>,
-          ].map((step, i) => (
-            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <span style={{
-                width: 22, height: 22, borderRadius: 6,
-                background: 'var(--blue-dim)',
-                border: '1px solid rgba(59,130,246,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 700, color: 'var(--blue-bright)',
-                flexShrink: 0, marginTop: 1,
-              }}>
-                {i + 1}
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>{step}</span>
-            </li>
-          ))}
-        </ol>
+
+        {/* Pending tasks */}
+        <div className="card">
+          {sectionHeader('✅', 'Pending tasks')}
+          {!dashboard || dashboard.tasks.length === 0
+            ? emptyState('No pending tasks.')
+            : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {dashboard.tasks.map((t, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ fontSize: 13, lineHeight: 1.4 }}>• {t.title}</span>
+                    {t.dueDate && (
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)', flexShrink: 0 }}>
+                        {formatTaskDue(t.dueDate)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </div>
+
+        {/* Recent ideas */}
+        <div className="card">
+          {sectionHeader('💡', 'Recent ideas')}
+          {!dashboard || dashboard.ideas.length === 0
+            ? emptyState('No ideas yet.')
+            : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {dashboard.ideas.map((idea) => (
+                  <div key={idea.id} style={{ fontSize: 13, lineHeight: 1.4, color: 'var(--text)' }}>
+                    {idea.text}
+                  </div>
+                ))}
+              </div>
+            )
+          }
+          {dashboard && dashboard.ideas.length > 0 && (
+            <a href="/ideas" style={{ fontSize: 11, color: 'var(--blue-bright)', display: 'block', marginTop: 12 }}>
+              View all ideas →
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );

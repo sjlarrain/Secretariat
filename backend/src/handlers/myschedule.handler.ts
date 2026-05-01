@@ -31,18 +31,19 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
 
     allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
 
+    const tz = settings.timezone;
     const isToday = new Date().toDateString() === targetDate.toDateString();
-    const label = isToday ? 'Today' : formatDate(targetDate, true);
+    const label = isToday ? 'Today' : formatDate(targetDate, true, tz);
 
     if (allEvents.length === 0) {
       await sendMessage(from, `📅 No events scheduled for ${label}.`);
       return;
     }
 
-    const lines = [`📅 *${label} — ${formatDate(targetDate, !isToday)}*\n`];
+    const lines = [`📅 *${label} — ${formatDate(targetDate, !isToday, tz)}*\n`];
     for (const event of allEvents) {
       const alias = calendarAccounts.length > 1 ? ` _(${event.calendarAlias})_` : '';
-      lines.push(`🕐 ${formatTime(event.start)}  ${event.title}${alias}`);
+      lines.push(`🕐 ${formatTime(event.start, tz)}  ${event.title}${alias}`);
     }
 
     await sendMessage(from, lines.join('\n'));

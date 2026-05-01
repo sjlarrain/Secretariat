@@ -15,10 +15,11 @@ export async function fireMorningDigest(): Promise<void> {
 
   allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
 
+  const tz = settings.timezone;
   const today = new Date();
   const lines = [
     `Good morning ☀️ Here's your schedule for today:\n`,
-    `📅 *${formatDate(today, true)}*\n`,
+    `📅 *${formatDate(today, true, tz)}*\n`,
   ];
 
   if (allEvents.length === 0) {
@@ -26,7 +27,7 @@ export async function fireMorningDigest(): Promise<void> {
   } else {
     for (const event of allEvents) {
       const alias = calAccounts.length > 1 ? ` _(${event.calendarAlias})_` : '';
-      lines.push(`${formatTime(event.start)} — ${event.title}${alias}`);
+      lines.push(`${formatTime(event.start, tz)} — ${event.title}${alias}`);
     }
   }
 

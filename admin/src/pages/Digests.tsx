@@ -10,11 +10,23 @@ const TIMEZONES = [
   'America/Sao_Paulo', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney',
 ];
 
+function StatusPill({ label }: { label: string }) {
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 600,
+      color: 'var(--green)', background: 'var(--green-dim)',
+      padding: '2px 9px', borderRadius: 99,
+    }}>{label}</span>
+  );
+}
+
 export default function Digests() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const [editingMorning, setEditingMorning] = useState(false);
+  const [editingWeekly, setEditingWeekly] = useState(false);
 
   useEffect(() => { api.getSettings().then(setSettings); }, []);
 
@@ -50,6 +62,8 @@ export default function Digests() {
     try {
       await api.saveSettings(settings!);
       setMsg('Settings saved.');
+      setEditingMorning(false);
+      setEditingWeekly(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Save failed.');
     } finally {
@@ -57,11 +71,7 @@ export default function Digests() {
     }
   }
 
-  const sectionStyle = (enabled: boolean): React.CSSProperties => ({
-    opacity: enabled ? 1 : 0.5,
-    transition: 'opacity 0.2s',
-    pointerEvents: enabled ? 'auto' : 'none',
-  });
+  const morningDayLabels = settings.morningDigest.days.map((d) => DAYS[d]).join(', ');
 
   return (
     <div style={{ maxWidth: 600 }}>
@@ -86,7 +96,6 @@ export default function Digests() {
 
       {/* Morning Digest */}
       <div className="card" style={{ marginBottom: 12 }}>
-        {/* Section header with toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
           <span style={{ fontSize: 16 }}>☀️</span>
           <div style={{ flex: 1 }}>
@@ -99,39 +108,53 @@ export default function Digests() {
             <input
               type="checkbox"
               checked={settings.morningDigest.enabled}
-              onChange={(e) => updateMorning('enabled', e.target.checked)}
+              onChange={(e) => {
+                updateMorning('enabled', e.target.checked);
+                if (!e.target.checked) setEditingMorning(false);
+              }}
             />
             <span className="toggle-track" />
           </label>
         </div>
 
-        <div style={sectionStyle(settings.morningDigest.enabled)}>
-          {/* Time */}
-          <div style={{ marginBottom: 16, maxWidth: 180 }}>
-            <label className="field-label">Send at</label>
-            <input
-              type="time"
-              value={settings.morningDigest.time}
-              onChange={(e) => updateMorning('time', e.target.value)}
-            />
+        {settings.morningDigest.enabled && !editingMorning ? (
+          /* Status card */
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <StatusPill label={`at ${settings.morningDigest.time}`} />
+              {morningDayLabels && <StatusPill label={morningDayLabels} />}
+            </div>
+            <button className="btn-ghost" style={{ fontSize: 12, flexShrink: 0 }} onClick={() => setEditingMorning(true)}>
+              Edit
+            </button>
           </div>
-
-          {/* Days */}
+        ) : settings.morningDigest.enabled ? (
+          /* Edit form */
           <div>
-            <label className="field-label">Days</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {DAYS.map((day, i) => (
-                <button
-                  key={i}
-                  className={`day-pill${settings.morningDigest.days.includes(i) ? ' active' : ''}`}
-                  onClick={() => toggleMorningDay(i)}
-                >
-                  {day}
-                </button>
-              ))}
+            <div style={{ marginBottom: 16, maxWidth: 180 }}>
+              <label className="field-label">Send at</label>
+              <input
+                type="time"
+                value={settings.morningDigest.time}
+                onChange={(e) => updateMorning('time', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="field-label">Days</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {DAYS.map((day, i) => (
+                  <button
+                    key={i}
+                    className={`day-pill${settings.morningDigest.days.includes(i) ? ' active' : ''}`}
+                    onClick={() => toggleMorningDay(i)}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       {/* Weekly Summary */}
@@ -148,28 +171,45 @@ export default function Digests() {
             <input
               type="checkbox"
               checked={settings.weeklySummary.enabled}
-              onChange={(e) => updateWeekly('enabled', e.target.checked)}
+              onChange={(e) => {
+                updateWeekly('enabled', e.target.checked);
+                if (!e.target.checked) setEditingWeekly(false);
+              }}
             />
             <span className="toggle-track" />
           </label>
         </div>
 
-        <div style={{ ...sectionStyle(settings.weeklySummary.enabled), display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div>
-            <label className="field-label">Day</label>
-            <select value={settings.weeklySummary.day} onChange={(e) => updateWeekly('day', Number(e.target.value))}>
-              {DAYS.map((day, i) => <option key={i} value={i}>{day}</option>)}
-            </select>
+        {settings.weeklySummary.enabled && !editingWeekly ? (
+          /* Status card */
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <StatusPill label={DAYS[settings.weeklySummary.day]} />
+              <StatusPill label={`at ${settings.weeklySummary.time}`} />
+            </div>
+            <button className="btn-ghost" style={{ fontSize: 12, flexShrink: 0 }} onClick={() => setEditingWeekly(true)}>
+              Edit
+            </button>
           </div>
-          <div>
-            <label className="field-label">Time</label>
-            <input
-              type="time"
-              value={settings.weeklySummary.time}
-              onChange={(e) => updateWeekly('time', e.target.value)}
-            />
+        ) : settings.weeklySummary.enabled ? (
+          /* Edit form */
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div>
+              <label className="field-label">Day</label>
+              <select value={settings.weeklySummary.day} onChange={(e) => updateWeekly('day', Number(e.target.value))}>
+                {DAYS.map((day, i) => <option key={i} value={i}>{day}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label">Time</label>
+              <input
+                type="time"
+                value={settings.weeklySummary.time}
+                onChange={(e) => updateWeekly('time', e.target.value)}
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       {err && <p className="error-msg" style={{ marginBottom: 12 }}>⚠ {err}</p>}

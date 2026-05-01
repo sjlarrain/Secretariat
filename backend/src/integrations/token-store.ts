@@ -50,7 +50,19 @@ function getRedis(): Redis {
 
 export async function getAllAccounts(): Promise<ConnectedAccount[]> {
   const data = await getRedis().get<ConnectedAccount[]>(ACCOUNTS_KEY);
-  return data ?? [];
+  const accounts = data ?? [];
+
+  // Self-heal: ensure at most one default per type
+  let dirty = false;
+  for (const type of ['calendar', 'tasks'] as const) {
+    const defaults = accounts.filter((a) => a.type === type && a.isDefault);
+    if (defaults.length > 1) {
+      defaults.slice(1).forEach((a) => { a.isDefault = false; dirty = true; });
+    }
+  }
+  if (dirty) await getRedis().set(ACCOUNTS_KEY, accounts);
+
+  return accounts;
 }
 
 export async function getAccount(id: string): Promise<ConnectedAccount | undefined> {

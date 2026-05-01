@@ -22,10 +22,12 @@ export async function fireWeeklySummary(): Promise<void> {
 
   const lines = ['📋 *Your week ahead:*\n'];
 
+  const tz = settings.timezone;
+
   // Group events by day
   const byDay = new Map<string, CalendarEvent[]>();
   for (const event of allEvents) {
-    const key = formatDate(event.start, true);
+    const key = formatDate(event.start, true, tz);
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(event);
   }
@@ -36,7 +38,7 @@ export async function fireWeeklySummary(): Promise<void> {
     for (const [day, events] of byDay) {
       lines.push(`*${day}*`);
       for (const event of events) {
-        lines.push(`  ${formatTime(event.start)} — ${event.title}`);
+        lines.push(`  ${formatTime(event.start, tz)} — ${event.title}`);
       }
       lines.push('');
     }
@@ -45,7 +47,7 @@ export async function fireWeeklySummary(): Promise<void> {
   if (allTasks.length > 0) {
     lines.push('📌 *Pending tasks:*');
     for (const task of allTasks) {
-      const due = task.dueDate ? ` — due ${formatDate(task.dueDate)}` : '';
+      const due = task.dueDate ? ` — due ${formatDate(task.dueDate, false, tz)}` : '';
       lines.push(`• ${task.title}${due}`);
     }
   }

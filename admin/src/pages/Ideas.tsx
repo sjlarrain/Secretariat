@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api, Project, Idea } from '../api/client';
 
-type View = 'all' | 'trash' | number; // 'all', 'trash', or a project id
+type View = 'all' | 'trash' | number;
+type LayoutMode = 'list' | 'grid';
 
 export default function IdeasPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [trashed, setTrashed] = useState<Idea[]>([]);
   const [view, setView] = useState<View>('all');
+  const [layout, setLayout] = useState<LayoutMode>('list');
   const [loading, setLoading] = useState(true);
 
   // New idea form
@@ -24,9 +26,11 @@ export default function IdeasPage() {
   const [newProjectName, setNewProjectName] = useState('');
   const [addingProject, setAddingProject] = useState(false);
 
-  // Rename project
+  // Three-dots menu
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -46,12 +50,22 @@ export default function IdeasPage() {
 
   useEffect(() => { load(); }, []);
 
-  // Refresh trash when switching to trash view (triggers server-side auto-purge)
   useEffect(() => {
     if (view === 'trash') {
       api.getTrashedIdeas().then((res) => setTrashed(res.ideas));
     }
   }, [view]);
+
+  // Close three-dots menu on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   function flash(message: string, isErr = false) {
     if (isErr) { setErr(message); setMsg(''); }
@@ -197,6 +211,7 @@ export default function IdeasPage() {
       await api.renameProject(id, renameValue.trim());
       setProjects((prev) => prev.map((p) => p.id === id ? { ...p, name: renameValue.trim() } : p));
       setRenamingId(null);
+      setMenuOpenId(null);
       flash('Project renamed.');
     } catch {
       flash('Failed to rename project.', true);
@@ -219,6 +234,7 @@ export default function IdeasPage() {
         const filtered = prev.filter((p) => p.id !== id);
         return filtered.map((p) => p.id === defId ? { ...p, ideaCount: p.ideaCount + count } : p);
       });
+      setMenuOpenId(null);
       flash('Project deleted.');
     } catch {
       flash('Failed to delete project.', true);
@@ -234,6 +250,87 @@ export default function IdeasPage() {
     );
   }
 
+  // ── Grid view ──────────────────────────────────────
+  if (layout === 'grid' && view === 'all') {
+    const lastIdea = (p: Project) => {
+      const match = [...ideas].reverse().find((i) => i.projectId === p.id);
+      return match?.text ?? null;
+    };
+
+    return (
+      <div>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>Ideas</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
+              {ideas.length} idea{ideas.length !== 1 ? 's' : ''} across {projects.length} project{projects.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn-ghost" style={{ fontSize: 15, padding: '6px 10px' }} onClick={() => setLayout('list')} title="List view">☰</button>
+            <button className="btn-ghost active" style={{ fontSize: 15, padding: '6px 10px' }} onClick={() => setLayout('grid')} title="Grid view">⊞</button>
+          </div>
+        </div>
+
+        {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
+        {err && <p className="error-msg" style={{ marginBottom: 14 }}>✕ {err}</p>}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+          {/* All ideas card */}
+          <button
+            onClick={() => { setLayout('list'); setView('all'); }}
+            className="card"
+            style={{ textAlign: 'left', cursor: 'pointer', padding: '18px 20px', border: '1px solid var(--border)' }}
+          >
+            <div style={{ fontSize: 22, marginBottom: 8 }}>🗂</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>All ideas</div>
+            <div style={{ fontSize: 12, color: 'var(--blue-bright)', fontWeight: 600 }}>{ideas.length} ideas</div>
+          </button>
+
+          {/* Project cards */}
+          {projects.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => { setLayout('list'); setView(p.id); }}
+              className="card"
+              style={{ textAlign: 'left', cursor: 'pointer', padding: '18px 20px', border: '1px solid var(--border)' }}
+            >
+              <div style={{ fontSize: 22, marginBottom: 8 }}>📁</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{p.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--blue-bright)', fontWeight: 600, marginBottom: lastIdea(p) ? 8 : 0 }}>
+                {p.ideaCount} idea{p.ideaCount !== 1 ? 's' : ''}
+              </div>
+              {lastIdea(p) && (
+                <div style={{
+                  fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4,
+                  overflow: 'hidden', display: '-webkit-box',
+                  WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                }}>
+                  {lastIdea(p)}
+                </div>
+              )}
+            </button>
+          ))}
+
+          {/* Trash card */}
+          <button
+            onClick={() => { setLayout('list'); setView('trash'); }}
+            className="card"
+            style={{ textAlign: 'left', cursor: 'pointer', padding: '18px 20px', border: '1px solid var(--border)', opacity: 0.7 }}
+          >
+            <div style={{ fontSize: 22, marginBottom: 8 }}>🗑</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Trash</div>
+            <div style={{ fontSize: 12, color: trashed.length > 0 ? 'var(--red)' : 'var(--text-dim)', fontWeight: 600 }}>
+              {trashed.length} item{trashed.length !== 1 ? 's' : ''}
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ──────────────────────────────────────
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', minHeight: '70vh' }}>
 
@@ -247,8 +344,12 @@ export default function IdeasPage() {
         overflow: 'hidden',
       }}>
         {/* Header */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.2px' }}>💡 Ideas</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button className={`btn-ghost${layout === 'list' ? ' active' : ''}`} style={{ fontSize: 13, padding: '3px 6px' }} onClick={() => setLayout('list')} title="List view">☰</button>
+            <button className={`btn-ghost${layout === 'grid' ? ' active' : ''}`} style={{ fontSize: 13, padding: '3px 6px' }} onClick={() => { setLayout('grid'); setView('all'); }} title="Grid view">⊞</button>
+          </div>
         </div>
 
         {/* All Ideas */}
@@ -296,37 +397,74 @@ export default function IdeasPage() {
                     autoFocus
                   />
                   <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => handleRenameProject(p.id)}>✓</button>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => setRenamingId(null)}>✕</button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setView(p.id)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 14px',
-                    background: view === p.id ? '#151e30' : 'transparent',
-                    border: 'none',
-                    color: view === p.id ? '#fff' : 'var(--text-muted)',
-                    fontSize: 13, fontWeight: view === p.id ? 600 : 400,
-                    cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s, color 0.1s',
-                  }}
-                >
-                  <span style={{ opacity: 0.5, fontSize: 13 }}>📁</span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                  <span style={{
-                    fontSize: 11, fontWeight: 600,
-                    background: view === p.id ? 'rgba(59,130,246,0.2)' : '#1c1c1c',
-                    color: view === p.id ? 'var(--blue-bright)' : 'var(--text-dim)',
-                    padding: '1px 6px', borderRadius: 99, flexShrink: 0,
-                  }}>{p.ideaCount}</span>
-                </button>
-              )}
-              {view === p.id && renamingId !== p.id && (
-                <div style={{ display: 'flex', gap: 2, padding: '0 8px 6px' }}>
-                  <button className="btn-ghost" style={{ fontSize: 10, padding: '2px 8px', flex: 1 }}
-                    onClick={() => { setRenamingId(p.id); setRenameValue(p.name); }}>Rename</button>
-                  {!p.isDefault && (
-                    <button className="btn-danger" style={{ fontSize: 10, padding: '2px 8px' }}
-                      onClick={() => handleDeleteProject(p.id, p.name)}>✕</button>
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setView(p.id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 14px',
+                      background: view === p.id ? '#151e30' : 'transparent',
+                      border: 'none',
+                      color: view === p.id ? '#fff' : 'var(--text-muted)',
+                      fontSize: 13, fontWeight: view === p.id ? 600 : 400,
+                      cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s, color 0.1s',
+                    }}
+                  >
+                    <span style={{ opacity: 0.5, fontSize: 13 }}>📁</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600,
+                      background: view === p.id ? 'rgba(59,130,246,0.2)' : '#1c1c1c',
+                      color: view === p.id ? 'var(--blue-bright)' : 'var(--text-dim)',
+                      padding: '1px 6px', borderRadius: 99, flexShrink: 0,
+                    }}>{p.ideaCount}</span>
+                    {/* Three-dots trigger */}
+                    <span
+                      onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === p.id ? null : p.id); }}
+                      style={{
+                        fontSize: 14, color: 'var(--text-dim)', padding: '0 2px',
+                        opacity: view === p.id || menuOpenId === p.id ? 1 : 0,
+                        transition: 'opacity 0.1s', flexShrink: 0,
+                      }}
+                      className="dot-menu-trigger"
+                    >⋯</span>
+                  </button>
+
+                  {/* Dropdown */}
+                  {menuOpenId === p.id && (
+                    <div ref={menuRef} style={{
+                      position: 'absolute', right: 8, top: '100%', zIndex: 50,
+                      background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                      minWidth: 120, overflow: 'hidden',
+                    }}>
+                      <button
+                        onClick={() => { setRenamingId(p.id); setRenameValue(p.name); setMenuOpenId(null); setView(p.id); }}
+                        style={{
+                          width: '100%', display: 'block', padding: '9px 14px',
+                          background: 'none', border: 'none', textAlign: 'left',
+                          fontSize: 13, color: 'var(--text)', cursor: 'pointer',
+                        }}
+                      >
+                        Rename
+                      </button>
+                      {!p.isDefault && (
+                        <button
+                          onClick={() => handleDeleteProject(p.id, p.name)}
+                          style={{
+                            width: '100%', display: 'block', padding: '9px 14px',
+                            background: 'none', border: 'none', textAlign: 'left',
+                            fontSize: 13, color: 'var(--red)', cursor: 'pointer',
+                            borderTop: '1px solid var(--border)',
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

@@ -48,6 +48,9 @@ export const api = {
     request(`/ideas/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteIdea: (id: number) => request(`/ideas/${id}`, { method: 'DELETE' }),
 
+  getDashboard: () => request<DashboardData>('/dashboard'),
+  getCommands: () => request<{ commands: CommandInfo[] }>('/commands'),
+
   getTrashedIdeas: () => request<{ ideas: Idea[] }>('/ideas/trash'),
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
   restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
@@ -77,6 +80,28 @@ export interface Idea {
   projectId: number;
   updatedAt?: string;
   deletedAt?: string;
+}
+
+export interface DashboardData {
+  events: { title: string; start: string; end: string }[];
+  tasks: { title: string; dueDate: string | null }[];
+  ideas: Idea[];
+}
+
+export interface CommandFlagInfo {
+  key: string;
+  long: string;
+  short: string | null;
+  description: string;
+  optional: boolean;
+}
+
+export interface CommandInfo {
+  key: string;
+  name: string;
+  description: string;
+  acceptedFlags: CommandFlagInfo[];
+  requiredFlags: string[];
 }
 
 export interface DigestConfig {

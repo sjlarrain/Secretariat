@@ -38,7 +38,7 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
 
     await sendMessage(
       from,
-      `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target)} at ${formatTime(target)}`
+      `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target, false, settings.timezone)} at ${formatTime(target, settings.timezone)}`
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

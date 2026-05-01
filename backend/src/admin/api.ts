@@ -26,6 +26,11 @@ import {
   permanentlyDeleteIdea,
   emptyTrash,
 } from '../integrations/local/ideas';
+import { resolveAccount } from '../integrations/registry';
+import { getEventsForDate } from '../integrations/google/calendar';
+import { getPendingTasks } from '../integrations/google/tasks';
+import { COMMANDS } from '../registries/commands.registry';
+import { FLAGS } from '../registries/flags.registry';
 
 const router = Router();
 
@@ -250,6 +255,58 @@ router.delete('/ideas/:id/permanent', requireAuth, async (req, res) => {
   const ok = await permanentlyDeleteIdea(id);
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
+});
+
+// --- Dashboard ---
+router.get('/dashboard', requireAuth, async (_req, res) => {
+  const settings = await getSettings();
+  const tz = settings.timezone;
+
+  const [calAccount, tasksAccount, ideasRes] = await Promise.all([
+    resolveAccount('calendar'),
+    resolveAccount('tasks'),
+    getIdeas(),
+  ]);
+
+  const [events, tasks] = await Promise.all([
+    calAccount ? getEventsForDate(calAccount, new Date(), tz).catch(() => []) : Promise.resolve([]),
+    tasksAccount ? getPendingTasks(tasksAccount).catch(() => []) : Promise.resolve([]),
+  ]);
+
+  events.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const recentIdeas = [...ideasRes].reverse().slice(0, 3);
+
+  res.json({
+    events: events.map((e) => ({
+      title: e.title,
+      start: e.start.toISOString(),
+      end: e.end.toISOString(),
+    })),
+    tasks: tasks.map((t) => ({
+      title: t.title,
+      dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+    })),
+    ideas: recentIdeas,
+  });
+});
+
+// --- Commands reference ---
+router.get('/commands', requireAuth, (_req, res) => {
+  const commands = Object.entries(COMMANDS).map(([key, cmd]) => ({
+    key,
+    name: cmd.name,
+    description: cmd.description,
+    acceptedFlags: cmd.acceptedFlags.map((f) => ({
+      key: f,
+      long: FLAGS[f]?.name ?? `--${f}`,
+      short: FLAGS[f]?.shortAlias ? `-${FLAGS[f].shortAlias}` : null,
+      description: FLAGS[f]?.description ?? '',
+      optional: FLAGS[f]?.optional ?? false,
+    })),
+    requiredFlags: cmd.requiredFlags,
+  }));
+  res.json({ commands });
 });
 
 // --- Google OAuth start (proxy from admin panel) ---

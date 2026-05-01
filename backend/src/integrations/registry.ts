@@ -1,4 +1,4 @@
-import { ConnectedAccount, getAllAccounts, getAccount, saveAccount, deleteAccount } from './token-store';
+import { ConnectedAccount, getAllAccounts, getAccount, saveAccount, deleteAccount, setDefaultAccount } from './token-store';
 
 export { ConnectedAccount };
 
@@ -13,15 +13,7 @@ export async function resolveAccount(type: 'calendar' | 'tasks', alias?: string)
 }
 
 export async function setDefault(id: string): Promise<void> {
-  const account = await getAccount(id);
-  if (!account) return;
-
-  const accounts = await getAllAccounts();
-  await Promise.all(
-    accounts
-      .filter((a) => a.type === account.type)
-      .map((a) => saveAccount({ ...a, isDefault: a.id === id }))
-  );
+  await setDefaultAccount(id);
 }
 
 export { getAllAccounts, getAccount, saveAccount, deleteAccount };

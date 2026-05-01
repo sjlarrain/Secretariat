@@ -81,6 +81,16 @@ export async function saveAccount(account: ConnectedAccount): Promise<void> {
   await getRedis().set(ACCOUNTS_KEY, accounts);
 }
 
+export async function setDefaultAccount(id: string): Promise<void> {
+  const accounts = await getAllAccounts();
+  const target = accounts.find((a) => a.id === id);
+  if (!target) return;
+  const updated = accounts.map((a) =>
+    a.type === target.type ? { ...a, isDefault: a.id === id } : a
+  );
+  await getRedis().set(ACCOUNTS_KEY, updated);
+}
+
 export async function deleteAccount(id: string): Promise<void> {
   const accounts = await getAllAccounts();
   await getRedis().set(ACCOUNTS_KEY, accounts.filter((a) => a.id !== id));

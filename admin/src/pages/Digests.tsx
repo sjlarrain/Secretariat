@@ -3,13 +3,6 @@ import { api, Settings } from '../api/client';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const TIMEZONES = [
-  'America/Santiago', 'America/New_York', 'America/Chicago', 'America/Denver',
-  'America/Los_Angeles', 'Europe/London', 'Europe/Madrid', 'Europe/Paris',
-  'America/Mexico_City', 'America/Bogota', 'America/Lima', 'America/Buenos_Aires',
-  'America/Sao_Paulo', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney',
-];
-
 function StatusPill({ label }: { label: string }) {
   return (
     <span style={{
@@ -37,10 +30,6 @@ export default function Digests() {
         Loading…
       </div>
     );
-  }
-
-  function update<K extends keyof Settings>(key: K, val: Settings[K]) {
-    setSettings((prev) => prev ? { ...prev, [key]: val } : prev);
   }
 
   function updateMorning<K extends keyof Settings['morningDigest']>(key: K, val: Settings['morningDigest'][K]) {
@@ -81,17 +70,6 @@ export default function Digests() {
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
           Scheduled WhatsApp messages sent automatically
         </p>
-      </div>
-
-      {/* Timezone */}
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 14 }}>🌍</span>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>Timezone</span>
-        </div>
-        <select value={settings.timezone} onChange={(e) => update('timezone', e.target.value)}>
-          {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-        </select>
       </div>
 
       {/* Morning Digest */}

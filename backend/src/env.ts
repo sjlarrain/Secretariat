@@ -22,6 +22,7 @@ const envSchema = z.object({
   QSTASH_TOKEN: z.string().min(1, 'QSTASH_TOKEN is required'),
   QSTASH_CURRENT_SIGNING_KEY: z.string().min(1, 'QSTASH_CURRENT_SIGNING_KEY is required'),
   QSTASH_NEXT_SIGNING_KEY: z.string().min(1, 'QSTASH_NEXT_SIGNING_KEY is required'),
+  QSTASH_URL: z.string().url().optional(),
 
   // Google OAuth
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),

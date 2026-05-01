@@ -4,7 +4,7 @@ import { env } from '../env';
 let _client: Client | null = null;
 
 function getClient(): Client {
-  if (!_client) _client = new Client({ token: env.QSTASH_TOKEN });
+  if (!_client) _client = new Client({ token: env.QSTASH_TOKEN, ...(env.QSTASH_URL ? { baseUrl: env.QSTASH_URL } : {}) });
   return _client;
 }
 

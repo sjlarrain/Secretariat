@@ -3,11 +3,12 @@ import { qstashVerify } from '../middleware/qstash-verify';
 import { sendMessage } from '../kapso/client';
 import { fireMorningDigest } from '../cron/morning-digest';
 import { fireWeeklySummary } from '../cron/weekly-summary';
+import { removeReminder } from '../integrations/local/reminders';
 
 const router = Router();
 
 router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) => {
-  const { title, phoneNumber } = req.body as { title?: string; phoneNumber?: string };
+  const { reminderId, title, phoneNumber } = req.body as { reminderId?: string; title?: string; phoneNumber?: string };
 
   if (!title || !phoneNumber) {
     res.status(400).json({ error: 'Missing title or phoneNumber' });
@@ -16,6 +17,7 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
 
   try {
     await sendMessage(phoneNumber, `⏰ *Reminder:* ${title}`);
+    if (reminderId) await removeReminder(reminderId).catch(() => {});
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Reminder fire error:', err);

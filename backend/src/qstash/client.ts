@@ -43,3 +43,9 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
   const client = getClient();
   await client.schedules.delete(scheduleId);
 }
+
+// Cancels a pending one-time message (best-effort)
+export async function cancelMessage(messageId: string): Promise<void> {
+  const client = getClient();
+  await client.messages.cancel(messageId);
+}

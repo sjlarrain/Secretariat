@@ -58,6 +58,9 @@ export const api = {
     request(`/plans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePlan: (id: number) => request(`/plans/${id}`, { method: 'DELETE' }),
 
+  getReminders: () => request<{ reminders: Reminder[] }>('/reminders'),
+  deleteReminder: (id: string) => request(`/reminders/${id}`, { method: 'DELETE' }),
+
   getTrashedIdeas: () => request<{ ideas: Idea[] }>('/ideas/trash'),
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
   restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
@@ -117,6 +120,14 @@ export interface CommandInfo {
   description: string;
   acceptedFlags: CommandFlagInfo[];
   requiredFlags: string[];
+}
+
+export interface Reminder {
+  id: string;
+  title: string;
+  phoneNumber: string;
+  fireAt: string;
+  messageId: string;
 }
 
 export interface DigestConfig {

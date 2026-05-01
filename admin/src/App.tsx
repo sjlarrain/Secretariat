@@ -3,7 +3,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Whitelist from './pages/Whitelist';
-import Digests from './pages/Digests';
+import CronManager from './pages/CronManager';
 import Ideas from './pages/Ideas';
 import Commands from './pages/Commands';
 import Plans from './pages/Plans';
@@ -14,7 +14,7 @@ const NAV_LINKS = [
   { to: '/', label: 'Dashboard', icon: '🏠', end: true },
   { to: '/accounts', label: 'Accounts', icon: '🔗' },
   { to: '/whitelist', label: 'Whitelist', icon: '📱' },
-  { to: '/digests', label: 'Digests', icon: '⏰' },
+  { to: '/cron', label: 'Cron Manager', icon: '⏰' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
   { to: '/plans', label: 'Plans', icon: '📋' },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
@@ -137,7 +137,7 @@ export default function App() {
         <Route path="/" element={<Layout><Dashboard /></Layout>} />
         <Route path="/accounts" element={<Layout><Accounts /></Layout>} />
         <Route path="/whitelist" element={<Layout><Whitelist /></Layout>} />
-        <Route path="/digests" element={<Layout><Digests /></Layout>} />
+        <Route path="/cron" element={<Layout><CronManager /></Layout>} />
         <Route path="/plans" element={<Layout><Plans /></Layout>} />
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
         <Route path="/commands" element={<Layout><Commands /></Layout>} />

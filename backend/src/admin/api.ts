@@ -32,6 +32,8 @@ import { getPendingTasks } from '../integrations/google/tasks';
 import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../integrations/local/plans';
+import { getReminders, removeReminder } from '../integrations/local/reminders';
+import { cancelMessage } from '../qstash/client';
 
 const router = Router();
 
@@ -343,6 +345,22 @@ router.delete('/plans/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const ok = await deletePlan(id);
   if (!ok) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json({ ok: true });
+});
+
+// --- Pending reminders ---
+router.get('/reminders', requireAuth, async (_req, res) => {
+  const reminders = await getReminders();
+  res.json({ reminders });
+});
+
+router.delete('/reminders/:id', requireAuth, async (req, res) => {
+  const id = req.params['id'] as string;
+  const reminders = await getReminders();
+  const reminder = reminders.find((r) => r.id === id);
+  if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
+  await removeReminder(id);
+  await cancelMessage(reminder.messageId).catch(() => {});
   res.json({ ok: true });
 });
 

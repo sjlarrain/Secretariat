@@ -2,7 +2,9 @@ import { ParsedCommand } from '../parser/command.parser';
 import { scheduleOnce } from '../qstash/client';
 import { getSettings } from '../integrations/token-store';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
+import { saveReminder } from '../integrations/local/reminders';
 import { sendMessage } from '../kapso/client';
+import { randomUUID } from 'crypto';
 
 export async function reminderHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags, extraArgs } = parsed;
@@ -29,12 +31,16 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
   }
 
   const delaySeconds = Math.floor((target.getTime() - now) / 1000);
+  const id = randomUUID();
 
   try {
-    await scheduleOnce('/internal/reminder/fire', delaySeconds, {
+    const messageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
+      reminderId: id,
       title,
       phoneNumber: from,
     });
+
+    await saveReminder({ id, title, phoneNumber: from, fireAt: target.toISOString(), messageId });
 
     await sendMessage(
       from,

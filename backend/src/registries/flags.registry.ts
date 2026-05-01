@@ -64,4 +64,10 @@ export const FLAGS: Record<string, FlagDefinition> = {
     optional: true,
     description: 'Project folder — omit value to list all projects, provide name to filter or assign',
   },
+  plan: {
+    name: '--plan',
+    type: 'string',
+    required: false,
+    description: 'Plan type name (e.g. Lunch, Coffee) — shows free slots for that meeting type',
+  },
 };

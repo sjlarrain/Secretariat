@@ -6,6 +6,7 @@ import Whitelist from './pages/Whitelist';
 import Digests from './pages/Digests';
 import Ideas from './pages/Ideas';
 import Commands from './pages/Commands';
+import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
 import { api } from './api/client';
 
@@ -15,6 +16,7 @@ const NAV_LINKS = [
   { to: '/whitelist', label: 'Whitelist', icon: '📱' },
   { to: '/digests', label: 'Digests', icon: '⏰' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
+  { to: '/plans', label: 'Plans', icon: '📋' },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/commands', label: 'Commands', icon: '📖' },
 ];
@@ -136,6 +138,7 @@ export default function App() {
         <Route path="/accounts" element={<Layout><Accounts /></Layout>} />
         <Route path="/whitelist" element={<Layout><Whitelist /></Layout>} />
         <Route path="/digests" element={<Layout><Digests /></Layout>} />
+        <Route path="/plans" element={<Layout><Plans /></Layout>} />
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
         <Route path="/commands" element={<Layout><Commands /></Layout>} />
         <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />

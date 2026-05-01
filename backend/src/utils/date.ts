@@ -38,3 +38,22 @@ export function formatDate(date: Date, includeDay = false, timezone = 'America/S
 export function formatTime(date: Date, timezone = 'America/Santiago'): string {
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone });
 }
+
+// Returns the Monday of the ISO week containing `date`
+export function getMondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day; // shift to Monday
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// Returns Date objects for the given weekday indices (1=Mon..6=Sat) in the week starting at `monday`
+export function getWeekDates(monday: Date, days: number[]): Date[] {
+  return days.map((d) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + (d - 1)); // 1=Mon → offset 0, 2=Tue → offset 1, etc.
+    return date;
+  });
+}

@@ -51,6 +51,13 @@ export const api = {
   getDashboard: () => request<DashboardData>('/dashboard'),
   getCommands: () => request<{ commands: CommandInfo[] }>('/commands'),
 
+  getPlans: () => request<{ plans: PlanType[] }>('/plans'),
+  createPlan: (data: Omit<PlanType, 'id'>) =>
+    request<{ plan: PlanType }>('/plans', { method: 'POST', body: JSON.stringify(data) }),
+  updatePlan: (id: number, data: Partial<Omit<PlanType, 'id'>>) =>
+    request(`/plans/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePlan: (id: number) => request(`/plans/${id}`, { method: 'DELETE' }),
+
   getTrashedIdeas: () => request<{ ideas: Idea[] }>('/ideas/trash'),
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
   restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
@@ -80,6 +87,14 @@ export interface Idea {
   projectId: number;
   updatedAt?: string;
   deletedAt?: string;
+}
+
+export interface PlanType {
+  id: number;
+  name: string;
+  days: number[];
+  slots: string[];
+  durationMinutes: number;
 }
 
 export interface DashboardData {

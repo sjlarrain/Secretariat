@@ -102,7 +102,7 @@ async function checkAvailability(
     const freeSlots: string[] = [];
 
     for (const slot of plan.slots) {
-      const slotStart = combineDateAndTime(day, slot);
+      const slotStart = combineDateAndTime(day, slot, tz);
       const slotEnd = new Date(slotStart.getTime() + plan.durationMinutes * 60_000);
 
       const blocked = events.some((e) => isBlocked(e, slotStart, slotEnd));

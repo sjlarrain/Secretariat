@@ -20,12 +20,23 @@ export function parseDate(input: string, timezone: string = 'America/Santiago'):
   return parsed ?? null;
 }
 
-// Combines a date and HH:MM time string into a Date
-export function combineDateAndTime(date: Date, timeStr: string): Date {
+// Combines a date and HH:MM time string into a Date, interpreting the time in the given timezone
+export function combineDateAndTime(date: Date, timeStr: string, timezone = 'America/Santiago'): Date {
   const [hours, minutes] = timeStr.split(':').map(Number);
-  const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
+  // Get the calendar date in the target timezone (YYYY-MM-DD)
+  const dateInTz = date.toLocaleDateString('en-CA', { timeZone: timezone });
+  // Build a UTC probe as if the desired wall-clock time were UTC
+  const probe = new Date(`${dateInTz}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00Z`);
+  // Find how many ms the timezone is offset from UTC at that instant
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(probe);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  const tzMs = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+  const offsetMs = tzMs - probe.getTime(); // negative for zones behind UTC
+  return new Date(probe.getTime() - offsetMs);
 }
 
 // Formats a Date for WhatsApp display (e.g. "22 Apr" or "Tue 22 Apr")

@@ -20,7 +20,7 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
     return;
   }
 
-  const target = combineDateAndTime(date, flags['at']);
+  const target = combineDateAndTime(date, flags['at'], settings.timezone);
   const now = Date.now();
 
   if (target.getTime() <= now) {

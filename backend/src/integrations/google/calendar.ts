@@ -102,9 +102,10 @@ export async function getEventsForDate(account: ConnectedAccount, date: Date, ti
       .filter((e) => {
         const title = e.summary ?? '';
         if (/^canceled[:\s]/i.test(title)) return false;
-        const id = e.id ?? '';
-        if (id && seen.has(id)) return false;
-        if (id) seen.add(id);
+        const start = e.start?.dateTime ?? e.start?.date ?? '';
+        const key = `${title}|${start}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       })
       .map((e) => ({
@@ -147,9 +148,10 @@ export async function getWeekEvents(account: ConnectedAccount, timezone: string)
       .filter((e) => {
         const title = e.summary ?? '';
         if (/^canceled[:\s]/i.test(title)) return false;
-        const id = e.id ?? '';
-        if (id && seen.has(id)) return false;
-        if (id) seen.add(id);
+        const start = e.start?.dateTime ?? e.start?.date ?? '';
+        const key = `${title}|${start}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       })
       .map((e) => ({

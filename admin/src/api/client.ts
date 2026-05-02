@@ -61,11 +61,23 @@ export const api = {
   getReminders: () => request<{ reminders: Reminder[] }>('/reminders'),
   deleteReminder: (id: string) => request(`/reminders/${id}`, { method: 'DELETE' }),
 
+  getAccountCalendars: (id: string) =>
+    request<{ calendars: GoogleCalendar[]; enabledCalendarIds: string[] }>(`/accounts/${id}/calendars`),
+  saveAccountCalendars: (id: string, calendarIds: string[]) =>
+    request(`/accounts/${id}/calendars`, { method: 'PATCH', body: JSON.stringify({ calendarIds }) }),
+
   getTrashedIdeas: () => request<{ ideas: Idea[] }>('/ideas/trash'),
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
   restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
   permanentlyDeleteIdea: (id: number) => request(`/ideas/${id}/permanent`, { method: 'DELETE' }),
 };
+
+export interface GoogleCalendar {
+  id: string;
+  summary: string;
+  primary: boolean;
+  backgroundColor?: string;
+}
 
 export interface Account {
   id: string;

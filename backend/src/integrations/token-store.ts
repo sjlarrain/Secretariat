@@ -9,6 +9,7 @@ export interface ConnectedAccount {
   type: 'calendar' | 'tasks';
   isDefault: boolean;
   encryptedTokens: string; // JSON stringified tokens, AES-256-GCM encrypted
+  enabledCalendarIds?: string[];
 }
 
 export interface Settings {

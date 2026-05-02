@@ -27,7 +27,7 @@ import {
   emptyTrash,
 } from '../integrations/local/ideas';
 import { resolveAccount } from '../integrations/registry';
-import { getEventsForDate } from '../integrations/google/calendar';
+import { getEventsForDate, listCalendars } from '../integrations/google/calendar';
 import { getPendingTasks } from '../integrations/google/tasks';
 import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
@@ -96,6 +96,28 @@ router.patch('/accounts/:id', requireAuth, async (req, res) => {
     return;
   }
 
+  await saveAccount(account);
+  res.json({ ok: true });
+});
+
+router.get('/accounts/:id/calendars', requireAuth, async (req, res) => {
+  const account = await getAccount(String(req.params.id));
+  if (!account) {
+    res.status(404).json({ error: 'Account not found' });
+    return;
+  }
+  const calendars = await listCalendars(account);
+  res.json({ calendars, enabledCalendarIds: account.enabledCalendarIds ?? ['primary'] });
+});
+
+router.patch('/accounts/:id/calendars', requireAuth, async (req, res) => {
+  const account = await getAccount(String(req.params.id));
+  if (!account) {
+    res.status(404).json({ error: 'Account not found' });
+    return;
+  }
+  const { calendarIds } = req.body as { calendarIds: string[] };
+  account.enabledCalendarIds = calendarIds;
   await saveAccount(account);
   res.json({ ok: true });
 });

@@ -10,6 +10,13 @@ export interface CalendarEvent {
   calendarAlias?: string;
 }
 
+export interface GoogleCalendar {
+  id: string;
+  summary: string;
+  primary: boolean;
+  backgroundColor?: string;
+}
+
 async function getCalendarClient(account: ConnectedAccount) {
   const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens);
   const { client, refreshedTokens } = await getAuthenticatedClient(tokens);
@@ -24,6 +31,17 @@ async function getCalendarClient(account: ConnectedAccount) {
   }
 
   return google.calendar({ version: 'v3', auth: client });
+}
+
+export async function listCalendars(account: ConnectedAccount): Promise<GoogleCalendar[]> {
+  const cal = await getCalendarClient(account);
+  const res = await cal.calendarList.list();
+  return (res.data.items ?? []).map((item) => ({
+    id: item.id ?? '',
+    summary: item.summary ?? '',
+    primary: !!item.primary,
+    backgroundColor: item.backgroundColor ?? undefined,
+  }));
 }
 
 export async function createEvent(
@@ -64,22 +82,29 @@ export async function getEventsForDate(account: ConnectedAccount, date: Date, ti
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
-  const res = await cal.events.list({
-    calendarId: 'primary',
-    timeMin: startOfDay.toISOString(),
-    timeMax: endOfDay.toISOString(),
-    singleEvents: true,
-    orderBy: 'startTime',
-    timeZone: timezone,
-  });
+  const calendarIds = account.enabledCalendarIds ?? ['primary'];
+  const results = await Promise.all(
+    calendarIds.map((calendarId) =>
+      cal.events.list({
+        calendarId,
+        timeMin: startOfDay.toISOString(),
+        timeMax: endOfDay.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        timeZone: timezone,
+      })
+    )
+  );
 
-  return (res.data.items ?? []).map((e) => ({
-    id: e.id ?? '',
-    title: e.summary ?? '(no title)',
-    start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
-    end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
-    calendarAlias: account.alias,
-  }));
+  return results.flatMap((res) =>
+    (res.data.items ?? []).map((e) => ({
+      id: e.id ?? '',
+      title: e.summary ?? '(no title)',
+      start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
+      end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
+      calendarAlias: account.alias,
+    }))
+  );
 }
 
 export async function getTodayEvents(account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
@@ -92,20 +117,27 @@ export async function getWeekEvents(account: ConnectedAccount, timezone: string)
   const now = new Date();
   const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const res = await cal.events.list({
-    calendarId: 'primary',
-    timeMin: now.toISOString(),
-    timeMax: weekLater.toISOString(),
-    singleEvents: true,
-    orderBy: 'startTime',
-    timeZone: timezone,
-  });
+  const calendarIds = account.enabledCalendarIds ?? ['primary'];
+  const results = await Promise.all(
+    calendarIds.map((calendarId) =>
+      cal.events.list({
+        calendarId,
+        timeMin: now.toISOString(),
+        timeMax: weekLater.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        timeZone: timezone,
+      })
+    )
+  );
 
-  return (res.data.items ?? []).map((e) => ({
-    id: e.id ?? '',
-    title: e.summary ?? '(no title)',
-    start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
-    end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
-    calendarAlias: account.alias,
-  }));
+  return results.flatMap((res) =>
+    (res.data.items ?? []).map((e) => ({
+      id: e.id ?? '',
+      title: e.summary ?? '(no title)',
+      start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
+      end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
+      calendarAlias: account.alias,
+    }))
+  );
 }

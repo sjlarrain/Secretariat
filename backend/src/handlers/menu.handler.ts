@@ -14,7 +14,9 @@ const MENU = `🤖 *Secretariat — Commands*
 
 */myschedule* — Show calendar events for a day
   --for     date _(today by default)_
-  --plan    plan type _(e.g. Lunch, Coffee)_
+  --plan    plan type _(e.g. Lunch, Coffee)_ (-p)
+            omit value to list available plans
+            add --for to check a specific day
 
 ✅ *Tasks*
 */task* — Create a Google Task

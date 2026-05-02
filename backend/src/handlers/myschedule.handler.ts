@@ -6,9 +6,30 @@ import { getPlans, findPlanByName, PlanType } from '../integrations/local/plans'
 import { parseDate, formatDate, formatTime, getMondayOfWeek, getWeekDates, combineDateAndTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 
+const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const BUFFER_MS = 30 * 60_000;
+
 export async function myscheduleHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags, extraArgs } = parsed;
   const settings = await getSettings();
+
+  // ── Plan list mode: /myschedule --plan (no value) ─────
+  if (flags['plan'] === '') {
+    const plans = await getPlans();
+    if (plans.length === 0) {
+      await sendMessage(from, '❌ No plans configured. Visit the admin panel to create one.');
+      return;
+    }
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const lines = ['📋 *Available plans:*\n'];
+    for (const p of plans) {
+      const days = p.days.map((d) => dayNames[d]).join(', ');
+      const slots = p.slots.join(' · ');
+      lines.push(`• *${p.name}* — ${p.durationMinutes}min | ${days} | ${slots}`);
+    }
+    await sendMessage(from, lines.join('\n'));
+    return;
+  }
 
   const dateInput = flags['for'] || extraArgs.join(' ').trim();
   const targetDate = dateInput ? parseDate(dateInput, settings.timezone) : new Date();
@@ -32,11 +53,15 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
 
     if (!plan) {
       const names = plans.map((p) => p.name).join(', ');
-      await sendMessage(from, `❌ Unknown plan type "${flags['plan']}". Available: ${names}`);
+      await sendMessage(from, `❌ Unknown plan "${flags['plan']}". Available: ${names}`);
       return;
     }
 
-    await checkAvailability(from, plan, targetDate, calendarAccounts, settings.timezone);
+    if (flags['for']) {
+      await checkDayAvailability(from, plan, targetDate, calendarAccounts, settings.timezone);
+    } else {
+      await checkWeekAvailability(from, plan, targetDate, calendarAccounts, settings.timezone);
+    }
     return;
   }
 
@@ -70,7 +95,34 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
   }
 }
 
-async function checkAvailability(
+async function checkDayAvailability(
+  from: string,
+  plan: PlanType,
+  date: Date,
+  calendarAccounts: Awaited<ReturnType<typeof getAllAccounts>>,
+  tz: string,
+): Promise<void> {
+  const events = (
+    await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, date, tz).catch(() => [])))
+  ).flat();
+
+  const dayLabel = `${DAYS_SHORT[date.getDay()]} ${formatDate(date, false, tz)}`;
+  const freeSlots: string[] = [];
+
+  for (const slot of plan.slots) {
+    const slotStart = combineDateAndTime(date, slot, tz);
+    const slotEnd = new Date(slotStart.getTime() + plan.durationMinutes * 60_000);
+    if (!events.some((e) => isBlocked(e, slotStart, slotEnd))) freeSlots.push(slot);
+  }
+
+  if (freeSlots.length === 0) {
+    await sendMessage(from, `❌ *${plan.name} — ${dayLabel}*\n\nNo free slots that day.`);
+  } else {
+    await sendMessage(from, `✅ *${plan.name} — ${dayLabel}*\n\nFree: ${freeSlots.join(' · ')}`);
+  }
+}
+
+async function checkWeekAvailability(
   from: string,
   plan: PlanType,
   referenceDate: Date,
@@ -80,7 +132,6 @@ async function checkAvailability(
   const monday = getMondayOfWeek(referenceDate);
   const days = getWeekDates(monday, plan.days);
 
-  // Fetch events for all days in parallel, across all accounts
   const eventsByDay = await Promise.all(
     days.map(async (day) => {
       const events = (
@@ -90,7 +141,6 @@ async function checkAvailability(
     })
   );
 
-  const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const weekLabel = formatDate(monday, false, tz);
   const lines: string[] = [`🗓 *${plan.name} — week of ${weekLabel}*\n`];
 
@@ -104,9 +154,7 @@ async function checkAvailability(
     for (const slot of plan.slots) {
       const slotStart = combineDateAndTime(day, slot, tz);
       const slotEnd = new Date(slotStart.getTime() + plan.durationMinutes * 60_000);
-
-      const blocked = events.some((e) => isBlocked(e, slotStart, slotEnd));
-      if (!blocked) freeSlots.push(slot);
+      if (!events.some((e) => isBlocked(e, slotStart, slotEnd))) freeSlots.push(slot);
     }
 
     if (freeSlots.length > 0) {
@@ -128,11 +176,8 @@ async function checkAvailability(
 }
 
 function isBlocked(event: CalendarEvent, slotStart: Date, slotEnd: Date): boolean {
-  // All-day event: start/end will be midnight; if start equals end (date-only), block whole day
   const eventStart = event.start.getTime();
   const eventEnd = event.end.getTime();
-
   if (eventStart === eventEnd) return true; // all-day marker
-
-  return eventStart < slotEnd.getTime() && eventEnd > slotStart.getTime();
+  return eventStart < slotEnd.getTime() + BUFFER_MS && eventEnd > slotStart.getTime() - BUFFER_MS;
 }

@@ -60,7 +60,7 @@ export function parseCommand(raw: string): ParseResult {
     if (token.startsWith('--')) {
       flagKey = findFlagKeyByLong(token.slice(2).toLowerCase());
     } else if (/^-[a-z]$/.test(token)) {
-      flagKey = findFlagKeyByShort(token.slice(1));
+      flagKey = findFlagKeyByShort(token.slice(1), commandDef.acceptedFlags);
     }
 
     if (flagKey !== null) {
@@ -142,9 +142,9 @@ function findFlagKeyByLong(flagName: string): string | null {
   return null;
 }
 
-function findFlagKeyByShort(shortChar: string): string | null {
-  for (const [key, def] of Object.entries(FLAGS)) {
-    if (def.shortAlias === shortChar) return key;
+function findFlagKeyByShort(shortChar: string, allowedKeys: string[]): string | null {
+  for (const key of allowedKeys) {
+    if (FLAGS[key]?.shortAlias === shortChar) return key;
   }
   return null;
 }

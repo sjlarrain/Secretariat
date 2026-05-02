@@ -66,8 +66,10 @@ export const FLAGS: Record<string, FlagDefinition> = {
   },
   plan: {
     name: '--plan',
+    shortAlias: 'p',
     type: 'string',
     required: false,
+    optional: true,
     description: 'Plan type name (e.g. Lunch, Coffee) — shows free slots for that meeting type',
   },
 };

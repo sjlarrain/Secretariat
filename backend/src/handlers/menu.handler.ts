@@ -10,8 +10,11 @@ const MENU = `🤖 *Secretariat — Commands*
   --at      HH:MM _(required)_
   --invite  email1,email2
   --notes   description
+  --using   calendar alias
 
-*/myschedule* — Show today's events
+*/myschedule* — Show calendar events for a day
+  --for     date _(today by default)_
+  --plan    plan type _(e.g. Lunch, Coffee)_
 
 ✅ *Tasks*
 */task* — Create a Google Task

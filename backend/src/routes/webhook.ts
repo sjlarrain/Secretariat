@@ -9,7 +9,9 @@ import { reminderHandler } from '../handlers/reminder.handler';
 import { mytaskHandler } from '../handlers/mytask.handler';
 import { myscheduleHandler } from '../handlers/myschedule.handler';
 import { ideasHandler } from '../handlers/ideas.handler';
+import { linksHandler } from '../handlers/links.handler';
 import { menuHandler } from '../handlers/menu.handler';
+import type { ParsedCommand } from '../parser/command.parser';
 
 const router = Router();
 
@@ -42,6 +44,14 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   if (isDuplicate(messageId)) return;
 
   try {
+    // Auto-save bare URLs as links (no /prefix required)
+    const trimmed = text.trim();
+    if (/^https?:\/\/\S+$/.test(trimmed)) {
+      const synthetic: ParsedCommand = { command: 'links', flags: {}, extraArgs: [trimmed], raw: trimmed };
+      await linksHandler(synthetic, from);
+      return;
+    }
+
     const result = parseCommand(text);
 
     if (!result.success || !result.data) {
@@ -75,6 +85,9 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
         break;
       case 'ideas':
         await ideasHandler(data, from);
+        break;
+      case 'links':
+        await linksHandler(data, from);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

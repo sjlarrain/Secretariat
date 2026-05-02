@@ -72,4 +72,18 @@ export const FLAGS: Record<string, FlagDefinition> = {
     optional: true,
     description: 'Plan type name (e.g. Lunch, Coffee) — shows free slots for that meeting type',
   },
+  read: {
+    name: '--read',
+    shortAlias: 'r',
+    type: 'string',
+    required: false,
+    description: 'Mark link #N as read (archived). Pass the 1-based index from /links.',
+  },
+  tags: {
+    name: '--tags',
+    shortAlias: 't',
+    type: 'string',
+    required: false,
+    description: 'Space-separated kebab-case tags (e.g. fintech-elements tech-news)',
+  },
 };

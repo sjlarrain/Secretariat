@@ -26,6 +26,7 @@ import {
   permanentlyDeleteIdea,
   emptyTrash,
 } from '../integrations/local/ideas';
+import { getLinks, getReadLinks, addLink, markLinkRead, deleteLink, updateLink } from '../integrations/local/links';
 import { resolveAccount } from '../integrations/registry';
 import { getEventsForDate, listCalendars } from '../integrations/google/calendar';
 import { getPendingTasks } from '../integrations/google/tasks';
@@ -386,6 +387,34 @@ router.delete('/reminders/:id', requireAuth, async (req, res) => {
   await removeReminder(id);
   await cancelMessage(reminder.messageId).catch(() => {});
   res.json({ ok: true });
+});
+
+// --- Links ---
+router.get('/links', requireAuth, async (req, res) => {
+  const filter = (req.query as { filter?: string }).filter;
+  const links = filter === 'read' ? await getReadLinks() : await getLinks();
+  res.json({ links });
+});
+
+router.post('/links', requireAuth, async (req, res) => {
+  const { url, tags } = req.body as { url?: string; tags?: string[] };
+  if (!url?.trim()) { res.status(400).json({ error: 'url is required' }); return; }
+  res.json({ link: await addLink(url, tags ?? []) });
+});
+
+router.patch('/links/:id', requireAuth, async (req, res) => {
+  const ok = await updateLink(Number(req.params['id']), req.body as { url?: string; tags?: string[] });
+  ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
+});
+
+router.post('/links/:id/read', requireAuth, async (req, res) => {
+  const ok = await markLinkRead(Number(req.params['id']));
+  ok ? res.json({ ok }) : res.status(404).json({ error: 'not found or already read' });
+});
+
+router.delete('/links/:id', requireAuth, async (req, res) => {
+  const ok = await deleteLink(Number(req.params['id']));
+  ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
 // --- Google OAuth start (proxy from admin panel) ---

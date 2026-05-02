@@ -7,15 +7,16 @@ export interface PlanType {
   days: number[];          // 0=Sun … 6=Sat
   slots: string[];         // HH:MM 24h strings
   durationMinutes: number;
+  bufferMinutes: number;   // travel buffer applied before and after the slot
 }
 
 const PLANS_KEY = 'secretariat:plans';
 
 const DEFAULT_PLANS: PlanType[] = [
-  { id: 1, name: 'Lunch',       days: [1,2,3,4],     slots: ['13:00','13:30','14:00'],          durationMinutes: 60 },
-  { id: 2, name: 'Coffee',      days: [1,2,3,4,5],   slots: ['10:00','16:00','17:00'],          durationMinutes: 30 },
-  { id: 3, name: 'After-office',days: [1,2,3,4],     slots: ['18:30','19:00','20:00'],          durationMinutes: 90 },
-  { id: 4, name: 'Sports',      days: [1,2,3,4,5,6], slots: ['07:00','08:00','19:00','20:00'],  durationMinutes: 60 },
+  { id: 1, name: 'Lunch',       days: [1,2,3,4],     slots: ['13:00','13:30','14:00'],          durationMinutes: 60, bufferMinutes: 30 },
+  { id: 2, name: 'Coffee',      days: [1,2,3,4,5],   slots: ['10:00','16:00','17:00'],          durationMinutes: 30, bufferMinutes: 15 },
+  { id: 3, name: 'After-office',days: [1,2,3,4],     slots: ['18:30','19:00','20:00'],          durationMinutes: 90, bufferMinutes: 30 },
+  { id: 4, name: 'Sports',      days: [1,2,3,4,5,6], slots: ['07:00','08:00','19:00','20:00'],  durationMinutes: 60, bufferMinutes: 0  },
 ];
 
 let _redis: Redis | null = null;

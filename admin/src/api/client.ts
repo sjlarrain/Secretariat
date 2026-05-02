@@ -110,6 +110,7 @@ export interface PlanType {
   days: number[];
   slots: string[];
   durationMinutes: number;
+  bufferMinutes: number;
 }
 
 export interface DashboardData {

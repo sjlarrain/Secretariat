@@ -8,15 +8,16 @@ interface EditState {
   days: number[];
   slots: string[];
   durationMinutes: number;
+  bufferMinutes: number;
   newSlot: string;
 }
 
 function emptyEdit(): EditState {
-  return { name: '', days: [1, 2, 3, 4, 5], slots: [], durationMinutes: 60, newSlot: '' };
+  return { name: '', days: [1, 2, 3, 4, 5], slots: [], durationMinutes: 60, bufferMinutes: 30, newSlot: '' };
 }
 
 function planToEdit(p: PlanType): EditState {
-  return { name: p.name, days: p.days, slots: p.slots, durationMinutes: p.durationMinutes, newSlot: '' };
+  return { name: p.name, days: p.days, slots: p.slots, durationMinutes: p.durationMinutes, bufferMinutes: p.bufferMinutes ?? 30, newSlot: '' };
 }
 
 export default function Plans() {
@@ -66,7 +67,7 @@ export default function Plans() {
     if (edit.slots.length === 0) { flash('Add at least one time slot.', true); return; }
     setSaving(true);
     try {
-      const data = { name: edit.name.trim(), days: edit.days, slots: edit.slots, durationMinutes: edit.durationMinutes };
+      const data = { name: edit.name.trim(), days: edit.days, slots: edit.slots, durationMinutes: edit.durationMinutes, bufferMinutes: edit.bufferMinutes };
       if (editingId === 'new') {
         const res = await api.createPlan(data);
         setPlans((prev) => [...prev, res.plan]);
@@ -178,6 +179,9 @@ export default function Plans() {
                         </code>
                       ))}
                       <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>· {plan.durationMinutes} min</span>
+                      {(plan.bufferMinutes ?? 0) > 0 && (
+                        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>· ±{plan.bufferMinutes} min buffer</span>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -280,15 +284,27 @@ function PlanForm({ edit, setEdit, toggleDay, addSlot, removeSlot, onSave, onCan
         </div>
       </div>
 
-      <div style={{ marginBottom: 20, maxWidth: 200 }}>
-        <label className="field-label">Duration (minutes)</label>
-        <input
-          type="number"
-          min={5}
-          max={480}
-          value={edit.durationMinutes}
-          onChange={(e) => setEdit((prev) => ({ ...prev, durationMinutes: Number(e.target.value) }))}
-        />
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+        <div style={{ maxWidth: 200 }}>
+          <label className="field-label">Duration (minutes)</label>
+          <input
+            type="number"
+            min={5}
+            max={480}
+            value={edit.durationMinutes}
+            onChange={(e) => setEdit((prev) => ({ ...prev, durationMinutes: Number(e.target.value) }))}
+          />
+        </div>
+        <div style={{ maxWidth: 200 }}>
+          <label className="field-label">Buffer (minutes each side)</label>
+          <input
+            type="number"
+            min={0}
+            max={120}
+            value={edit.bufferMinutes}
+            onChange={(e) => setEdit((prev) => ({ ...prev, bufferMinutes: Number(e.target.value) }))}
+          />
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>

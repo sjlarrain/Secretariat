@@ -7,7 +7,6 @@ import { parseDate, formatDate, formatTime, getMondayOfWeek, getWeekDates, combi
 import { sendMessage } from '../kapso/client';
 
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const BUFFER_MS = 30 * 60_000;
 
 export async function myscheduleHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags, extraArgs } = parsed;
@@ -25,7 +24,8 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     for (const p of plans) {
       const days = p.days.map((d) => dayNames[d]).join(', ');
       const slots = p.slots.join(' · ');
-      lines.push(`• *${p.name}* — ${p.durationMinutes}min | ${days} | ${slots}`);
+      const buffer = (p.bufferMinutes ?? 0) > 0 ? ` | ±${p.bufferMinutes}min buffer` : '';
+      lines.push(`• *${p.name}* — ${p.durationMinutes}min${buffer} | ${days} | ${slots}`);
     }
     await sendMessage(from, lines.join('\n'));
     return;
@@ -108,11 +108,12 @@ async function checkDayAvailability(
 
   const dayLabel = `${DAYS_SHORT[date.getDay()]} ${formatDate(date, false, tz)}`;
   const freeSlots: string[] = [];
+  const bufferMs = (plan.bufferMinutes ?? 30) * 60_000;
 
   for (const slot of plan.slots) {
     const slotStart = combineDateAndTime(date, slot, tz);
     const slotEnd = new Date(slotStart.getTime() + plan.durationMinutes * 60_000);
-    if (!events.some((e) => isBlocked(e, slotStart, slotEnd))) freeSlots.push(slot);
+    if (!events.some((e) => isBlocked(e, slotStart, slotEnd, bufferMs))) freeSlots.push(slot);
   }
 
   if (freeSlots.length === 0) {
@@ -143,6 +144,7 @@ async function checkWeekAvailability(
 
   const weekLabel = formatDate(monday, false, tz);
   const lines: string[] = [`🗓 *${plan.name} — week of ${weekLabel}*\n`];
+  const bufferMs = (plan.bufferMinutes ?? 30) * 60_000;
 
   let totalFreeSlots = 0;
   let daysWithSlots = 0;
@@ -154,7 +156,7 @@ async function checkWeekAvailability(
     for (const slot of plan.slots) {
       const slotStart = combineDateAndTime(day, slot, tz);
       const slotEnd = new Date(slotStart.getTime() + plan.durationMinutes * 60_000);
-      if (!events.some((e) => isBlocked(e, slotStart, slotEnd))) freeSlots.push(slot);
+      if (!events.some((e) => isBlocked(e, slotStart, slotEnd, bufferMs))) freeSlots.push(slot);
     }
 
     if (freeSlots.length > 0) {
@@ -175,9 +177,9 @@ async function checkWeekAvailability(
   await sendMessage(from, lines.join('\n'));
 }
 
-function isBlocked(event: CalendarEvent, slotStart: Date, slotEnd: Date): boolean {
+function isBlocked(event: CalendarEvent, slotStart: Date, slotEnd: Date, bufferMs: number): boolean {
   const eventStart = event.start.getTime();
   const eventEnd = event.end.getTime();
   if (eventStart === eventEnd) return true; // all-day marker
-  return eventStart < slotEnd.getTime() + BUFFER_MS && eventEnd > slotStart.getTime() - BUFFER_MS;
+  return eventStart < slotEnd.getTime() + bufferMs && eventEnd > slotStart.getTime() - bufferMs;
 }

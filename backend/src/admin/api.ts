@@ -342,23 +342,24 @@ router.get('/plans', requireAuth, async (_req, res) => {
 });
 
 router.post('/plans', requireAuth, async (req, res) => {
-  const { name, days, slots, durationMinutes } = req.body as Partial<{ name: string; days: number[]; slots: string[]; durationMinutes: number }>;
+  const { name, days, slots, durationMinutes, bufferMinutes } = req.body as Partial<{ name: string; days: number[]; slots: string[]; durationMinutes: number; bufferMinutes: number }>;
   if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
   if (!Array.isArray(days) || days.length === 0) { res.status(400).json({ error: 'days is required' }); return; }
   if (!Array.isArray(slots) || slots.length === 0) { res.status(400).json({ error: 'slots is required' }); return; }
   if (!durationMinutes || durationMinutes < 1) { res.status(400).json({ error: 'durationMinutes is required' }); return; }
-  const plan = await createPlan({ name: name.trim(), days, slots, durationMinutes });
+  const plan = await createPlan({ name: name.trim(), days, slots, durationMinutes, bufferMinutes: bufferMinutes ?? 30 });
   res.json({ plan });
 });
 
 router.patch('/plans/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, days, slots, durationMinutes } = req.body as Partial<{ name: string; days: number[]; slots: string[]; durationMinutes: number }>;
+  const { name, days, slots, durationMinutes, bufferMinutes } = req.body as Partial<{ name: string; days: number[]; slots: string[]; durationMinutes: number; bufferMinutes: number }>;
   const ok = await updatePlan(id, {
     ...(name !== undefined && { name: name.trim() }),
     ...(days !== undefined && { days }),
     ...(slots !== undefined && { slots }),
     ...(durationMinutes !== undefined && { durationMinutes }),
+    ...(bufferMinutes !== undefined && { bufferMinutes }),
   });
   if (!ok) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json({ ok: true });

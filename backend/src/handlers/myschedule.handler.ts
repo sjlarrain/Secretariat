@@ -65,6 +65,12 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     return;
   }
 
+  // ── Week view mode: /myschedule week ──────────────
+  if (extraArgs[0]?.toLowerCase() === 'week') {
+    await showWeekSchedule(from, new Date(), calendarAccounts, settings.timezone);
+    return;
+  }
+
   // ── Regular mode ───────────────────────────────────
   try {
     const tz = settings.timezone;
@@ -93,6 +99,50 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Could not fetch schedule: ${msg}`);
   }
+}
+
+async function showWeekSchedule(
+  from: string,
+  referenceDate: Date,
+  calendarAccounts: Awaited<ReturnType<typeof getAllAccounts>>,
+  tz: string,
+): Promise<void> {
+  const monday = getMondayOfWeek(referenceDate);
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+
+  const eventsByDay = await Promise.all(
+    weekDays.map(async (day) => {
+      const events = (
+        await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, day, tz).catch(() => [])))
+      ).flat();
+      events.sort((a, b) => a.start.getTime() - b.start.getTime());
+      return { day, events };
+    })
+  );
+
+  const weekLabel = formatDate(monday, true, tz);
+  const lines: string[] = [`📅 *Week of ${weekLabel}*\n`];
+  const multiAccount = calendarAccounts.length > 1;
+
+  for (const { day, events } of eventsByDay) {
+    const dayLabel = formatDate(day, true, tz);
+    lines.push(`*${dayLabel}*`);
+    if (events.length === 0) {
+      lines.push('  No events');
+    } else {
+      for (const event of events) {
+        const alias = multiAccount ? ` _(${event.calendarAlias})_` : '';
+        lines.push(`  🕐 ${formatTime(event.start, tz)}  ${event.title}${alias}`);
+      }
+    }
+    lines.push('');
+  }
+
+  await sendMessage(from, lines.join('\n').trimEnd());
 }
 
 async function checkDayAvailability(

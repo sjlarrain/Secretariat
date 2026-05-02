@@ -5,6 +5,7 @@
 | Version | Feature | Status | Difficulty |
 |---------|---------|--------|-----------|
 | v1.1 | `/ideas` — save & list ideas via WhatsApp (Upstash Redis) | ✅ Done | Easy |
+| **v1.2 — Flags Manager** | | | |
 | v1.2 | `/myschedule --plan` — availability check by plan type (Lunch, Coffee, etc.) | ✅ Done | Medium |
 | v1.2 | Plans page — CRUD for meeting plan types in admin panel | ✅ Done | Medium |
 | v1.2 | Cron Manager — renamed Digests, pending reminder list, cancel support | ✅ Done | Medium |

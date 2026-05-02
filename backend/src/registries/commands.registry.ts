@@ -44,7 +44,7 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   myschedule: {
     name: '/myschedule',
-    description: 'Show calendar events for a day, or free slots for a plan type (--plan Lunch)',
+    description: 'Show calendar events for a day/week, or free slots for a plan type (--plan Lunch)',
     acceptedFlags: ['for', 'plan'],
     requiredFlags: [],
   },

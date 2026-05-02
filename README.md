@@ -1,6 +1,6 @@
 # Secretariat
 
-A personal WhatsApp command bot that lets you manage your calendar, tasks, reminders, and ideas — all from a WhatsApp chat. Backed by a web admin panel to configure integrations, digest schedules, and meeting plan types.
+A personal WhatsApp command bot that lets you manage your calendar, tasks, reminders, ideas, and saved links — all from a WhatsApp chat. Backed by a web admin panel to configure integrations, digest schedules, meeting plan types, and more.
 
 **Owner:** Single user (Santiago). Only whitelisted WhatsApp numbers can trigger commands.
 
@@ -13,13 +13,16 @@ Send a command from WhatsApp and Secretariat handles the rest:
 | Command | What it does |
 |---------|-------------|
 | `/schedule` | Creates an event on Google Calendar |
-| `/myschedule` | Shows calendar events for a day, or free slots for a plan type |
+| `/myschedule` | Shows calendar events for a day or week, or free slots for a plan type |
 | `/task` | Creates a task in Google Tasks |
 | `/mytask` | Lists your pending tasks |
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
 | `/ideas` | Saves ideas, lists them, filters by project |
+| `/links` | Saves a link for later, lists unread links, or archives one |
 | `/menu` | Shows all commands and syntax |
 | `/start` | Wakes up the bot (useful after Render cold start) |
+
+You can also send a bare `https://...` URL without any command — it will be auto-saved as a link.
 
 ---
 
@@ -31,7 +34,7 @@ Send a command from WhatsApp and Secretariat handles the rest:
 |---------|---------|-----------|
 | [Kapso](https://kapso.io) | WhatsApp Cloud API — receives and sends messages | Yes |
 | [Upstash QStash](https://upstash.com/qstash) | Schedules reminders and digest crons | 500 msg/day, 3 crons |
-| [Upstash Redis](https://upstash.com/redis) | Persists ideas, plans, and pending reminders | Free |
+| [Upstash Redis](https://upstash.com/redis) | Persists ideas, plans, links, and pending reminders | Free |
 | [Google Cloud Console](https://console.cloud.google.com) | OAuth app for Calendar + Tasks | Free |
 | [Render](https://render.com) | Hosting | Free tier (cold starts ~50s) |
 
@@ -86,7 +89,7 @@ NODE_ENV=production
 │       │
 │       ├── registries/             # Single source of truth for commands and flags
 │       │   ├── commands.registry.ts   # Defines every command: name, accepted flags, required flags
-│       │   └── flags.registry.ts      # Defines every flag: --title, --for, --at, --plan, etc.
+│       │   └── flags.registry.ts      # Defines every flag: --title, --for, --at, --plan, --tags, --read, etc.
 │       │
 │       ├── parser/
 │       │   └── command.parser.ts   # Turns raw WhatsApp text into a structured ParsedCommand object
@@ -102,11 +105,12 @@ NODE_ENV=production
 │       │   ├── task.handler.ts
 │       │   ├── reminder.handler.ts # Saves pending reminder to Redis; fires via QStash
 │       │   ├── mytask.handler.ts
-│       │   ├── myschedule.handler.ts  # Regular mode + --plan availability mode
-│       │   └── ideas.handler.ts
+│       │   ├── myschedule.handler.ts  # Regular/week mode + --plan availability mode
+│       │   ├── ideas.handler.ts
+│       │   └── links.handler.ts    # Save, list, and archive links; auto-triggered by bare URLs
 │       │
 │       ├── routes/
-│       │   ├── webhook.ts          # POST /webhook/whatsapp — entry point for all WhatsApp messages
+│       │   ├── webhook.ts          # POST /webhook/whatsapp — entry point; auto-detects bare URLs
 │       │   ├── internal.ts         # POST /internal/* — called by QStash for reminders and digests
 │       │   └── auth.ts             # GET /auth/google/* — handles Google OAuth callback flow
 │       │
@@ -118,9 +122,10 @@ NODE_ENV=production
 │       │   │   ├── calendar.ts     # Google Calendar API: createEvent, getEventsForDate, etc.
 │       │   │   └── tasks.ts        # Google Tasks API: createTask, getPendingTasks
 │       │   └── local/
-│       │       ├── ideas.ts        # Ideas store (Upstash Redis)
+│       │       ├── ideas.ts        # Ideas + projects store (Upstash Redis)
 │       │       ├── plans.ts        # Plan types store (Upstash Redis) — Lunch, Coffee, etc.
-│       │       └── reminders.ts    # Pending reminders store (Upstash Redis) — cleared on fire
+│       │       ├── reminders.ts    # Pending reminders store (Upstash Redis) — cleared on fire
+│       │       └── links.ts        # Links store (Upstash Redis) — unread/read archive
 │       │
 │       ├── cron/
 │       │   ├── morning-digest.ts   # Fetches today's events → sends WhatsApp morning summary
@@ -133,10 +138,10 @@ NODE_ENV=production
 │       │   └── client.ts           # QStash wrapper: scheduleOnce(), scheduleCron(), deleteSchedule(), cancelMessage()
 │       │
 │       ├── admin/
-│       │   └── api.ts              # REST API for the admin panel
+│       │   └── api.ts              # REST API for the admin panel (/api/admin/*)
 │       │
 │       └── utils/
-│           ├── date.ts             # parseDate, combineDateAndTime (tz-aware), formatDate, getMondayOfWeek, etc.
+│           ├── date.ts             # parseDate, combineDateAndTime (tz-aware), formatDate, getMondayOfWeek, getWeekDates
 │           └── encrypt.ts          # AES-256-GCM encrypt/decrypt for stored OAuth tokens
 │
 ├── admin/                          # React + Vite admin panel (served as static files from backend)
@@ -144,15 +149,16 @@ NODE_ENV=production
 │       ├── main.tsx
 │       ├── App.tsx                 # Router + sidebar nav
 │       ├── api/
-│       │   └── client.ts           # Fetch wrapper for all /api/admin/* calls
+│       │   └── client.ts           # Fetch wrapper for all /api/admin/* calls + shared interfaces
 │       └── pages/
 │           ├── Login.tsx
 │           ├── Dashboard.tsx       # Overview: upcoming events, tasks, recent ideas
-│           ├── Accounts.tsx        # Connect/disconnect Google OAuth accounts
+│           ├── Accounts.tsx        # Connect/disconnect Google OAuth accounts + sub-calendar selection
 │           ├── Whitelist.tsx       # View whitelisted WhatsApp numbers
 │           ├── CronManager.tsx     # Morning digest + weekly summary config; pending reminders list
 │           ├── Plans.tsx           # CRUD for meeting plan types (Lunch, Coffee, etc.)
-│           ├── Ideas.tsx           # Folder-style ideas view with trash
+│           ├── Ideas.tsx           # Folder-style ideas view with trash and inline editing
+│           ├── Links.tsx           # Link manager: tag folders, unread list, read archive
 │           ├── Commands.tsx        # Reference for all available commands and flags
 │           └── Settings.tsx        # Timezone selector + live server clock
 │
@@ -169,7 +175,7 @@ NODE_ENV=production
 
 ## Command reference
 
-All commands support short flags: `-t` (`--title`), `-f` (`--for`), `-a` (`--at`), `-i` (`--invite`), `-u` (`--using`), `-n` (`--notes`), `-p` (`--project` for `/ideas`, `--plan` for `/myschedule`). The title can also be written directly after the command without a flag.
+All commands support short flags: `-t` (`--title`), `-f` (`--for`), `-a` (`--at`), `-i` (`--invite`), `-u` (`--using`), `-n` (`--notes`), `-p` (`--project` for `/ideas`, `--plan` for `/myschedule`), `-t` (`--tags` for `/links`), `-r` (`--read` for `/links`). The title can also be written directly after the command without a flag.
 
 All commands must be sent from a whitelisted WhatsApp number.
 
@@ -193,6 +199,7 @@ All commands must be sent from a whitelisted WhatsApp number.
 
 ```
 /myschedule                              → today's events
+/myschedule week                         → full 7-day week view
 /myschedule -f tomorrow                  → tomorrow's events
 /myschedule -f next monday               → specific day
 /myschedule --plan                       → list all configured plan types
@@ -203,8 +210,10 @@ All commands must be sent from a whitelisted WhatsApp number.
 
 In regular mode, lists all calendar events for the given day sorted by start time. Events are deduplicated across calendars and "Canceled:" events are automatically filtered out.
 
+`/myschedule week` shows all 7 days of the current week, day by day, with their events.
+
 In `--plan` / `-p` mode:
-- Without `--for`: shows the full week, day by day, with free slots marked
+- Without `--for`: shows the full week day by day with free slots
 - With `--for`: returns a single yes/no answer for that specific date
 
 Each plan defines its own **buffer** (minutes kept free before and after the slot as travel time). Plan types are managed in the admin panel → Plans.
@@ -255,6 +264,23 @@ The reminder fires as a WhatsApp message at the scheduled time, delivered by QSt
 
 Ideas are stored in Upstash Redis and persist across restarts. Deleted ideas go to a **trash can** in the admin panel and are permanently removed after 30 days.
 
+### `/links` — Save and manage links
+
+```
+/links <url>                        → save a link
+/links <url> --tags tag1 tag2       → save with kebab-case tags
+/links <url> -t tag1 tag2           → same with short flag
+/links                              → list all unread links (numbered)
+/links --read <N>                   → mark link #N as read (archive it)
+/links -r <N>                       → same with short flag
+```
+
+You can also send a bare URL (e.g. `https://example.com`) without any `/command` prefix — it will be auto-saved as a link.
+
+Tags are kebab-case and space-separated (e.g. `-t fintech-elements tech-news`). A link can have multiple tags. Unread links are numbered oldest-first in `/links` output; that same numbering is used for `--read N`.
+
+Read links are archived rather than deleted — accessible in the admin panel → Links.
+
 ### `/menu` — Show command list
 
 ```
@@ -282,7 +308,8 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Whitelist** | View allowed WhatsApp numbers (edit via `WHITELISTED_NUMBERS` env var) |
 | **Cron Manager** | Configure morning digest and weekly summary; view and cancel pending reminders |
 | **Plans** | Create and manage meeting plan types (name, days, time slots, duration, buffer) for `/myschedule --plan` |
-| **Ideas** | Folder-style view by project; create, edit, delete, reassign; Trash with 30-day auto-purge |
+| **Ideas** | Folder-style view by project; create, edit, delete, reassign; trash with 30-day auto-purge |
+| **Links** | Tag-folder view; add links, mark as read, delete; read archive sidebar section |
 | **Commands** | Reference for all commands and flags |
 | **Settings** | Timezone selector with live server clock to verify the setting |
 
@@ -324,15 +351,16 @@ cd admin && npm install && npm run dev   # Vite dev server on :5173
 
 ---
 
-## Planned features
+## Roadmap
 
-See [BACKLOG.md](./BACKLOG.md) for the full ordered queue. Next up:
+See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 
-| Version | Feature |
-|---------|---------|
-| v1.2 | `/delete --task N` — delete a Google Task by index | ⬜ next up |
-| v1.3 | Activity log in the admin panel |
-| v1.4 | Natural language messages via Claude API (no `/` prefix needed) |
-| v1.5 | Todoist integration |
-| v1.6 | Microsoft Calendar via Azure OAuth2 |
-| v1.7 | Multi-user support with persistent database |
+| Version | Name | Focus |
+|---------|------|-------|
+| v1.2 | Flags Manager | ✅ Done — calendar, plans, schedule improvements |
+| v1.3 | Links Manager | 🔄 Testing — save & tag URLs from WhatsApp |
+| v1.4 | Code Review & Hardening | Security audit + env/token manager from admin panel |
+| v1.5 | Multi-User | User accounts, major open operation |
+| v1.6 | Todoist | Task integration via Todoist API |
+| v1.7 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
+| v1.8 | NLP | Natural language messages via Claude API |

@@ -169,7 +169,7 @@ NODE_ENV=production
 
 ## Command reference
 
-All commands support short flags: `-t` (`--title`), `-f` (`--for`), `-a` (`--at`), `-i` (`--invite`), `-u` (`--using`), `-n` (`--notes`), `-p` (`--project`). The title can also be written directly after the command without a flag.
+All commands support short flags: `-t` (`--title`), `-f` (`--for`), `-a` (`--at`), `-i` (`--invite`), `-u` (`--using`), `-n` (`--notes`), `-p` (`--project` for `/ideas`, `--plan` for `/myschedule`). The title can also be written directly after the command without a flag.
 
 All commands must be sent from a whitelisted WhatsApp number.
 
@@ -192,16 +192,22 @@ All commands must be sent from a whitelisted WhatsApp number.
 ### `/myschedule` — Calendar events or free slots
 
 ```
-/myschedule                         → today's events
-/myschedule -f tomorrow             → tomorrow's events
-/myschedule -f next monday          → specific day
-/myschedule --plan Lunch            → free Lunch slots this week
-/myschedule --plan Coffee -f next week  → free Coffee slots next week
+/myschedule                              → today's events
+/myschedule -f tomorrow                  → tomorrow's events
+/myschedule -f next monday               → specific day
+/myschedule --plan                       → list all configured plan types
+/myschedule -p Lunch                     → free Lunch slots this week
+/myschedule -p Lunch -f next monday      → free Lunch slots the week of next Monday
+/myschedule -p Lunch -f 15-05-2026       → yes/no availability for that specific day
 ```
 
-In regular mode, lists all calendar events for the given day sorted by start time.
+In regular mode, lists all calendar events for the given day sorted by start time. Events are deduplicated across calendars and "Canceled:" events are automatically filtered out.
 
-In `--plan` mode, checks the week containing the given date and shows which slots in the plan are free across all connected calendars. Plan types are managed in the admin panel → Plans.
+In `--plan` / `-p` mode:
+- Without `--for`: shows the full week, day by day, with free slots marked
+- With `--for`: returns a single yes/no answer for that specific date
+
+Each plan defines its own **buffer** (minutes kept free before and after the slot as travel time). Plan types are managed in the admin panel → Plans.
 
 ### `/task` — Create a Google Task
 
@@ -272,10 +278,10 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | Page | What you can do |
 |------|----------------|
 | **Dashboard** | Upcoming events, pending tasks, recent ideas at a glance |
-| **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set default; disconnect |
+| **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set default; select which sub-calendars to include; disconnect |
 | **Whitelist** | View allowed WhatsApp numbers (edit via `WHITELISTED_NUMBERS` env var) |
 | **Cron Manager** | Configure morning digest and weekly summary; view and cancel pending reminders |
-| **Plans** | Create and manage meeting plan types (name, days, time slots, duration) for `/myschedule --plan` |
+| **Plans** | Create and manage meeting plan types (name, days, time slots, duration, buffer) for `/myschedule --plan` |
 | **Ideas** | Folder-style view by project; create, edit, delete, reassign; Trash with 30-day auto-purge |
 | **Commands** | Reference for all commands and flags |
 | **Settings** | Timezone selector with live server clock to verify the setting |
@@ -324,7 +330,7 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue. Next up:
 
 | Version | Feature |
 |---------|---------|
-| v1.2 | `/delete --task N` — delete a Google Task by index |
+| v1.2 | `/delete --task N` — delete a Google Task by index | ⬜ next up |
 | v1.3 | Activity log in the admin panel |
 | v1.4 | Natural language messages via Claude API (no `/` prefix needed) |
 | v1.5 | Todoist integration |

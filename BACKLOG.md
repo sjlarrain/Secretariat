@@ -9,6 +9,10 @@
 | v1.2 | Plans page — CRUD for meeting plan types in admin panel | ✅ Done | Medium |
 | v1.2 | Cron Manager — renamed Digests, pending reminder list, cancel support | ✅ Done | Medium |
 | v1.2 | Settings — live server clock, timezone fix for reminders | ✅ Done | Easy |
+| v1.2 | Google sub-calendar selection — choose which calendars to pull events from | ✅ Done | Medium |
+| v1.2 | Event dedup + skip canceled — deduplicate cross-calendar events, filter "Canceled:" | ✅ Done | Easy |
+| v1.2 | `/myschedule --plan` — per-plan buffer, specific day mode, `-p` alias, list mode | ✅ Done | Easy |
+| v1.2 | Plans `bufferMinutes` — configurable travel buffer per plan type | ✅ Done | Easy |
 | v1.2 | `/delete --task N` — delete a Google Task by index number | ⬜ Pending | Easy |
 | v1.3 | Logs in app — activity log visible in admin panel | ⬜ Pending | Medium |
 | v1.4 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |

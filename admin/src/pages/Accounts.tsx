@@ -73,8 +73,13 @@ export default function Accounts() {
       ? [...panel.enabledIds, calendarId]
       : panel.enabledIds.filter((id) => id !== calendarId);
     setCalPanels((prev) => ({ ...prev, [accountId]: { ...prev[accountId], enabledIds: newIds } }));
+    const newNames: Record<string, string> = {};
+    for (const id of newIds) {
+      const cal = panel.calendars.find((c) => c.id === id);
+      if (cal) newNames[id] = cal.summary;
+    }
     try {
-      await api.saveAccountCalendars(accountId, newIds);
+      await api.saveAccountCalendars(accountId, newIds, newNames);
     } catch (err) {
       setCalPanels((prev) => ({
         ...prev,

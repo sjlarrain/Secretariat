@@ -10,6 +10,7 @@ export interface ConnectedAccount {
   isDefault: boolean;
   encryptedTokens: string; // JSON stringified tokens, AES-256-GCM encrypted
   enabledCalendarIds?: string[];
+  calendarNames?: Record<string, string>;
 }
 
 export interface Settings {

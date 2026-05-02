@@ -116,8 +116,9 @@ router.patch('/accounts/:id/calendars', requireAuth, async (req, res) => {
     res.status(404).json({ error: 'Account not found' });
     return;
   }
-  const { calendarIds } = req.body as { calendarIds: string[] };
+  const { calendarIds, calendarNames } = req.body as { calendarIds: string[]; calendarNames?: Record<string, string> };
   account.enabledCalendarIds = calendarIds;
+  if (calendarNames) account.calendarNames = calendarNames;
   await saveAccount(account);
   res.json({ ok: true });
 });

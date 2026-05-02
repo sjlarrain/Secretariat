@@ -96,14 +96,24 @@ export async function getEventsForDate(account: ConnectedAccount, date: Date, ti
     )
   );
 
-  return results.flatMap((res) =>
-    (res.data.items ?? []).map((e) => ({
-      id: e.id ?? '',
-      title: e.summary ?? '(no title)',
-      start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
-      end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
-      calendarAlias: account.alias,
-    }))
+  const seen = new Set<string>();
+  return results.flatMap((res, i) =>
+    (res.data.items ?? [])
+      .filter((e) => {
+        const title = e.summary ?? '';
+        if (/^canceled[:\s]/i.test(title)) return false;
+        const id = e.id ?? '';
+        if (id && seen.has(id)) return false;
+        if (id) seen.add(id);
+        return true;
+      })
+      .map((e) => ({
+        id: e.id ?? '',
+        title: e.summary ?? '(no title)',
+        start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
+        end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
+        calendarAlias: account.calendarNames?.[calendarIds[i]] ?? account.alias,
+      }))
   );
 }
 
@@ -131,13 +141,23 @@ export async function getWeekEvents(account: ConnectedAccount, timezone: string)
     )
   );
 
-  return results.flatMap((res) =>
-    (res.data.items ?? []).map((e) => ({
-      id: e.id ?? '',
-      title: e.summary ?? '(no title)',
-      start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
-      end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
-      calendarAlias: account.alias,
-    }))
+  const seen = new Set<string>();
+  return results.flatMap((res, i) =>
+    (res.data.items ?? [])
+      .filter((e) => {
+        const title = e.summary ?? '';
+        if (/^canceled[:\s]/i.test(title)) return false;
+        const id = e.id ?? '';
+        if (id && seen.has(id)) return false;
+        if (id) seen.add(id);
+        return true;
+      })
+      .map((e) => ({
+        id: e.id ?? '',
+        title: e.summary ?? '(no title)',
+        start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
+        end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
+        calendarAlias: account.calendarNames?.[calendarIds[i]] ?? account.alias,
+      }))
   );
 }

@@ -63,8 +63,8 @@ export const api = {
 
   getAccountCalendars: (id: string) =>
     request<{ calendars: GoogleCalendar[]; enabledCalendarIds: string[] }>(`/accounts/${id}/calendars`),
-  saveAccountCalendars: (id: string, calendarIds: string[]) =>
-    request(`/accounts/${id}/calendars`, { method: 'PATCH', body: JSON.stringify({ calendarIds }) }),
+  saveAccountCalendars: (id: string, calendarIds: string[], calendarNames: Record<string, string>) =>
+    request(`/accounts/${id}/calendars`, { method: 'PATCH', body: JSON.stringify({ calendarIds, calendarNames }) }),
 
   getTrashedIdeas: () => request<{ ideas: Idea[] }>('/ideas/trash'),
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),

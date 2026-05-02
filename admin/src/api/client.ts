@@ -70,6 +70,15 @@ export const api = {
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
   restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
   permanentlyDeleteIdea: (id: number) => request(`/ideas/${id}/permanent`, { method: 'DELETE' }),
+
+  getLinks: (filter?: 'read') =>
+    request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
+  createLink: (url: string, tags: string[]) =>
+    request<{ link: Link }>('/links', { method: 'POST', body: JSON.stringify({ url, tags }) }),
+  updateLink: (id: number, data: { url?: string; tags?: string[] }) =>
+    request(`/links/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  markLinkRead: (id: number) => request(`/links/${id}/read`, { method: 'POST' }),
+  deleteLink: (id: number) => request(`/links/${id}`, { method: 'DELETE' }),
 };
 
 export interface GoogleCalendar {
@@ -141,6 +150,14 @@ export interface Reminder {
   phoneNumber: string;
   fireAt: string;
   messageId: string;
+}
+
+export interface Link {
+  id: number;
+  url: string;
+  tags: string[];
+  createdAt: string;
+  readAt?: string;
 }
 
 export interface DigestConfig {

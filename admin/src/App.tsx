@@ -5,6 +5,7 @@ import Accounts from './pages/Accounts';
 import Whitelist from './pages/Whitelist';
 import CronManager from './pages/CronManager';
 import Ideas from './pages/Ideas';
+import Links from './pages/Links';
 import Commands from './pages/Commands';
 import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
@@ -18,6 +19,7 @@ const NAV_LINKS = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
   { to: '/plans', label: 'Plans', icon: '📋' },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
+  { to: '/links', label: 'Links', icon: '🌐' },
   { to: '/commands', label: 'Commands', icon: '📖' },
 ];
 
@@ -140,6 +142,7 @@ export default function App() {
         <Route path="/cron" element={<Layout><CronManager /></Layout>} />
         <Route path="/plans" element={<Layout><Plans /></Layout>} />
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
+        <Route path="/links" element={<Layout><Links /></Layout>} />
         <Route path="/commands" element={<Layout><Commands /></Layout>} />
         <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
         <Route path="*" element={<Navigate to="/" replace />} />

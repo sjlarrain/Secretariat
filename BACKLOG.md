@@ -17,9 +17,12 @@
 | v1.2 | `/myschedule week` — full week calendar view | ✅ Done | Easy |
 | v1.2 | `/delete --task N` — delete a Google Task by index number | ✅ Done | Easy |
 | **v1.3 — Links Manager** | | | |
-| v1.3 | Links Manager — save & tag URLs via WhatsApp, read archive, admin panel | 🔄 Testing | Easy |
+| v1.3 | Links Manager — save & tag URLs via WhatsApp, read archive, admin panel | ✅ Done | Easy |
+| v1.3 | `/links #N -t tag` — add tags to existing link via WhatsApp | ✅ Done | Easy |
+| v1.3 | Inline tag editor — add/remove tags per link in admin panel | ✅ Done | Easy |
 | **v1.4 — Code Review & Hardening** | | | |
 | v1.4 | Full code review — security audit, vulnerability check, command edge cases | ⬜ Pending | Medium |
+| v1.4 | Env/token manager — configure Kapso, QStash, Google OAuth, Upstash and other secrets directly from the admin panel (no server .env edit) | ⬜ Pending | Medium |
 | **v1.5 — Multi-User** | | | |
 | v1.5 | User functionality — multi-user support, major open operation | ⬜ Pending | Hard |
 | **v1.6 — Todoist** | | | |

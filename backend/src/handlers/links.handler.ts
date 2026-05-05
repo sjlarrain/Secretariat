@@ -1,6 +1,6 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
-import { getLinks, addLink, markLinkRead } from '../integrations/local/links';
+import { getLinks, addLink, markLinkRead, updateLink } from '../integrations/local/links';
 
 export async function linksHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const url     = parsed.extraArgs[0]?.trim() ?? '';
@@ -25,6 +25,28 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
       }
       await markLinkRead(target.id);
       await sendMessage(from, `✅ Link #${n} marked as read.`);
+      return;
+    }
+
+    // /links #N -t tag1 tag2  →  add tags to existing link
+    if (url.startsWith('#') && tagsArg !== undefined) {
+      const n = parseInt(url.slice(1), 10);
+      if (isNaN(n) || n < 1) {
+        await sendMessage(from, '❌ Usage: `/links #N -t tag1 tag2`');
+        return;
+      }
+      const unread = (await getLinks()).sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      const target = unread[n - 1];
+      if (!target) {
+        await sendMessage(from, `❌ No unread link #${n}. Send \`/links\` to see the list.`);
+        return;
+      }
+      const newTags = tagsArg.split(/\s+/).map((t) => t.toLowerCase()).filter(Boolean);
+      const merged = [...new Set([...target.tags, ...newTags])];
+      await updateLink(target.id, { tags: merged });
+      await sendMessage(from, `✅ Tags updated on #${n}: ${merged.join(', ')}`);
       return;
     }
 

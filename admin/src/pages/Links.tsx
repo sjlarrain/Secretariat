@@ -16,6 +16,11 @@ export default function LinksPage() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
+  const [editingTagsId, setEditingTagsId] = useState<number | null>(null);
+  const [editTagInput, setEditTagInput] = useState('');
+  const [editTagList, setEditTagList] = useState<string[]>([]);
+  const [savingTags, setSavingTags] = useState(false);
+
   async function load() {
     setLoading(true);
     const [unreadRes, readRes] = await Promise.all([api.getLinks(), api.getLinks('read')]);
@@ -77,6 +82,46 @@ export default function LinksPage() {
       else setLinks((prev) => prev.filter((l) => l.id !== id));
     } catch {
       flash('Failed to delete link.', true);
+    }
+  }
+
+  function openTagEditor(link: Link) {
+    setEditTagList([...link.tags]);
+    setEditTagInput('');
+    setEditingTagsId(link.id);
+  }
+
+  function addEditTag(raw: string) {
+    const tag = raw.trim().toLowerCase();
+    if (tag && !editTagList.includes(tag)) setEditTagList((prev) => [...prev, tag]);
+    setEditTagInput('');
+  }
+
+  function handleTagInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      addEditTag(editTagInput);
+    } else if (e.key === 'Backspace' && editTagInput === '' && editTagList.length > 0) {
+      setEditTagList((prev) => prev.slice(0, -1));
+    }
+  }
+
+  async function handleSaveTags(id: number) {
+    if (editTagInput.trim()) addEditTag(editTagInput);
+    setSavingTags(true);
+    try {
+      const tags = editTagInput.trim()
+        ? [...new Set([...editTagList, editTagInput.trim().toLowerCase()])]
+        : editTagList;
+      await api.updateLink(id, { tags });
+      setLinks((prev) => prev.map((l) => l.id === id ? { ...l, tags } : l));
+      setRead((prev) => prev.map((l) => l.id === id ? { ...l, tags } : l));
+      setEditingTagsId(null);
+      flash('Tags saved.');
+    } catch {
+      flash('Failed to save tags.', true);
+    } finally {
+      setSavingTags(false);
     }
   }
 
@@ -256,8 +301,53 @@ export default function LinksPage() {
                   <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 3 }}>
                     {shortUrl(link.url)} · {formatDate(isReadView && link.readAt ? link.readAt : link.createdAt)}
                   </div>
-                  {link.tags.length > 0 && (
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+                  {/* Tags row: pills or inline editor */}
+                  {editingTagsId === link.id ? (
+                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                      {editTagList.map((tag) => (
+                        <span
+                          key={tag}
+                          style={{
+                            fontSize: 10, fontWeight: 600, padding: '2px 8px',
+                            borderRadius: 99, background: 'var(--blue-dim)',
+                            color: 'var(--blue-bright)', display: 'flex', alignItems: 'center', gap: 4,
+                          }}
+                        >
+                          {tag}
+                          <span
+                            onClick={() => setEditTagList((prev) => prev.filter((t) => t !== tag))}
+                            style={{ cursor: 'pointer', opacity: 0.7, fontSize: 11 }}
+                          >×</span>
+                        </span>
+                      ))}
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editTagInput}
+                        onChange={(e) => setEditTagInput(e.target.value)}
+                        onKeyDown={handleTagInputKeyDown}
+                        onBlur={() => { if (editTagInput.trim()) addEditTag(editTagInput); }}
+                        placeholder="add tag…"
+                        style={{ fontSize: 11, padding: '2px 6px', width: 90, borderRadius: 6 }}
+                      />
+                      <button
+                        className="btn-primary"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                        disabled={savingTags}
+                        onClick={() => handleSaveTags(link.id)}
+                      >
+                        {savingTags ? '…' : 'Save'}
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => setEditingTagsId(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
                       {link.tags.map((tag) => (
                         <span
                           key={tag}
@@ -271,6 +361,13 @@ export default function LinksPage() {
                           {tag}
                         </span>
                       ))}
+                      <span
+                        onClick={() => openTagEditor(link)}
+                        style={{ fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 2 }}
+                        title="Edit tags"
+                      >
+                        ✏️
+                      </span>
                     </div>
                   )}
                 </div>

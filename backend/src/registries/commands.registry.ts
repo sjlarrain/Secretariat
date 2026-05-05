@@ -56,7 +56,7 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   links: {
     name: '/links',
-    description: 'Save a link, list unread links, or archive one. `/links <url>` to save, `/links` to list, `/links -r N` to archive.',
+    description: 'Save a link, list, archive, or tag. `/links <url>` to save, `/links` to list, `/links -r N` to archive, `/links #N -t tag` to add tags.',
     acceptedFlags: ['tags', 'read'],
     requiredFlags: [],
   },

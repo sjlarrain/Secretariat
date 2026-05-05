@@ -29,6 +29,10 @@ export default function CronManager() {
   const [editingMorning, setEditingMorning] = useState(false);
   const [editingWeekly, setEditingWeekly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingReminder, setEditingReminder] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [savingReminder, setSavingReminder] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
@@ -79,6 +83,26 @@ export default function CronManager() {
       setReminders((prev) => prev.filter((r) => r.id !== id));
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  function openEditReminder(r: Reminder) {
+    const d = new Date(r.fireAt);
+    setEditDate(d.toLocaleDateString('en-CA')); // YYYY-MM-DD for input[type=date]
+    setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setEditingReminder(r.id);
+  }
+
+  async function handleSaveReminder(id: string) {
+    if (!editDate || !editTime) return;
+    setSavingReminder(true);
+    try {
+      const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
+      await api.updateReminder(id, fireAt);
+      setReminders((prev) => prev.map((r) => r.id === id ? { ...r, fireAt } : r));
+      setEditingReminder(null);
+    } finally {
+      setSavingReminder(false);
     }
   }
 
@@ -249,15 +273,48 @@ export default function CronManager() {
                           {formatFireAt(r.fireAt)}
                         </div>
                       </div>
-                      <button
-                        className="btn-danger"
-                        style={{ fontSize: 11, padding: '3px 8px', flexShrink: 0 }}
-                        disabled={deletingId === r.id}
-                        onClick={() => handleDeleteReminder(r.id)}
-                      >
-                        {deletingId === r.id ? '…' : 'Cancel'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          className="btn-secondary"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          onClick={() => editingReminder === r.id ? setEditingReminder(null) : openEditReminder(r)}
+                        >
+                          {editingReminder === r.id ? 'Close' : 'Edit'}
+                        </button>
+                        <button
+                          className="btn-danger"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          disabled={deletingId === r.id}
+                          onClick={() => handleDeleteReminder(r.id)}
+                        >
+                          {deletingId === r.id ? '…' : 'Cancel'}
+                        </button>
+                      </div>
                     </div>
+                    {editingReminder === r.id && (
+                      <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          style={{ fontSize: 12, padding: '3px 6px' }}
+                        />
+                        <input
+                          type="time"
+                          value={editTime}
+                          onChange={(e) => setEditTime(e.target.value)}
+                          style={{ fontSize: 12, padding: '3px 6px' }}
+                        />
+                        <button
+                          className="btn-primary"
+                          style={{ fontSize: 11, padding: '3px 10px' }}
+                          disabled={savingReminder}
+                          onClick={() => handleSaveReminder(r.id)}
+                        >
+                          {savingReminder ? '…' : 'Save'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>

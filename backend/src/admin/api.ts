@@ -9,7 +9,7 @@ import {
   saveSettings,
 } from '../integrations/token-store';
 import { setDefault } from '../integrations/registry';
-import { scheduleCron, deleteSchedule } from '../qstash/client';
+import { scheduleCron, deleteSchedule, scheduleOnce } from '../qstash/client';
 import { whitelistedNumbers } from '../env';
 import {
   getIdeas,
@@ -33,7 +33,7 @@ import { getPendingTasks } from '../integrations/google/tasks';
 import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../integrations/local/plans';
-import { getReminders, removeReminder } from '../integrations/local/reminders';
+import { getReminders, removeReminder, updateReminder } from '../integrations/local/reminders';
 import { cancelMessage } from '../qstash/client';
 
 const router = Router();
@@ -377,6 +377,28 @@ router.delete('/plans/:id', requireAuth, async (req, res) => {
 router.get('/reminders', requireAuth, async (_req, res) => {
   const reminders = await getReminders();
   res.json({ reminders });
+});
+
+router.put('/reminders/:id', requireAuth, async (req, res) => {
+  const id = req.params['id'] as string;
+  const { fireAt } = req.body as { fireAt: string };
+  if (!fireAt) { res.status(400).json({ error: 'Missing fireAt' }); return; }
+  const newFireAt = new Date(fireAt);
+  if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
+    res.status(400).json({ error: 'fireAt must be a valid future datetime' }); return;
+  }
+  const reminders = await getReminders();
+  const reminder = reminders.find((r) => r.id === id);
+  if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
+  await cancelMessage(reminder.messageId).catch(() => {});
+  const delaySeconds = Math.floor((newFireAt.getTime() - Date.now()) / 1000);
+  const newMessageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
+    reminderId: id,
+    title: reminder.title,
+    phoneNumber: reminder.phoneNumber,
+  });
+  await updateReminder(id, { fireAt: newFireAt.toISOString(), messageId: newMessageId });
+  res.json({ ok: true });
 });
 
 router.delete('/reminders/:id', requireAuth, async (req, res) => {

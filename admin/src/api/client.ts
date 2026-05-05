@@ -59,6 +59,8 @@ export const api = {
   deletePlan: (id: number) => request(`/plans/${id}`, { method: 'DELETE' }),
 
   getReminders: () => request<{ reminders: Reminder[] }>('/reminders'),
+  updateReminder: (id: string, fireAt: string) =>
+    request(`/reminders/${id}`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
   deleteReminder: (id: string) => request(`/reminders/${id}`, { method: 'DELETE' }),
 
   getAccountCalendars: (id: string) =>

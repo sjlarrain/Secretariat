@@ -31,18 +31,24 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     return;
   }
 
+  const calendarAccounts = (await getAllAccounts()).filter((a) => a.type === 'calendar');
+
+  if (calendarAccounts.length === 0) {
+    await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
+    return;
+  }
+
+  // ── Week view mode: /myschedule week ──────────────
+  if (extraArgs[0]?.toLowerCase() === 'week') {
+    await showWeekSchedule(from, new Date(), calendarAccounts, settings.timezone);
+    return;
+  }
+
   const dateInput = flags['for'] || extraArgs.join(' ').trim();
   const targetDate = dateInput ? parseDate(dateInput, settings.timezone) : new Date();
 
   if (!targetDate) {
     await sendMessage(from, `❌ Could not parse date: "${dateInput}". Try "tomorrow", "next monday", or DD-MM-YYYY.`);
-    return;
-  }
-
-  const calendarAccounts = (await getAllAccounts()).filter((a) => a.type === 'calendar');
-
-  if (calendarAccounts.length === 0) {
-    await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
     return;
   }
 
@@ -62,12 +68,6 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     } else {
       await checkWeekAvailability(from, plan, targetDate, calendarAccounts, settings.timezone);
     }
-    return;
-  }
-
-  // ── Week view mode: /myschedule week ──────────────
-  if (extraArgs[0]?.toLowerCase() === 'week') {
-    await showWeekSchedule(from, new Date(), calendarAccounts, settings.timezone);
     return;
   }
 

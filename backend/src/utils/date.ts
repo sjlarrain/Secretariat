@@ -8,8 +8,8 @@ export function parseDate(input: string, timezone: string = 'America/Santiago'):
   const strictMatch = trimmed.match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (strictMatch) {
     const [, dd, mm, yyyy] = strictMatch;
-    const iso = `${yyyy}-${mm}-${dd}`;
-    const d = new Date(iso);
+    // Use noon UTC so the local date is correct in any timezone (avoids UTC-midnight rollback)
+    const d = new Date(`${yyyy}-${mm}-${dd}T12:00:00Z`);
     if (!isNaN(d.getTime())) return d;
     return null;
   }

@@ -34,3 +34,12 @@ export async function removeReminder(id: string): Promise<boolean> {
   await getRedis().set(KEY, filtered);
   return true;
 }
+
+export async function updateReminder(id: string, updates: Partial<Pick<PendingReminder, 'fireAt' | 'messageId'>>): Promise<boolean> {
+  const list = await getReminders();
+  const idx = list.findIndex((r) => r.id === id);
+  if (idx === -1) return false;
+  list[idx] = { ...list[idx], ...updates };
+  await getRedis().set(KEY, list);
+  return true;
+}

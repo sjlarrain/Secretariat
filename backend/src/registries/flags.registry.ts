@@ -86,4 +86,11 @@ export const FLAGS: Record<string, FlagDefinition> = {
     required: false,
     description: 'Space-separated kebab-case tags (e.g. fintech-elements tech-news)',
   },
+  done: {
+    name: '--done',
+    shortAlias: 'd',
+    type: 'string',
+    required: false,
+    description: 'Mark work item #N as done (e.g. --done 3 or -d 3)',
+  },
 };

@@ -75,6 +75,12 @@ export const api = {
   markIdeaDone: (id: number) => request(`/ideas/${id}/done`, { method: 'PATCH' }),
   getDoneIdeas: () => request<{ ideas: Idea[] }>('/ideas/done'),
 
+  getWorkItems: () => request<{ items: WorkItem[] }>('/work'),
+  getDoneWorkItems: () => request<{ items: WorkItem[] }>('/work/done'),
+  createWorkItem: (text: string) => request<{ item: WorkItem }>('/work', { method: 'POST', body: JSON.stringify({ text }) }),
+  markWorkItemDone: (id: number) => request(`/work/${id}/done`, { method: 'PATCH' }),
+  deleteWorkItem: (id: number) => request(`/work/${id}`, { method: 'DELETE' }),
+
   getLinks: (filter?: 'read') =>
     request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
   createLink: (url: string, tags: string[]) =>
@@ -166,6 +172,15 @@ export interface Link {
   readAt?: string;
 }
 
+export interface WorkItem {
+  id: number;
+  text: string;
+  createdAt: string;
+  doneAt?: string;
+  reminderFor?: string;
+  qstashMessageId?: string;
+}
+
 export interface DigestConfig {
   enabled: boolean;
   time: string;
@@ -176,6 +191,7 @@ export interface DigestConfig {
 
 export interface Settings {
   timezone: string;
+  workReminder: DigestConfig;  // every Monday, enabled by default
   morningDigest: DigestConfig & { days: number[] };
   weeklySummary: DigestConfig & { day: number };
 }

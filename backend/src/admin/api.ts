@@ -36,6 +36,7 @@ import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../integrations/local/plans';
 import { getReminders, removeReminder, updateReminder } from '../integrations/local/reminders';
+import { getWorkItems, getDoneWorkItems, addWorkItem, markWorkItemDone, deleteWorkItem } from '../integrations/local/work';
 import { cancelMessage } from '../qstash/client';
 
 const router = Router();
@@ -194,6 +195,26 @@ router.put('/settings', requireAuth, async (req, res) => {
       console.error('Failed to create weekly summary schedule:', err);
     }
   }
+
+  // Handle work reminder cron (every Monday)
+  const prevWork = current.workReminder ?? { enabled: false, time: '09:00' };
+  const nextWork = next.workReminder ?? prevWork;
+
+  if (prevWork.scheduleId && (!nextWork.enabled || prevWork.time !== nextWork.time)) {
+    try { await deleteSchedule(prevWork.scheduleId); } catch { /* ignore */ }
+    nextWork.scheduleId = undefined;
+  }
+
+  if (nextWork.enabled && !nextWork.scheduleId) {
+    const [hh, mm] = nextWork.time.split(':');
+    const cron = `${mm} ${hh} * * 1`; // every Monday
+    try {
+      nextWork.scheduleId = await scheduleCron('/internal/digest/work', cron, {});
+    } catch (err) {
+      console.error('Failed to create work reminder schedule:', err);
+    }
+  }
+  next.workReminder = nextWork;
 
   await saveSettings(next);
   res.json({ ok: true, settings: next });
@@ -451,6 +472,36 @@ router.post('/links/:id/read', requireAuth, async (req, res) => {
 
 router.delete('/links/:id', requireAuth, async (req, res) => {
   const ok = await deleteLink(Number(req.params['id']));
+  ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
+});
+
+// --- Work ---
+router.get('/work', requireAuth, async (_req, res) => {
+  const items = await getWorkItems();
+  res.json({ items });
+});
+
+router.get('/work/done', requireAuth, async (_req, res) => {
+  const items = await getDoneWorkItems();
+  res.json({ items });
+});
+
+router.post('/work', requireAuth, async (req, res) => {
+  const { text } = req.body as { text?: string };
+  if (!text?.trim()) { res.status(400).json({ error: 'text required' }); return; }
+  const item = await addWorkItem(text.trim());
+  res.json({ item });
+});
+
+router.patch('/work/:id/done', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const item = await markWorkItemDone(id);
+  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+  res.json({ ok: true });
+});
+
+router.delete('/work/:id', requireAuth, async (req, res) => {
+  const ok = await deleteWorkItem(Number(req.params.id));
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 

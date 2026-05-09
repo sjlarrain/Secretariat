@@ -60,4 +60,10 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: ['tags', 'read'],
     requiredFlags: [],
   },
+  work: {
+    name: '/work',
+    description: 'Weekend to-do list. `/work <text>` to add, `/work` to list, `/work --done N` to mark done. Add --for and --at for an optional one-shot reminder.',
+    acceptedFlags: ['done', 'for', 'at'],
+    requiredFlags: [],
+  },
 };

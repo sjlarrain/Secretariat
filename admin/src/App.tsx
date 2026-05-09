@@ -9,6 +9,7 @@ import Links from './pages/Links';
 import Commands from './pages/Commands';
 import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
+import WorkPage from './pages/Work';
 import { api } from './api/client';
 
 const NAV_LINKS = [
@@ -20,6 +21,7 @@ const NAV_LINKS = [
   { to: '/plans', label: 'Plans', icon: '📋' },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
+  { to: '/work', label: 'Work', icon: '🗂️' },
   { to: '/commands', label: 'Commands', icon: '📖' },
 ];
 
@@ -64,7 +66,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.2px' }}>
               Secretariat
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.2</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.4</div>
           </div>
         </div>
 
@@ -143,6 +145,7 @@ export default function App() {
         <Route path="/plans" element={<Layout><Plans /></Layout>} />
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
         <Route path="/links" element={<Layout><Links /></Layout>} />
+        <Route path="/work" element={<Layout><WorkPage /></Layout>} />
         <Route path="/commands" element={<Layout><Commands /></Layout>} />
         <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -11,6 +11,7 @@ import { myscheduleHandler } from '../handlers/myschedule.handler';
 import { ideasHandler } from '../handlers/ideas.handler';
 import { linksHandler } from '../handlers/links.handler';
 import { menuHandler } from '../handlers/menu.handler';
+import { workHandler } from '../handlers/work.handler';
 import type { ParsedCommand } from '../parser/command.parser';
 
 const router = Router();
@@ -88,6 +89,9 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
         break;
       case 'links':
         await linksHandler(data, from);
+        break;
+      case 'work':
+        await workHandler(data, from);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

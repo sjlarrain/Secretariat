@@ -235,6 +235,44 @@ export default function CronManager() {
             ) : null}
           </div>
 
+          {/* Work Reminder */}
+          <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Work List — Monday Reminder</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Sends pending work items every Monday morning
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.workReminder?.enabled ?? true}
+                  onChange={(e) => setSettings((prev) => prev ? {
+                    ...prev,
+                    workReminder: { ...(prev.workReminder ?? { enabled: true, time: '09:00' }), enabled: e.target.checked },
+                  } : prev)}
+                />
+                <span style={{ fontSize: 13 }}>{(settings.workReminder?.enabled ?? true) ? 'On' : 'Off'}</span>
+              </label>
+            </div>
+            {(settings.workReminder?.enabled ?? true) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                <label className="field-label" style={{ margin: 0 }}>Time</label>
+                <input
+                  type="time"
+                  value={settings.workReminder?.time ?? '09:00'}
+                  onChange={(e) => setSettings((prev) => prev ? {
+                    ...prev,
+                    workReminder: { ...(prev.workReminder ?? { enabled: true, time: '09:00' }), time: e.target.value },
+                  } : prev)}
+                  style={{ width: 110 }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>every Monday</span>
+              </div>
+            )}
+          </div>
+
           {err && <p className="error-msg" style={{ marginBottom: 12 }}>⚠ {err}</p>}
           {msg && <p className="success-msg" style={{ marginBottom: 12 }}>✓ {msg}</p>}
 

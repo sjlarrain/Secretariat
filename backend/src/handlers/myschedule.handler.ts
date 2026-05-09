@@ -74,9 +74,9 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
   // ── Regular mode ───────────────────────────────────
   try {
     const tz = settings.timezone;
-    const allEvents = (
-      await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, targetDate, tz)))
-    ).flat();
+    const allEvents = dedup(
+      (await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, targetDate, tz)))).flat()
+    );
 
     allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -91,7 +91,8 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     const lines = [`📅 *${label} — ${formatDate(targetDate, !isToday, tz)}*\n`];
     for (const event of allEvents) {
       const alias = calendarAccounts.length > 1 ? ` _(${event.calendarAlias})_` : '';
-      lines.push(`🕐 ${formatTime(event.start, tz)}  ${event.title}${alias}`);
+      const prefix = event.isAllDay ? '📌' : `🕐 ${formatTime(event.start, tz)} `;
+      lines.push(`${prefix} ${event.title}${alias}`);
     }
 
     await sendMessage(from, lines.join('\n'));
@@ -116,9 +117,9 @@ async function showWeekSchedule(
 
   const eventsByDay = await Promise.all(
     weekDays.map(async (day) => {
-      const events = (
-        await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, day, tz).catch(() => [])))
-      ).flat();
+      const events = dedup(
+        (await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, day, tz).catch(() => [])))).flat()
+      );
       events.sort((a, b) => a.start.getTime() - b.start.getTime());
       return { day, events };
     })
@@ -136,7 +137,8 @@ async function showWeekSchedule(
     } else {
       for (const event of events) {
         const alias = multiAccount ? ` _(${event.calendarAlias})_` : '';
-        lines.push(`  🕐 ${formatTime(event.start, tz)}  ${event.title}${alias}`);
+        const prefix = event.isAllDay ? '  📌' : `  🕐 ${formatTime(event.start, tz)} `;
+        lines.push(`${prefix} ${event.title}${alias}`);
       }
     }
     lines.push('');
@@ -225,6 +227,16 @@ async function checkWeekAvailability(
 
   lines.push(`\n${daysWithSlots} day${daysWithSlots !== 1 ? 's' : ''} with open slots.`);
   await sendMessage(from, lines.join('\n'));
+}
+
+function dedup(events: CalendarEvent[]): CalendarEvent[] {
+  const seen = new Set<string>();
+  return events.filter((e) => {
+    const key = `${e.title}|${e.start.toISOString()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function isBlocked(event: CalendarEvent, slotStart: Date, slotEnd: Date, bufferMs: number): boolean {

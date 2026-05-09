@@ -8,6 +8,7 @@ export interface CalendarEvent {
   start: Date;
   end: Date;
   calendarAlias?: string;
+  isAllDay: boolean;
 }
 
 export interface GoogleCalendar {
@@ -114,6 +115,7 @@ export async function getEventsForDate(account: ConnectedAccount, date: Date, ti
         start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
         end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
         calendarAlias: account.calendarNames?.[calendarIds[i]] ?? account.alias,
+        isAllDay: !e.start?.dateTime,
       }))
   );
 }
@@ -160,6 +162,7 @@ export async function getWeekEvents(account: ConnectedAccount, timezone: string)
         start: new Date(e.start?.dateTime ?? e.start?.date ?? ''),
         end: new Date(e.end?.dateTime ?? e.end?.date ?? ''),
         calendarAlias: account.calendarNames?.[calendarIds[i]] ?? account.alias,
+        isAllDay: !e.start?.dateTime,
       }))
   );
 }

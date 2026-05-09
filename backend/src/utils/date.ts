@@ -14,9 +14,9 @@ export function parseDate(input: string, timezone: string = 'America/Santiago'):
     return null;
   }
 
-  // Natural language via chrono-node
+  // Natural language via chrono-node — forwardDate ensures "thursday" means next/current Thu
   const ref = new Date();
-  const parsed = chrono.parseDate(trimmed, { instant: ref, timezone });
+  const parsed = chrono.parseDate(trimmed, { instant: ref, timezone }, { forwardDate: true });
   return parsed ?? null;
 }
 

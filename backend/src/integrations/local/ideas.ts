@@ -24,6 +24,7 @@ export interface Idea {
   projectId: number;
   updatedAt?: string;
   deletedAt?: string;
+  usedAt?: string; // marked as "done/used" — distinct from trash
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
@@ -96,7 +97,21 @@ export async function deleteProject(id: number): Promise<{ ok: boolean; error?: 
 
 export async function getIdeas(): Promise<Idea[]> {
   const all = await getAllIdeasRaw();
-  return all.filter((i) => !i.deletedAt);
+  return all.filter((i) => !i.deletedAt && !i.usedAt);
+}
+
+export async function getDoneIdeas(): Promise<Idea[]> {
+  const all = await getAllIdeasRaw();
+  return all.filter((i) => !!i.usedAt && !i.deletedAt);
+}
+
+export async function markIdeaAsDone(id: number): Promise<boolean> {
+  const all = await getAllIdeasRaw();
+  const idx = all.findIndex((i) => i.id === id && !i.deletedAt && !i.usedAt);
+  if (idx === -1) return false;
+  all[idx].usedAt = new Date().toISOString();
+  await redis.set(IDEAS_KEY, all);
+  return true;
 }
 
 export async function addIdea(text: string, projectId: number): Promise<Idea> {

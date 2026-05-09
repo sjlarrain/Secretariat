@@ -25,6 +25,8 @@ import {
   restoreIdea,
   permanentlyDeleteIdea,
   emptyTrash,
+  markIdeaAsDone,
+  getDoneIdeas,
 } from '../integrations/local/ideas';
 import { getLinks, getReadLinks, addLink, markLinkRead, deleteLink, updateLink } from '../integrations/local/links';
 import { resolveAccount } from '../integrations/registry';
@@ -283,6 +285,18 @@ router.delete('/ideas/:id/permanent', requireAuth, async (req, res) => {
   const ok = await permanentlyDeleteIdea(id);
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
+});
+
+router.patch('/ideas/:id/done', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const ok = await markIdeaAsDone(id);
+  if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
+  res.json({ ok: true });
+});
+
+router.get('/ideas/done', requireAuth, async (_req, res) => {
+  const ideas = await getDoneIdeas();
+  res.json({ ideas });
 });
 
 // --- Dashboard ---

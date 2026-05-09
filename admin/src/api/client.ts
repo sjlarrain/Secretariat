@@ -72,6 +72,8 @@ export const api = {
   emptyTrash: () => request('/ideas/trash', { method: 'DELETE' }),
   restoreIdea: (id: number) => request(`/ideas/${id}/restore`, { method: 'POST' }),
   permanentlyDeleteIdea: (id: number) => request(`/ideas/${id}/permanent`, { method: 'DELETE' }),
+  markIdeaDone: (id: number) => request(`/ideas/${id}/done`, { method: 'PATCH' }),
+  getDoneIdeas: () => request<{ ideas: Idea[] }>('/ideas/done'),
 
   getLinks: (filter?: 'read') =>
     request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
@@ -114,6 +116,7 @@ export interface Idea {
   projectId: number;
   updatedAt?: string;
   deletedAt?: string;
+  usedAt?: string;
 }
 
 export interface PlanType {

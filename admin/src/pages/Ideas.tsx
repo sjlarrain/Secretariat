@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { api, Project, Idea } from '../api/client';
 
-type View = 'all' | 'trash' | number;
+type View = 'all' | 'trash' | 'done' | number;
 type LayoutMode = 'list' | 'grid';
 
 export default function IdeasPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [trashed, setTrashed] = useState<Idea[]>([]);
+  const [done, setDone] = useState<Idea[]>([]);
   const [view, setView] = useState<View>('all');
   const [layout, setLayout] = useState<LayoutMode>('list');
   const [loading, setLoading] = useState(true);
@@ -37,14 +38,16 @@ export default function IdeasPage() {
 
   async function load() {
     setLoading(true);
-    const [pRes, iRes, tRes] = await Promise.all([
+    const [pRes, iRes, tRes, dRes] = await Promise.all([
       api.getProjects(),
       api.getIdeas(),
       api.getTrashedIdeas(),
+      api.getDoneIdeas(),
     ]);
     setProjects(pRes.projects);
     setIdeas(iRes.ideas);
     setTrashed(tRes.ideas);
+    setDone(dRes.ideas);
     setLoading(false);
   }
 
@@ -127,6 +130,24 @@ export default function IdeasPage() {
       flash('Idea updated.');
     } catch {
       flash('Failed to update idea.', true);
+    }
+  }
+
+  async function handleMarkDone(id: number) {
+    try {
+      const idea = ideas.find((i) => i.id === id);
+      await api.markIdeaDone(id);
+      setIdeas((prev) => prev.filter((i) => i.id !== id));
+      if (idea) {
+        setDone((prev) => [...prev, { ...idea, usedAt: new Date().toISOString() }]);
+        setProjects((prev) => prev.map((p) => p.id === idea.projectId
+          ? { ...p, ideaCount: Math.max(0, p.ideaCount - 1) }
+          : p
+        ));
+      }
+      flash('Idea marked as done!');
+    } catch {
+      flash('Failed to mark idea as done.', true);
     }
   }
 
@@ -486,8 +507,31 @@ export default function IdeasPage() {
           </form>
         </div>
 
-        {/* Trash folder */}
+        {/* Done + Trash folders */}
         <div style={{ borderTop: '1px solid var(--border)', padding: '6px 0 8px' }}>
+          <button
+            onClick={() => setView('done')}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 14px',
+              background: view === 'done' ? 'rgba(34,197,94,0.08)' : 'transparent',
+              border: 'none',
+              color: view === 'done' ? 'var(--green)' : 'var(--text-muted)',
+              fontSize: 13, fontWeight: view === 'done' ? 600 : 400,
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <span style={{ opacity: 0.6, fontSize: 13 }}>✅</span>
+            <span style={{ flex: 1 }}>Completed</span>
+            {done.length > 0 && (
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                background: view === 'done' ? 'rgba(34,197,94,0.15)' : '#1c1c1c',
+                color: view === 'done' ? 'var(--green)' : 'var(--text-dim)',
+                padding: '1px 6px', borderRadius: 99,
+              }}>{done.length}</span>
+            )}
+          </button>
           <button
             onClick={() => setView('trash')}
             style={{
@@ -521,12 +565,14 @@ export default function IdeasPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>
-              {view === 'trash' ? 'Trash' : view === 'all' ? 'All ideas' : (activeProject?.name ?? 'Project')}
+              {view === 'trash' ? 'Trash' : view === 'done' ? 'Completed' : view === 'all' ? 'All ideas' : (activeProject?.name ?? 'Project')}
             </h2>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
               {view === 'trash'
                 ? `${trashed.length} item${trashed.length !== 1 ? 's' : ''} · auto-deleted after 30 days`
-                : `${visibleIdeas.length} idea${visibleIdeas.length !== 1 ? 's' : ''}${view === 'all' ? ` across ${projects.length} project${projects.length !== 1 ? 's' : ''}` : ''}`
+                : view === 'done'
+                  ? `${done.length} idea${done.length !== 1 ? 's' : ''} marked as done`
+                  : `${visibleIdeas.length} idea${visibleIdeas.length !== 1 ? 's' : ''}${view === 'all' ? ` across ${projects.length} project${projects.length !== 1 ? 's' : ''}` : ''}`
               }
             </p>
           </div>
@@ -540,8 +586,47 @@ export default function IdeasPage() {
         {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
         {err && <p className="error-msg" style={{ marginBottom: 14 }}>✕ {err}</p>}
 
-        {/* ── Trash view ── */}
-        {view === 'trash' ? (
+        {/* ── Done view ── */}
+        {view === 'done' ? (
+          done.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 32, marginBottom: 14 }}>✅</div>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>No completed ideas yet</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Mark ideas as Done to move them here.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {done.map((idea) => {
+                const project = projects.find((p) => p.id === idea.projectId);
+                return (
+                  <div key={idea.id} className="card" style={{ padding: '14px 18px', opacity: 0.75 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                          {idea.text}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                          {project && (
+                            <span style={{
+                              fontSize: 11, color: 'var(--text-dim)',
+                              background: '#1a1a1a', border: '1px solid var(--border)',
+                              padding: '1px 7px', borderRadius: 99,
+                            }}>📁 {project.name}</span>
+                          )}
+                          {idea.usedAt && (
+                            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                              Done {new Date(idea.usedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : view === 'trash' ? (
           trashed.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 32, marginBottom: 14 }}>🗑</div>
@@ -679,6 +764,11 @@ export default function IdeasPage() {
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                            <button
+                              className="btn-ghost"
+                              style={{ fontSize: 12, color: 'var(--green)', borderColor: 'var(--green)' }}
+                              onClick={() => handleMarkDone(idea.id)}
+                            >✓ Done</button>
                             <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => startEdit(idea)}>Edit</button>
                             <button className="btn-danger" style={{ fontSize: 12 }} onClick={() => handleDeleteIdea(idea.id)}>Delete</button>
                           </div>

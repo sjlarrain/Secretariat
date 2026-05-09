@@ -21,13 +21,13 @@
 | v1.3 | `/links #N -t tag` — add tags to existing link via WhatsApp | ✅ Done | Easy |
 | v1.3 | Inline tag editor — add/remove tags per link in admin panel | ✅ Done | Easy |
 | **v1.4 — Fixes & /work** | | | |
-| v1.4 | Future-only date resolution — "thursday" always means next/current Thu | ⬜ Pending | Easy |
-| v1.4 | Cross-account event dedup — deduplicate events shared across multiple Google accounts | ⬜ Pending | Easy |
-| v1.4 | Google Calendar reconnect workflow — detect invalid_grant, mark disconnected, admin badge + reconnect button | ⬜ Pending | Medium |
-| v1.4 | Ideas "Done" button — mark idea as used/completed (distinct from trash), admin panel | ⬜ Pending | Easy |
-| v1.4 | Em-dash fix — normalize WhatsApp autocorrected `—` back to `--` in parser | ⬜ Pending | Easy |
-| v1.4 | `/work` — weekend to-do list with optional per-item reminder; Monday morning digest | ⬜ Pending | Medium |
-| v1.4 | `/menu` refresh — required vs optional flags, shorthand aliases, all commands | ⬜ Pending | Easy |
+| v1.4 | Future-only date resolution — "thursday" always means next/current Thu | ✅ Done | Easy |
+| v1.4 | Cross-account event dedup — deduplicate events shared across multiple Google accounts | ✅ Done | Easy |
+| v1.4 | Google Calendar reconnect workflow — detect invalid_grant, mark disconnected, admin badge + reconnect button | ✅ Done | Medium |
+| v1.4 | Ideas "Done" button — mark idea as used/completed (distinct from trash), admin panel | ✅ Done | Easy |
+| v1.4 | Em-dash fix — normalize WhatsApp autocorrected `—` back to `--` in parser | ✅ Done | Easy |
+| v1.4 | `/work` — weekend to-do list with optional per-item reminder; Monday morning digest | ✅ Done | Medium |
+| v1.4 | `/menu` refresh — required vs optional flags, shorthand aliases, all commands | ✅ Done | Easy |
 | **v1.5 — Code Review & Hardening** | | | |
 | v1.5 | Full code review — security audit, vulnerability check, command edge cases | ⬜ Pending | Medium |
 | v1.5 | Env/token manager — configure Kapso, QStash, Google OAuth, Upstash and other secrets directly from the admin panel (no server .env edit) | ⬜ Pending | Medium |

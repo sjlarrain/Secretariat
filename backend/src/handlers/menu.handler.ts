@@ -5,39 +5,55 @@ const MENU = `🤖 *Secretariat — Commands*
 
 📅 *Calendar*
 */schedule* — Create a calendar event
-  --title   name _(required)_
-  --for     date _(required)_
-  --at      HH:MM _(required)_
-  --invite  email1,email2
-  --notes   description
-  --using   calendar alias
+  --title (-t)   name *(required)*
+  --for (-f)     date *(required)* — DD-MM-YYYY or "next friday"
+  --at (-a) / @  HH:MM *(required)*
+  --invite (-i)  email1,email2
+  --notes (-n)   description
+  --using (-u)   calendar alias (e.g. GG)
 
-*/myschedule* — Show calendar events for a day
-  --for     date _(today by default)_
-  --plan    plan type _(e.g. Lunch, Coffee)_ (-p)
-            omit value to list available plans
-            add --for to check a specific day
+*/myschedule* — Show calendar events
+  _(no flags)_   today's schedule
+  week            full week view
+  --for (-f)      specific day
+  --plan (-p)     free slots for a plan type (e.g. Lunch)
+                  omit value to list all plans
+                  add --for to check a specific day
 
 ✅ *Tasks*
 */task* — Create a Google Task
-  --title   name _(required)_
-  --for     due date
-  --notes   description
+  --title (-t)   name
+  --for (-f)     due date
+  --notes (-n)   description
 
 */mytask* — Show pending tasks
 
 ⏰ *Reminders*
-*/reminder* — Set a WhatsApp reminder
-  --title   text _(required)_
-  --for     date _(required)_
-  --at      HH:MM _(required)_
+*/reminder* — One-shot WhatsApp reminder (no tracking)
+  --title (-t)   text *(required)*
+  --for (-f)     date *(required)*
+  --at (-a) / @  HH:MM *(required)*
+
+🗂 *Work List*
+*/work* text               — Add item to work list
+*/work* text --for (-f) date --at (-a) time — Add with reminder
+*/work* —                  List pending items
+*/work* --done (-d) N      — Mark item #N as done
 
 💡 *Ideas*
-*/ideas* text — Save an idea (goes to default project)
-*/ideas* text --project Name — Save to a specific project
-*/ideas* — List all ideas
-*/ideas* --project — List your projects
-*/ideas* --project Name — List ideas in that project`;
+*/ideas* text                  — Save idea (default project)
+*/ideas* text --project (-p) Name — Save to specific project
+*/ideas*                       — List all ideas
+*/ideas* --project             — List projects
+*/ideas* --project (-p) Name   — Ideas in that project
+
+🔗 *Links*
+*/links* url              — Save a link
+*/links*                  — List active links
+*/links* --read (-r) N    — Archive link #N
+*/links* #N --tags (-t) tag1 tag2 — Add tags to link #N
+
+_Send /start to wake up the bot._`;
 
 export async function menuHandler(_parsed: ParsedCommand, from: string): Promise<void> {
   await sendMessage(from, MENU);

@@ -4,7 +4,9 @@
   "scripts": {
     "build": "rimraf dist && tsc",
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@googleapis/calendar": "latest",
@@ -26,6 +28,7 @@
     "@types/node": "latest",
     "rimraf": "latest",
     "tsx": "latest",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.5"
   }
 }

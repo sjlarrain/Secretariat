@@ -14,8 +14,9 @@ export interface ParseResult {
   error?: string;
 }
 
-export function parseCommand(raw: string): ParseResult {
-  const trimmed = raw.trim();
+export function parseCommand(input: string): ParseResult {
+  // WhatsApp autocorrects -- to em-dash (—) or en-dash (–); normalize back
+  const trimmed = input.replace(/[—–]/g, '--').trim();
 
   if (!trimmed.startsWith('/')) {
     return { success: false, error: 'Not a command. Start your message with /start to see available commands.' };

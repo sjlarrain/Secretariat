@@ -1,6 +1,6 @@
 # Secretariat
 
-A personal WhatsApp command bot that lets you manage your calendar, tasks, reminders, ideas, and saved links — all from a WhatsApp chat. Backed by a web admin panel to configure integrations, digest schedules, meeting plan types, and more.
+A personal WhatsApp command bot that lets you manage your calendar, tasks, reminders, ideas, links, and weekend work list — all from a WhatsApp chat. Backed by a web admin panel to configure integrations, digest schedules, meeting plan types, and more.
 
 **Owner:** Single user (Santiago). Only whitelisted WhatsApp numbers can trigger commands.
 
@@ -19,6 +19,7 @@ Send a command from WhatsApp and Secretariat handles the rest:
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
 | `/ideas` | Saves ideas, lists them, filters by project |
 | `/links` | Saves a link for later, lists unread links, or archives one |
+| `/work` | Adds items to a weekend work list; optional per-item reminder; Monday digest |
 | `/menu` | Shows all commands and syntax |
 | `/start` | Wakes up the bot (useful after Render cold start) |
 
@@ -252,6 +253,27 @@ Lists all incomplete tasks sorted by due date.
 
 The reminder fires as a WhatsApp message at the scheduled time, delivered by QStash. Times are interpreted in the configured timezone. Pending reminders are visible (and cancellable) in the admin panel → Cron Manager.
 
+### `/work` — Weekend work list
+
+```
+/work <text>                              → add item to work list
+/work <text> --for <date> --at <HH:MM>   → add item with a one-shot reminder
+/work <text> -f <date> -a <HH:MM>        → same with short flags
+/work <text> -f <date> @<HH:MM>          → same with @ shorthand
+/work                                     → list pending items (numbered)
+/work —                                   → same (bare dash also lists)
+/work --done <N>                          → mark item #N as done
+/work -d <N>                              → same with short flag
+```
+
+```
+/work Buy groceries
+/work Read the Q1 report -f saturday @10:00
+/work --done 2
+```
+
+Items stay in the list until explicitly marked done — they are **not** fire-and-forget. A Monday morning digest is sent automatically with all pending items (configurable in admin panel → Cron Manager). The per-item reminder is optional: if `--for` / `--at` are provided, a one-shot QStash reminder fires at that time; marking the item done before it fires cancels the reminder.
+
 ### `/ideas` — Save or list ideas
 
 ```
@@ -358,9 +380,10 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 | Version | Name | Focus |
 |---------|------|-------|
 | v1.2 | Flags Manager | ✅ Done — calendar, plans, schedule improvements |
-| v1.3 | Links Manager | 🔄 Testing — save & tag URLs from WhatsApp |
-| v1.4 | Code Review & Hardening | Security audit + env/token manager from admin panel |
-| v1.5 | Multi-User | User accounts, major open operation |
-| v1.6 | Todoist | Task integration via Todoist API |
-| v1.7 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
-| v1.8 | NLP | Natural language messages via Claude API |
+| v1.3 | Links Manager | ✅ Done — save & tag URLs from WhatsApp |
+| v1.4 | Fixes & /work | ✅ Done — bug fixes, /work list, Ideas done, disconnection detection |
+| v1.5 | Code Review & Hardening | Security audit + env/token manager from admin panel |
+| v1.6 | Multi-User | User accounts, major open operation |
+| v1.7 | Todoist | Task integration via Todoist API |
+| v1.8 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
+| v1.9 | NLP | Natural language messages via Claude API |

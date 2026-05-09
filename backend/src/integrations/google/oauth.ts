@@ -45,15 +45,30 @@ export interface GoogleTokens {
   expiry_date: number;
 }
 
-export async function getAuthenticatedClient(tokens: GoogleTokens) {
+export class CalendarDisconnectedError extends Error {
+  constructor(public alias: string) {
+    super(`DISCONNECTED:${alias}`);
+    this.name = 'CalendarDisconnectedError';
+  }
+}
+
+export async function getAuthenticatedClient(tokens: GoogleTokens, alias?: string) {
   const client = getOAuthClient();
   client.setCredentials(tokens);
 
   // Auto-refresh if expired
   if (Date.now() >= tokens.expiry_date - 60_000) {
-    const { credentials } = await client.refreshAccessToken();
-    client.setCredentials(credentials);
-    return { client, refreshedTokens: credentials };
+    try {
+      const { credentials } = await client.refreshAccessToken();
+      client.setCredentials(credentials);
+      return { client, refreshedTokens: credentials };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid_grant|token has been expired|token has been revoked/i.test(msg)) {
+        throw new CalendarDisconnectedError(alias ?? 'unknown');
+      }
+      throw err;
+    }
   }
 
   return { client, refreshedTokens: null };

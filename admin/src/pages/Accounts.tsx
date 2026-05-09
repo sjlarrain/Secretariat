@@ -94,6 +94,10 @@ export default function Accounts() {
     window.location.href = `/api/admin/auth/google/start?alias=${encodeURIComponent(alias)}&type=${type}`;
   }
 
+  function reconnectGoogle(acc: Account) {
+    window.location.href = `/api/admin/auth/google/start?alias=${encodeURIComponent(acc.alias)}&type=${acc.type}`;
+  }
+
   if (loading) {
     return (
       <div className="loading-wrap">
@@ -162,24 +166,37 @@ export default function Accounts() {
                       <span className={`badge badge-${acc.provider}`}>{acc.provider}</span>
                       <span className={`badge badge-${acc.type}`}>{acc.type}</span>
                       {acc.isDefault && <span className="badge badge-default">default</span>}
+                      {acc.isDisconnected && (
+                        <span className="badge" style={{ background: 'var(--orange, #e5a550)', color: '#fff' }}>
+                          disconnected
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {acc.type === 'calendar' && (
-                      <button
-                        className="btn-ghost"
-                        style={{ fontSize: 12, opacity: panel?.open ? 1 : 0.75 }}
-                        onClick={() => toggleCalendarPanel(acc.id)}
-                      >
-                        {panel?.open ? 'Hide calendars' : 'Manage calendars'}
+                    {acc.isDisconnected ? (
+                      <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => reconnectGoogle(acc)}>
+                        Reconnect
                       </button>
-                    )}
-                    {!acc.isDefault && (
-                      <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => handleSetDefault(acc.id)}>
-                        Set default
-                      </button>
+                    ) : (
+                      <>
+                        {acc.type === 'calendar' && (
+                          <button
+                            className="btn-ghost"
+                            style={{ fontSize: 12, opacity: panel?.open ? 1 : 0.75 }}
+                            onClick={() => toggleCalendarPanel(acc.id)}
+                          >
+                            {panel?.open ? 'Hide calendars' : 'Manage calendars'}
+                          </button>
+                        )}
+                        {!acc.isDefault && (
+                          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => handleSetDefault(acc.id)}>
+                            Set default
+                          </button>
+                        )}
+                      </>
                     )}
                     <button className="btn-danger" style={{ fontSize: 12 }} onClick={() => handleDisconnect(acc.id)}>
                       Disconnect

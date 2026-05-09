@@ -72,6 +72,7 @@ router.get('/accounts', requireAuth, async (_req, res) => {
     provider: a.provider,
     type: a.type,
     isDefault: a.isDefault,
+    isDisconnected: a.isDisconnected ?? false,
   }));
   res.json({ accounts });
 });

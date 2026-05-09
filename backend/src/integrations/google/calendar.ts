@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { ConnectedAccount, saveAccount, encryptTokens, decryptTokens } from '../token-store';
-import { GoogleTokens, getAuthenticatedClient } from './oauth';
+import { GoogleTokens, getAuthenticatedClient, CalendarDisconnectedError } from './oauth';
 
 export interface CalendarEvent {
   id: string;
@@ -20,18 +20,25 @@ export interface GoogleCalendar {
 
 async function getCalendarClient(account: ConnectedAccount) {
   const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens);
-  const { client, refreshedTokens } = await getAuthenticatedClient(tokens);
+  try {
+    const { client, refreshedTokens } = await getAuthenticatedClient(tokens, account.alias);
 
-  if (refreshedTokens?.access_token) {
-    account.encryptedTokens = encryptTokens({
-      access_token: refreshedTokens.access_token,
-      refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
-      expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
-    });
-    await saveAccount(account);
+    if (refreshedTokens?.access_token) {
+      account.encryptedTokens = encryptTokens({
+        access_token: refreshedTokens.access_token,
+        refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
+        expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
+      });
+      await saveAccount(account);
+    }
+
+    return google.calendar({ version: 'v3', auth: client });
+  } catch (err) {
+    if (err instanceof CalendarDisconnectedError) {
+      await saveAccount({ ...account, isDisconnected: true });
+    }
+    throw err;
   }
-
-  return google.calendar({ version: 'v3', auth: client });
 }
 
 export async function listCalendars(account: ConnectedAccount): Promise<GoogleCalendar[]> {

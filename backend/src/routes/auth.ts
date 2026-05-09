@@ -47,15 +47,19 @@ router.get('/google/callback', async (req: Request, res: Response) => {
   try {
     const tokens = await exchangeCode(code);
     const existingAccounts = await getAllAccounts();
+    const existing = existingAccounts.find((a) => a.alias === pending.alias && a.type === pending.type);
     const isFirstOfType = !existingAccounts.some((a) => a.type === pending.type);
 
     await saveAccount({
-      id: uuidv4(),
+      id: existing?.id ?? uuidv4(),
       alias: pending.alias,
       provider: 'google',
       type: pending.type,
-      isDefault: isFirstOfType,
+      isDefault: existing?.isDefault ?? isFirstOfType,
       encryptedTokens: encryptTokens(tokens),
+      enabledCalendarIds: existing?.enabledCalendarIds,
+      calendarNames: existing?.calendarNames,
+      isDisconnected: false,
     });
 
     res.send(`

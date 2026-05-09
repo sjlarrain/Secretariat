@@ -1,6 +1,7 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { getAllAccounts } from '../integrations/registry';
 import { getEventsForDate, CalendarEvent } from '../integrations/google/calendar';
+import { CalendarDisconnectedError } from '../integrations/google/oauth';
 import { getSettings } from '../integrations/token-store';
 import { getPlans, findPlanByName, PlanType } from '../integrations/local/plans';
 import { parseDate, formatDate, formatTime, getMondayOfWeek, getWeekDates, combineDateAndTime } from '../utils/date';
@@ -74,9 +75,10 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
   // ── Regular mode ───────────────────────────────────
   try {
     const tz = settings.timezone;
-    const allEvents = dedup(
-      (await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, targetDate, tz)))).flat()
-    );
+    const { events: allEvents, disconnected } = await fetchEventsForDate(calendarAccounts, targetDate, tz);
+    if (disconnected.length > 0) {
+      await sendMessage(from, disconnected.map((a) => `⚠️ Calendar *${a}* is disconnected. Reconnect via admin panel.`).join('\n'));
+    }
 
     allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -102,6 +104,28 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
   }
 }
 
+async function fetchEventsForDate(
+  accounts: Awaited<ReturnType<typeof getAllAccounts>>,
+  date: Date,
+  tz: string,
+): Promise<{ events: CalendarEvent[]; disconnected: string[] }> {
+  const disconnected: string[] = [];
+  const results = await Promise.all(
+    accounts.map(async (acc) => {
+      try {
+        return await getEventsForDate(acc, date, tz);
+      } catch (err) {
+        if (err instanceof CalendarDisconnectedError) {
+          disconnected.push(acc.alias);
+          return [];
+        }
+        throw err;
+      }
+    })
+  );
+  return { events: dedup(results.flat()), disconnected };
+}
+
 async function showWeekSchedule(
   from: string,
   referenceDate: Date,
@@ -117,9 +141,7 @@ async function showWeekSchedule(
 
   const eventsByDay = await Promise.all(
     weekDays.map(async (day) => {
-      const events = dedup(
-        (await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, day, tz).catch(() => [])))).flat()
-      );
+      const { events } = await fetchEventsForDate(calendarAccounts, day, tz);
       events.sort((a, b) => a.start.getTime() - b.start.getTime());
       return { day, events };
     })
@@ -154,9 +176,7 @@ async function checkDayAvailability(
   calendarAccounts: Awaited<ReturnType<typeof getAllAccounts>>,
   tz: string,
 ): Promise<void> {
-  const events = (
-    await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, date, tz).catch(() => [])))
-  ).flat();
+  const { events } = await fetchEventsForDate(calendarAccounts, date, tz);
 
   const dayLabel = `${DAYS_SHORT[date.getDay()]} ${formatDate(date, false, tz)}`;
   const freeSlots: string[] = [];
@@ -187,9 +207,7 @@ async function checkWeekAvailability(
 
   const eventsByDay = await Promise.all(
     days.map(async (day) => {
-      const events = (
-        await Promise.all(calendarAccounts.map((acc) => getEventsForDate(acc, day, tz).catch(() => [])))
-      ).flat();
+      const { events } = await fetchEventsForDate(calendarAccounts, day, tz);
       return { day, events };
     })
   );

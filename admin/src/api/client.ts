@@ -96,6 +96,7 @@ export interface Account {
   provider: 'google';
   type: 'calendar' | 'tasks';
   isDefault: boolean;
+  isDisconnected: boolean;
 }
 
 export interface Project {

@@ -11,6 +11,7 @@ export interface ConnectedAccount {
   encryptedTokens: string; // JSON stringified tokens, AES-256-GCM encrypted
   enabledCalendarIds?: string[];
   calendarNames?: Record<string, string>;
+  isDisconnected?: boolean; // set to true when OAuth refresh token is revoked
 }
 
 export interface Settings {

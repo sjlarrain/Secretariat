@@ -28,6 +28,16 @@ Every commit must follow this format:
 
 ---
 
+## MCP Servers
+
+| Server | Purpose | Scope |
+|--------|---------|-------|
+| `kapso` | Kapso WhatsApp API documentation lookups only | Project |
+
+**Important:** The `kapso` MCP is for documentation reference only. Do not use it to send messages, modify webhooks, or interact with the live Kapso API.
+
+---
+
 ## Development Commands
 
 ```bash

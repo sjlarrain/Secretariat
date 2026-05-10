@@ -373,6 +373,18 @@ cd admin && npm install && npm run dev   # Vite dev server on :5173
 
 ---
 
+## Claude Code — MCP recommendation
+
+If you develop this project with [Claude Code](https://claude.ai/code), it is recommended to add the Kapso MCP server scoped to this project for API documentation lookups:
+
+```bash
+claude mcp add kapso https://docs.kapso.ai/mcp --transport http --scope project
+```
+
+**Important:** Use this MCP for documentation reference only — do not use it to send messages or interact with the live Kapso API. The `.claude/` directory is already gitignored so the config will not be committed.
+
+---
+
 ## Roadmap
 
 See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.

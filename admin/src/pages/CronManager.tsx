@@ -118,8 +118,86 @@ export default function CronManager() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
-        {/* Left: digests */}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24, alignItems: 'start' }}>
+        {/* Left: pending reminders */}
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
+            Pending Reminders
+            <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-dim)', marginLeft: 8 }}>
+              {reminders.length > 0 ? `${reminders.length} queued` : ''}
+            </span>
+          </div>
+
+          {reminders.length === 0 ? (
+            <div className="card" style={{ padding: '28px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>⏰</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No pending reminders</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {reminders
+                .slice()
+                .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime())
+                .map((r) => (
+                  <div key={r.id} className="card" style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.title}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                          {formatFireAt(r.fireAt)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          className="btn-secondary"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          onClick={() => editingReminder === r.id ? setEditingReminder(null) : openEditReminder(r)}
+                        >
+                          {editingReminder === r.id ? 'Close' : 'Edit'}
+                        </button>
+                        <button
+                          className="btn-danger"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          disabled={deletingId === r.id}
+                          onClick={() => handleDeleteReminder(r.id)}
+                        >
+                          {deletingId === r.id ? '…' : 'Cancel'}
+                        </button>
+                      </div>
+                    </div>
+                    {editingReminder === r.id && (
+                      <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          style={{ fontSize: 12, padding: '3px 6px' }}
+                        />
+                        <input
+                          type="time"
+                          value={editTime}
+                          onChange={(e) => setEditTime(e.target.value)}
+                          style={{ fontSize: 12, padding: '3px 6px' }}
+                        />
+                        <button
+                          className="btn-primary"
+                          style={{ fontSize: 11, padding: '3px 10px' }}
+                          disabled={savingReminder}
+                          onClick={() => handleSaveReminder(r.id)}
+                        >
+                          {savingReminder ? '…' : 'Save'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right: digest configs */}
         <div>
           {/* Morning Digest */}
           <div className="card" style={{ marginBottom: 12 }}>
@@ -281,83 +359,6 @@ export default function CronManager() {
           </button>
         </div>
 
-        {/* Right: pending reminders */}
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
-            Pending Reminders
-            <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-dim)', marginLeft: 8 }}>
-              {reminders.length > 0 ? `${reminders.length} queued` : ''}
-            </span>
-          </div>
-
-          {reminders.length === 0 ? (
-            <div className="card" style={{ padding: '28px 16px', textAlign: 'center' }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>⏰</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No pending reminders</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {reminders
-                .slice()
-                .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime())
-                .map((r) => (
-                  <div key={r.id} className="card" style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.title}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                          {formatFireAt(r.fireAt)}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button
-                          className="btn-secondary"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => editingReminder === r.id ? setEditingReminder(null) : openEditReminder(r)}
-                        >
-                          {editingReminder === r.id ? 'Close' : 'Edit'}
-                        </button>
-                        <button
-                          className="btn-danger"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          disabled={deletingId === r.id}
-                          onClick={() => handleDeleteReminder(r.id)}
-                        >
-                          {deletingId === r.id ? '…' : 'Cancel'}
-                        </button>
-                      </div>
-                    </div>
-                    {editingReminder === r.id && (
-                      <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          type="date"
-                          value={editDate}
-                          onChange={(e) => setEditDate(e.target.value)}
-                          style={{ fontSize: 12, padding: '3px 6px' }}
-                        />
-                        <input
-                          type="time"
-                          value={editTime}
-                          onChange={(e) => setEditTime(e.target.value)}
-                          style={{ fontSize: 12, padding: '3px 6px' }}
-                        />
-                        <button
-                          className="btn-primary"
-                          style={{ fontSize: 11, padding: '3px 10px' }}
-                          disabled={savingReminder}
-                          onClick={() => handleSaveReminder(r.id)}
-                        >
-                          {savingReminder ? '…' : 'Save'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

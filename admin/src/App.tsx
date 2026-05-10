@@ -9,20 +9,17 @@ import Links from './pages/Links';
 import Commands from './pages/Commands';
 import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
+import TimeConfig from './pages/TimeConfig';
 import WorkPage from './pages/Work';
 import { api } from './api/client';
 
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard', icon: '🏠', end: true },
-  { to: '/accounts', label: 'Accounts', icon: '🔗' },
-  { to: '/whitelist', label: 'Whitelist', icon: '📱' },
-  { to: '/cron', label: 'Cron Manager', icon: '⏰' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
-  { to: '/plans', label: 'Plans', icon: '📋' },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
+  { to: '/cron', label: 'Cron Manager', icon: '⏰' },
   { to: '/work', label: 'Work', icon: '🗂️' },
-  { to: '/commands', label: 'Commands', icon: '📖' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -139,15 +136,25 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Layout><Dashboard /></Layout>} />
-        <Route path="/accounts" element={<Layout><Accounts /></Layout>} />
-        <Route path="/whitelist" element={<Layout><Whitelist /></Layout>} />
-        <Route path="/cron" element={<Layout><CronManager /></Layout>} />
-        <Route path="/plans" element={<Layout><Plans /></Layout>} />
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
         <Route path="/links" element={<Layout><Links /></Layout>} />
+        <Route path="/cron" element={<Layout><CronManager /></Layout>} />
         <Route path="/work" element={<Layout><WorkPage /></Layout>} />
-        <Route path="/commands" element={<Layout><Commands /></Layout>} />
+
+        {/* Settings hub + sub-pages */}
         <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+        <Route path="/settings/accounts" element={<Layout><Accounts /></Layout>} />
+        <Route path="/settings/whitelist" element={<Layout><Whitelist /></Layout>} />
+        <Route path="/settings/plans" element={<Layout><Plans /></Layout>} />
+        <Route path="/settings/commands" element={<Layout><Commands /></Layout>} />
+        <Route path="/settings/time" element={<Layout><TimeConfig /></Layout>} />
+
+        {/* Legacy redirects */}
+        <Route path="/accounts" element={<Navigate to="/settings/accounts" replace />} />
+        <Route path="/whitelist" element={<Navigate to="/settings/whitelist" replace />} />
+        <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
+        <Route path="/commands" element={<Navigate to="/settings/commands" replace />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -118,7 +118,7 @@ export default function CronManager() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
         {/* Left: pending reminders */}
         <div>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
@@ -142,7 +142,7 @@ export default function CronManager() {
                   <div key={r.id} className="card" style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, wordBreak: 'break-word' }}>
                           {r.title}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>

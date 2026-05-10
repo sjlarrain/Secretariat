@@ -71,7 +71,7 @@ export default function SettingsPage() {
           >
             <div style={{ fontSize: 22, marginBottom: 10 }}>{s.icon}</div>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 5 }}>{s.title}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{s.description}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, wordBreak: 'break-word' }}>{s.description}</div>
           </button>
         ))}
       </div>

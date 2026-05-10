@@ -59,6 +59,8 @@ export default function SettingsPage() {
               background: 'var(--bg-card)',
               borderRadius: 10,
               transition: 'border-color 0.15s, background 0.15s',
+              color: 'var(--text)',
+              whiteSpace: 'normal',
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(59,130,246,0.4)';

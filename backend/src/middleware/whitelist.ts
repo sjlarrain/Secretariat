@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { whitelistedNumbers } from '../env';
+import crypto from 'crypto';
+import { env, whitelistedNumbers } from '../env';
 import { sendMessage } from '../kapso/client';
 
 // require() works around the package-exports subpath limitation in CommonJS moduleResolution
@@ -10,6 +11,34 @@ const { normalizeWebhook } = require('@kapso/whatsapp-cloud-api/server') as {
     statuses: unknown[];
   };
 };
+
+type RawBodyRequest = Request & { rawBody?: Buffer };
+
+export function webhookSignatureVerify(req: Request, res: Response, next: NextFunction): void {
+  const signature = req.headers['x-webhook-signature'] as string | undefined;
+  const rawBody = (req as RawBodyRequest).rawBody;
+
+  if (!signature || !rawBody) {
+    // Drop silently with 200 — don't help attackers fingerprint the check
+    res.status(200).json({ ok: false });
+    return;
+  }
+
+  const expected = crypto
+    .createHmac('sha256', env.WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest('hex');
+
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    res.status(200).json({ ok: false });
+    return;
+  }
+
+  next();
+}
 
 export interface WebhookExtras {
   senderPhone: string;

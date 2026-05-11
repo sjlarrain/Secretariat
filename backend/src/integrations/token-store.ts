@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../env';
-import { encrypt, decrypt } from '../utils/encrypt';
+import { encryptWithKey, decryptWithKey, deriveAccountKey } from '../utils/encrypt';
 
 export interface ConnectedAccount {
   id: string;
@@ -114,10 +114,12 @@ export async function saveSettings(settings: Settings): Promise<void> {
   await getRedis().set(SETTINGS_KEY, settings);
 }
 
-export function encryptTokens(tokens: object): string {
-  return encrypt(JSON.stringify(tokens), env.TOKEN_ENCRYPTION_KEY);
+export function encryptTokens(tokens: object, accountId: string): string {
+  const key = deriveAccountKey(env.TOKEN_ENCRYPTION_KEY, accountId);
+  return encryptWithKey(JSON.stringify(tokens), key);
 }
 
-export function decryptTokens<T = object>(encrypted: string): T {
-  return JSON.parse(decrypt(encrypted, env.TOKEN_ENCRYPTION_KEY)) as T;
+export function decryptTokens<T = object>(encrypted: string, accountId: string): T {
+  const key = deriveAccountKey(env.TOKEN_ENCRYPTION_KEY, accountId);
+  return JSON.parse(decryptWithKey(encrypted, key)) as T;
 }

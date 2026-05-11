@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import { env } from '../env';
 import {
   getAllAccounts,
@@ -41,6 +42,14 @@ import { cancelMessage } from '../qstash/client';
 
 const router = Router();
 
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+});
+
 // --- Session auth middleware ---
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if ((req.session as { authenticated?: boolean }).authenticated) {
@@ -51,7 +60,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
 }
 
 // --- Auth ---
-router.post('/login', (req: Request, res: Response) => {
+router.post('/login', loginRateLimit, (req: Request, res: Response) => {
   const { username, password } = req.body as { username?: string; password?: string };
   if (username === env.ADMIN_USERNAME && password === env.ADMIN_PASSWORD) {
     (req.session as { authenticated?: boolean }).authenticated = true;

@@ -19,7 +19,7 @@ export interface GoogleCalendar {
 }
 
 async function getCalendarClient(account: ConnectedAccount) {
-  const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens);
+  const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
   try {
     const { client, refreshedTokens } = await getAuthenticatedClient(tokens, account.alias);
 
@@ -28,7 +28,7 @@ async function getCalendarClient(account: ConnectedAccount) {
         access_token: refreshedTokens.access_token,
         refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
         expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
-      });
+      }, account.id);
       await saveAccount(account);
     }
 

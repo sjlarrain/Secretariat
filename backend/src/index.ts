@@ -14,12 +14,7 @@ const app = express();
 // so that secure session cookies are set correctly over HTTPS
 app.set('trust proxy', 1);
 
-app.use(express.json({
-  verify: (req, _res, buf) => {
-    // Capture raw body buffer for webhook signature verification
-    (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
-  },
-}));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(

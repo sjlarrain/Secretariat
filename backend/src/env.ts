@@ -32,7 +32,7 @@ const envSchema = z.object({
   // Security
   TOKEN_ENCRYPTION_KEY: z.string().length(32, 'TOKEN_ENCRYPTION_KEY must be exactly 32 characters'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
-  WEBHOOK_SECRET: z.string().min(1, 'WEBHOOK_SECRET is required'),
+  WEBHOOK_SECRET: z.string().min(1).optional(),
 
   // App
   BASE_URL: z.string().url('BASE_URL must be a valid URL'),

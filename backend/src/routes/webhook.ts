@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { parseCommand } from '../parser/command.parser';
-import { webhookSignatureVerify, extractWebhookData, whitelistMiddleware, WebhookRequest } from '../middleware/whitelist';
+import { extractWebhookData, whitelistMiddleware, WebhookRequest } from '../middleware/whitelist';
 import { sendMessage } from '../kapso/client';
 import { startHandler } from '../handlers/start.handler';
 import { scheduleHandler } from '../handlers/schedule.handler';
@@ -34,7 +34,7 @@ function isDuplicate(messageId: string | null): boolean {
   return false;
 }
 
-router.post('/', webhookSignatureVerify, extractWebhookData, whitelistMiddleware, async (req: Request, res: Response) => {
+router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, res: Response) => {
   // Always return 200 — Kapso retries on non-200
   res.status(200).json({ ok: true });
 

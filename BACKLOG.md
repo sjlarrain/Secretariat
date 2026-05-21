@@ -33,6 +33,7 @@
 | v1.5 | _Blocked: WhatsApp Business Cloud API does not support sending to group chats. Revisit when Kapso/Meta adds group messaging to the API._ | | |
 | **v1.6 — Code Review & Hardening** | | | |
 | v1.6 | Full code review — security audit, vulnerability check, command edge cases | ⬜ Pending | Medium |
+| v1.6 | Webhook HMAC signature verification — re-enable `webhookSignatureVerify` once Kapso supports sending `x-webhook-signature`; `WEBHOOK_SECRET` env var already defined | ⬜ Pending | Easy |
 | v1.5 | Env/token manager — configure Kapso, QStash, Google OAuth, Upstash and other secrets directly from the admin panel (no server .env edit) | ⬜ Pending | Medium |
 | **v1.7 — Local Task Manager** | | | |
 | v1.7 | `/task` — local task manager stored in Redis; rename current `/task` to `/gtask`; admin Tasks page replaces Google Tasks widget on dashboard | ✅ Done | Medium |

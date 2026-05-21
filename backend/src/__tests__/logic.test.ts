@@ -342,68 +342,85 @@ describe('local task groupByProject()', () => {
 });
 
 // ─── Snooze date logic ────────────────────────────────────────────────────────
+// Local copies of the timezone-aware snooze functions (mirrors snooze.ts logic).
+// Tests use UTC as the timezone to make assertions timezone-independent.
 
 type SnoozeOption = '1d' | '3d' | 'monday';
 
-function nextMonday(from: Date): Date {
-  const d = new Date(from);
-  const day = d.getDay();
-  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
-  d.setDate(d.getDate() + daysUntilMonday);
-  d.setHours(9, 0, 0, 0);
-  return d;
+function combineDateAndTimeSimple(date: Date, timeStr: string, timezone: string): Date {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const dateInTz = date.toLocaleDateString('en-CA', { timeZone: timezone });
+  const probe = new Date(`${dateInTz}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00Z`);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(probe);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  const tzMs = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+  return new Date(probe.getTime() - (tzMs - probe.getTime()));
 }
 
-function getSnoozeDate(option: SnoozeOption, defaultTime = '09:00', from = new Date()): Date {
-  const [hh, mm] = defaultTime.split(':').map(Number);
+function nextMondayTz(from: Date, timezone: string): Date {
+  const dateStr = from.toLocaleDateString('en-CA', { timeZone: timezone });
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const localNoon = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const dayOfWeek = localNoon.getUTCDay();
+  const daysUntilMonday = dayOfWeek === 1 ? 7 : (8 - dayOfWeek) % 7;
+  const mondayNoon = new Date(Date.UTC(year, month - 1, day + daysUntilMonday, 12, 0, 0));
+  return combineDateAndTimeSimple(mondayNoon, '09:00', timezone);
+}
+
+function getSnoozeDateTz(option: SnoozeOption, defaultTime: string, timezone: string, now: Date): Date {
+  const dateStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
+  const [year, month, day] = dateStr.split('-').map(Number);
   if (option === '1d') {
-    const d = new Date(from);
-    d.setDate(d.getDate() + 1);
-    d.setHours(hh, mm, 0, 0);
-    return d;
+    const noon = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+    return combineDateAndTimeSimple(noon, defaultTime, timezone);
   }
   if (option === '3d') {
-    const d = new Date(from);
-    d.setDate(d.getDate() + 3);
-    d.setHours(hh, mm, 0, 0);
-    return d;
+    const noon = new Date(Date.UTC(year, month - 1, day + 3, 12, 0, 0));
+    return combineDateAndTimeSimple(noon, defaultTime, timezone);
   }
-  return nextMonday(from);
+  return nextMondayTz(now, timezone);
 }
 
-describe('getSnoozeDate', () => {
-  const base = new Date('2026-05-20T10:00:00.000Z'); // Wednesday UTC
+describe('getSnoozeDate (timezone-aware)', () => {
+  // Use UTC as timezone: UTC offset = 0, so local = UTC — makes assertions simple
+  const TZ = 'UTC';
+  // Wednesday 2026-05-20 10:00 UTC = Wednesday 10:00 local in UTC timezone
+  const base = new Date('2026-05-20T10:00:00.000Z');
 
-  it('1d adds exactly one day and sets default time', () => {
-    const result = getSnoozeDate('1d', '09:00', base);
-    expect(result.getDate()).toBe(base.getDate() + 1);
-    expect(result.getHours()).toBe(9);
-    expect(result.getMinutes()).toBe(0);
+  it('1d advances to the next calendar day in the user timezone', () => {
+    const result = getSnoozeDateTz('1d', '09:00', TZ, base);
+    expect(result.getUTCDate()).toBe(21); // May 21
+    expect(result.getUTCHours()).toBe(9);
+    expect(result.getUTCMinutes()).toBe(0);
   });
 
-  it('3d adds exactly three days and sets default time', () => {
-    const result = getSnoozeDate('3d', '08:30', base);
-    expect(result.getDate()).toBe(base.getDate() + 3);
-    expect(result.getHours()).toBe(8);
-    expect(result.getMinutes()).toBe(30);
+  it('3d advances three calendar days in the user timezone', () => {
+    const result = getSnoozeDateTz('3d', '08:30', TZ, base);
+    expect(result.getUTCDate()).toBe(23); // May 23
+    expect(result.getUTCHours()).toBe(8);
+    expect(result.getUTCMinutes()).toBe(30);
   });
 
   it('monday always returns a Monday', () => {
-    const result = getSnoozeDate('monday', '09:00', base);
-    expect(result.getDay()).toBe(1); // 1 = Monday
+    const result = getSnoozeDateTz('monday', '09:00', TZ, base);
+    expect(result.getUTCDay()).toBe(1); // 1 = Monday
   });
 
-  it('monday from Monday advances to next Monday (not same day)', () => {
-    const monday = new Date('2026-05-18T10:00:00'); // a Monday
-    const result = getSnoozeDate('monday', '09:00', monday);
-    expect(result.getDay()).toBe(1);
-    expect(result.getDate()).toBe(25); // 2026-05-25 = next Monday
+  it('monday from Monday (UTC) advances to the next Monday', () => {
+    const monday = new Date('2026-05-18T10:00:00.000Z'); // Monday in UTC
+    const result = getSnoozeDateTz('monday', '09:00', TZ, monday);
+    expect(result.getUTCDay()).toBe(1);
+    expect(result.getUTCDate()).toBe(25); // 2026-05-25
   });
 
-  it('monday sets time to 09:00', () => {
-    const result = getSnoozeDate('monday', '15:00', base); // defaultTime ignored for monday
-    expect(result.getHours()).toBe(9);
-    expect(result.getMinutes()).toBe(0);
+  it('monday always sets time to 09:00 regardless of defaultTime', () => {
+    const result = getSnoozeDateTz('monday', '15:00', TZ, base);
+    expect(result.getUTCHours()).toBe(9);
+    expect(result.getUTCMinutes()).toBe(0);
   });
 });
 
@@ -459,6 +476,47 @@ describe('parseButtonId', () => {
 
   it('returns null for too few parts', () => {
     expect(parseButtonId('s1d_task')).toBeNull();
+  });
+});
+
+// ─── localTimeToCron UTC offset logic ────────────────────────────────────────
+// Mirrors the localTimeToCron helper in admin/api.ts — tests the pure math only.
+
+function applyUtcOffset(localTime: string, offsetMin: number, localDays: number[]): { cron: string } {
+  const [lh, lm] = localTime.split(':').map(Number);
+  const utcTotal = lh * 60 + lm + offsetMin;
+  const dayDelta = utcTotal < 0 ? -1 : utcTotal >= 1440 ? 1 : 0;
+  const norm = ((utcTotal % 1440) + 1440) % 1440;
+  const uh = Math.floor(norm / 60);
+  const um = norm % 60;
+  const utcDays = localDays.map((d) => ((d + dayDelta) % 7 + 7) % 7).sort((a, b) => a - b);
+  return { cron: `${String(um).padStart(2, '0')} ${String(uh).padStart(2, '0')} * * ${utcDays.join(',')}` };
+}
+
+describe('localTimeToCron UTC offset math', () => {
+  it('UTC-4 (America/Santiago winter): 08:00 local → 12:00 UTC, same days', () => {
+    const { cron } = applyUtcOffset('08:00', 240, [1, 2, 3, 4, 5]);
+    expect(cron).toBe('00 12 * * 1,2,3,4,5');
+  });
+
+  it('UTC+0: 08:00 local → 08:00 UTC, same days', () => {
+    const { cron } = applyUtcOffset('08:00', 0, [1, 2, 3, 4, 5]);
+    expect(cron).toBe('00 08 * * 1,2,3,4,5');
+  });
+
+  it('UTC+5 (east): 03:00 local → 22:00 UTC previous day — Monday shifts to Sunday', () => {
+    const { cron } = applyUtcOffset('03:00', -300, [1]);
+    expect(cron).toBe('00 22 * * 0');
+  });
+
+  it('UTC-5: 22:00 local → 03:00 UTC next day — Friday shifts to Saturday', () => {
+    const { cron } = applyUtcOffset('22:00', 300, [5]);
+    expect(cron).toBe('00 03 * * 6');
+  });
+
+  it('midnight edge: 00:00 UTC-4 → 04:00 UTC', () => {
+    const { cron } = applyUtcOffset('00:00', 240, [1]);
+    expect(cron).toBe('00 04 * * 1');
   });
 });
 

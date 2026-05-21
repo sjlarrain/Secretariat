@@ -109,7 +109,9 @@ export async function deleteAccount(id: string): Promise<void> {
 
 export async function getSettings(): Promise<Settings> {
   const data = await getRedis().get<Settings>(SETTINGS_KEY);
-  return data ?? DEFAULT_SETTINGS;
+  if (!data) return { ...DEFAULT_SETTINGS };
+  // Merge top-level defaults so fields added in newer versions always have a value
+  return { ...DEFAULT_SETTINGS, ...data };
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

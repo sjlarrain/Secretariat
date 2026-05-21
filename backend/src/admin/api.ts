@@ -41,6 +41,32 @@ import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask, updateTaskQS
 import { cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
 
+// Converts a local HH:MM time + IANA timezone + day array into a UTC QStash cron string.
+// QStash interprets all cron expressions as UTC, so we must offset.
+function getUtcOffsetMinutes(timezone: string): number {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: 'numeric', hour12: false });
+  const parts = fmt.formatToParts(now);
+  const tzH = Number(parts.find((p) => p.type === 'hour')!.value) % 24;
+  const tzM = Number(parts.find((p) => p.type === 'minute')!.value);
+  let offset = now.getUTCHours() * 60 + now.getUTCMinutes() - (tzH * 60 + tzM);
+  if (offset > 12 * 60) offset -= 24 * 60;
+  if (offset < -12 * 60) offset += 24 * 60;
+  return offset; // positive = west of UTC (e.g. Americas), negative = east
+}
+
+function localTimeToCron(localTime: string, timezone: string, localDays: number[]): string {
+  const [lh, lm] = localTime.split(':').map(Number);
+  const offsetMin = getUtcOffsetMinutes(timezone);
+  const utcTotal = lh * 60 + lm + offsetMin;
+  const dayDelta = utcTotal < 0 ? -1 : utcTotal >= 1440 ? 1 : 0;
+  const norm = ((utcTotal % 1440) + 1440) % 1440;
+  const uh = Math.floor(norm / 60);
+  const um = norm % 60;
+  const utcDays = localDays.map((d) => ((d + dayDelta) % 7 + 7) % 7).sort((a, b) => a - b);
+  return `${String(um).padStart(2, '0')} ${String(uh).padStart(2, '0')} * * ${utcDays.join(',')}`;
+}
+
 const router = Router();
 
 const loginRateLimit = rateLimit({
@@ -177,9 +203,7 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
 
   if (nextMorning.enabled && !nextMorning.scheduleId) {
-    const [hh, mm] = nextMorning.time.split(':');
-    const dayCron = nextMorning.days.join(',');
-    const cron = `${mm} ${hh} * * ${dayCron}`;
+    const cron = localTimeToCron(nextMorning.time, next.timezone, nextMorning.days);
     try {
       nextMorning.scheduleId = await scheduleCron('/internal/digest/morning', cron, {});
     } catch (err) {
@@ -197,8 +221,7 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
 
   if (nextWeekly.enabled && !nextWeekly.scheduleId) {
-    const [hh, mm] = nextWeekly.time.split(':');
-    const cron = `${mm} ${hh} * * ${nextWeekly.day}`;
+    const cron = localTimeToCron(nextWeekly.time, next.timezone, [nextWeekly.day]);
     try {
       nextWeekly.scheduleId = await scheduleCron('/internal/digest/weekly', cron, {});
     } catch (err) {
@@ -216,8 +239,7 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
 
   if (nextWork.enabled && !nextWork.scheduleId) {
-    const [hh, mm] = nextWork.time.split(':');
-    const cron = `${mm} ${hh} * * 1`; // every Monday
+    const cron = localTimeToCron(nextWork.time, next.timezone, [1]); // every Monday
     try {
       nextWork.scheduleId = await scheduleCron('/internal/digest/work', cron, {});
     } catch (err) {
@@ -570,7 +592,7 @@ router.post('/reminders/:id/snooze', requireAuth, async (req, res) => {
   if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
 
   await cancelMessage(reminder.messageId).catch(() => {});
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     reminderId: reminder.id,
     title: reminder.title,
@@ -593,7 +615,7 @@ router.post('/tasks/:id/snooze', requireAuth, async (req, res) => {
   if (task.qstashMessageId) await cancelMessage(task.qstashMessageId).catch(() => {});
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
@@ -614,7 +636,7 @@ router.post('/tasks/:id/remind', requireAuth, async (req, res) => {
   if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
@@ -636,7 +658,7 @@ router.post('/work/:id/snooze', requireAuth, async (req, res) => {
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     workItemId: id,
     text: item.text,
@@ -656,7 +678,7 @@ router.post('/work/:id/remind', requireAuth, async (req, res) => {
   if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     workItemId: id,
     text: item.text,

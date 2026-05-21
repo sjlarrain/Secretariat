@@ -39,14 +39,15 @@ export async function buttonReplyHandler(buttonId: string, from: string): Promis
 
   const settings = await getSettings();
   const defaultTime = settings.defaultTaskTime ?? '09:00';
+  const timezone = settings.timezone ?? 'America/Santiago';
 
   try {
     if (parsed.type === 'rem') {
-      await handleReminderButton(parsed.action, parsed.option, parsed.itemId, from, defaultTime);
+      await handleReminderButton(parsed.action, parsed.option, parsed.itemId, from, defaultTime, timezone);
     } else if (parsed.type === 'task') {
-      await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime);
+      await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime, timezone);
     } else {
-      await handleWorkButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime);
+      await handleWorkButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime, timezone);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -60,6 +61,7 @@ async function handleReminderButton(
   reminderId: string,
   from: string,
   defaultTime: string,
+  timezone: string,
 ) {
   const reminders = await getReminders();
   const reminder = reminders.find((r) => r.id === reminderId);
@@ -76,14 +78,14 @@ async function handleReminderButton(
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, defaultTime);
+  const fireAt = getSnoozeDate(option!, defaultTime, timezone);
   const newMessageId = await scheduleOnce('/internal/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     reminderId,
     title: reminder.title,
     phoneNumber: from,
   });
   await updateReminder(reminderId, { fireAt: fireAt.toISOString(), messageId: newMessageId });
-  await sendMessage(from, `⏰ Snoozed: _"${reminder.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}`);
+  await sendMessage(from, `⏰ Snoozed: _"${reminder.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
 }
 
 async function handleTaskButton(
@@ -92,6 +94,7 @@ async function handleTaskButton(
   taskId: number,
   from: string,
   defaultTime: string,
+  timezone: string,
 ) {
   const tasks = await getTasks();
   const task = tasks.find((t) => t.id === taskId);
@@ -110,14 +113,14 @@ async function handleTaskButton(
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, defaultTime);
+  const fireAt = getSnoozeDate(option!, defaultTime, timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId,
     title: task.title,
     phoneNumber: from,
   });
   await updateTaskQStashId(taskId, newMessageId);
-  await sendMessage(from, `⏰ Task snoozed: _"${task.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}`);
+  await sendMessage(from, `⏰ Task snoozed: _"${task.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
 }
 
 async function handleWorkButton(
@@ -126,6 +129,7 @@ async function handleWorkButton(
   workId: number,
   from: string,
   defaultTime: string,
+  timezone: string,
 ) {
   const item = await getWorkItem(workId);
   if (!item) {
@@ -143,12 +147,12 @@ async function handleWorkButton(
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, defaultTime);
+  const fireAt = getSnoozeDate(option!, defaultTime, timezone);
   const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     workItemId: workId,
     text: item.text,
     phoneNumber: from,
   });
   await updateWorkItemReminder(workId, fireAt.toISOString(), newMessageId);
-  await sendMessage(from, `⏰ Work item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}`);
+  await sendMessage(from, `⏰ Work item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
 }

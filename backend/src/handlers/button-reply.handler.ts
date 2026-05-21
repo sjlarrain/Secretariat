@@ -1,8 +1,8 @@
 import { sendMessage } from '../kapso/client';
 import { getSettings } from '../integrations/token-store';
 import { getReminders, updateReminder, removeReminder } from '../integrations/local/reminders';
-import { getTasks, updateTaskQStashId, markTaskDone } from '../integrations/local/tasks';
-import { getWorkItem, updateWorkItemReminder, markWorkItemDone } from '../integrations/local/work';
+import { getTasks, updateTaskQStashId } from '../integrations/local/tasks';
+import { getWorkItem, updateWorkItemReminder } from '../integrations/local/work';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
 

@@ -66,7 +66,9 @@ export default function WorkPage() {
       const res = mode === 'snooze'
         ? await api.snoozeWork(item.id, option) as { ok: boolean; fireAt: string }
         : await api.remindWork(item.id, option) as { ok: boolean; fireAt: string };
-      setItems((prev) => prev.map((w) => w.id === item.id ? { ...w, reminderFor: res.fireAt, qstashMessageId: res.fireAt } : w));
+      setItems((prev) => prev.map((w) => w.id === item.id
+        ? { ...w, reminderFor: res.fireAt, qstashMessageId: 'scheduled' }
+        : w));
       setSnoozeTarget(null);
       flash(mode === 'snooze' ? 'Snoozed!' : 'Reminder added!');
     } catch {

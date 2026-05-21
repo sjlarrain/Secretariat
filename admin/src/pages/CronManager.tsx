@@ -103,6 +103,12 @@ export default function CronManager() {
       const res = await api.snoozeReminder(snoozeTarget.id, option) as { ok: boolean; fireAt: string };
       setReminders((prev) => prev.map((r) => r.id === snoozeTarget.id ? { ...r, fireAt: res.fireAt } : r));
       setSnoozeTarget(null);
+      setMsg('Snoozed!');
+      setTimeout(() => setMsg(''), 3000);
+    } catch (e) {
+      setSnoozeTarget(null);
+      setErr(e instanceof Error ? e.message : 'Snooze failed.');
+      setTimeout(() => setErr(''), 4000);
     } finally {
       setSnoozing(false);
     }

@@ -66,10 +66,11 @@ export default function TasksPage() {
     setSnoozing(true);
     try {
       const { task, mode } = snoozeTarget;
-      const res = mode === 'snooze'
-        ? await api.snoozeTask(task.id, option) as { ok: boolean; fireAt: string }
-        : await api.remindTask(task.id, option) as { ok: boolean; fireAt: string };
-      setItems((prev) => prev.map((t) => t.id === task.id ? { ...t, qstashMessageId: res.fireAt } : t));
+      mode === 'snooze'
+        ? await api.snoozeTask(task.id, option)
+        : await api.remindTask(task.id, option);
+      // Mark as having a reminder so the button switches to "Snooze"
+      setItems((prev) => prev.map((t) => t.id === task.id ? { ...t, qstashMessageId: 'scheduled' } : t));
       setSnoozeTarget(null);
       flash(mode === 'snooze' ? 'Snoozed!' : 'Reminder added!');
     } catch {

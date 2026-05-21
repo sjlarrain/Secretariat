@@ -42,12 +42,6 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: ['title', 'for', 'at'],
     requiredFlags: ['for', 'at'],
   },
-  mytask: {
-    name: '/mytask',
-    description: 'Retrieve and display your pending tasks',
-    acceptedFlags: [],
-    requiredFlags: [],
-  },
   myschedule: {
     name: '/myschedule',
     description: 'Show calendar events for a day/week, or free slots for a plan type (--plan Lunch)',

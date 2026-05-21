@@ -15,8 +15,7 @@ Send a command from WhatsApp and Secretariat handles the rest:
 | `/schedule` | Creates an event on Google Calendar |
 | `/myschedule` | Shows calendar events for a day or week, or free slots for a plan type |
 | `/task` | Personal task manager (add, list by project, mark done) — stored in Secretariat |
-| `/gtask` | Creates a task in Google Tasks |
-| `/mytask` | Lists your Google Tasks pending tasks |
+| `/gtask` | Google Tasks — no args lists pending, with title creates a new task |
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
 | `/ideas` | Saves ideas, lists them, filters by project |
 | `/links` | Saves a link for later, lists unread links, or archives one |
@@ -248,25 +247,19 @@ Each plan defines its own **buffer** (minutes kept free before and after the slo
 
 Tasks are stored in Secretariat's Redis. When a due date is set, a WhatsApp reminder fires at the due time (defaults to the "Default task reminder time" in admin Settings → Time Configuration). Marking a task done cancels any pending reminder.
 
-### `/gtask` — Create a Google Task
+### `/gtask` — Google Tasks
 
 ```
-/gtask <name> [--for <date>] [--notes <text>]
+/gtask                                   → list all pending Google Tasks
+/gtask <name> [--for <date>] [--notes]   → create a new Google Task
 /gtask -f <date> -n <notes>
 ```
 
 ```
+/gtask
 /gtask Call Isabel
 /gtask Send quarterly report -f next friday -n include Q1 numbers
 ```
-
-### `/mytask` — List pending Google Tasks
-
-```
-/mytask
-```
-
-Lists all incomplete Google Tasks sorted by due date.
 
 ### `/reminder` — Set a WhatsApp reminder
 

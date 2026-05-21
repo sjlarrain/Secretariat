@@ -87,7 +87,7 @@ describe('COMMANDS registry', () => {
 // ─── Cross-registry: expected commands exist ──────────────────────────────────
 
 describe('expected commands are registered', () => {
-  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'gtask', 'mytask', 'reminder', 'myschedule', 'ideas', 'links', 'work'];
+  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'gtask', 'reminder', 'myschedule', 'ideas', 'links', 'work'];
 
   for (const cmd of requiredCommands) {
     it(`/${cmd} is in COMMANDS`, () => {

@@ -7,7 +7,6 @@ import { scheduleHandler } from '../handlers/schedule.handler';
 import { gtaskHandler } from '../handlers/gtask.handler';
 import { taskHandler } from '../handlers/task.handler';
 import { reminderHandler } from '../handlers/reminder.handler';
-import { mytaskHandler } from '../handlers/mytask.handler';
 import { myscheduleHandler } from '../handlers/myschedule.handler';
 import { ideasHandler } from '../handlers/ideas.handler';
 import { linksHandler } from '../handlers/links.handler';
@@ -81,9 +80,6 @@ router.post('/', webhookSignatureVerify, extractWebhookData, whitelistMiddleware
         break;
       case 'reminder':
         await reminderHandler(data, from);
-        break;
-      case 'mytask':
-        await mytaskHandler(data, from);
         break;
       case 'myschedule':
         await myscheduleHandler(data, from);

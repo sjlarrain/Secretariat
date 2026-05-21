@@ -161,10 +161,17 @@ describe('/schedule', () => {
   });
 });
 
-// ─── /gtask (Google Tasks — renamed from /task) ───────────────────────────────
+// ─── /gtask (Google Tasks) ────────────────────────────────────────────────────
 
 describe('/gtask', () => {
-  it('succeeds with just text', () => {
+  it('succeeds with no arguments — list pending Google Tasks', () => {
+    const r = ok('/gtask');
+    expect(r.command).toBe('gtask');
+    expect(r.extraArgs).toEqual([]);
+    expect(r.flags).toEqual({});
+  });
+
+  it('captures title text in extraArgs — create mode', () => {
     const r = ok('/gtask Call Isabel');
     expect(r.command).toBe('gtask');
     expect(r.extraArgs).toEqual(['Call', 'Isabel']);
@@ -186,10 +193,8 @@ describe('/gtask', () => {
     expect(r.flags['notes']).toBe('include Q1 numbers');
   });
 
-  it('succeeds with no arguments (bare /gtask)', () => {
-    const r = ok('/gtask');
-    expect(r.extraArgs).toEqual([]);
-    expect(r.flags).toEqual({});
+  it('rejects --project (not accepted by /gtask)', () => {
+    expect(fail('/gtask Buy milk --project groceries')).toMatch(/unknown flag/i);
   });
 });
 
@@ -320,20 +325,6 @@ describe('/task', () => {
 
   it('rejects --invite (not accepted by /task)', () => {
     expect(fail('/task Buy milk --invite a@b.com')).toMatch(/unknown flag/i);
-  });
-});
-
-// ─── /mytask ─────────────────────────────────────────────────────────────────
-
-describe('/mytask', () => {
-  it('succeeds with no arguments', () => {
-    const r = ok('/mytask');
-    expect(r.command).toBe('mytask');
-    expect(r.extraArgs).toEqual([]);
-  });
-
-  it('rejects any flag', () => {
-    expect(fail('/mytask --for tomorrow')).toMatch(/unknown flag/i);
   });
 });
 

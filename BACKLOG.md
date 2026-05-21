@@ -35,13 +35,15 @@
 | v1.6 | Full code review — security audit, vulnerability check, command edge cases | ⬜ Pending | Medium |
 | v1.5 | Env/token manager — configure Kapso, QStash, Google OAuth, Upstash and other secrets directly from the admin panel (no server .env edit) | ⬜ Pending | Medium |
 | **v1.7 — Local Task Manager** | | | |
-| v1.7 | `/task` — local task manager stored in Redis; rename current `/task` to `/gtask`; admin Tasks page replaces Google Tasks widget on dashboard | ⬜ Pending | Medium |
-| **v1.8 — Multi-User** | | | |
-| v1.8 | User functionality — multi-user support, major open operation | ⬜ Pending | Hard |
-| **v1.9 — Todoist** | | | |
-| v1.9 | Todoist integration — create & list tasks via API key | ⬜ Pending | Medium |
-| **v1.10 — Microsoft / Outlook** | | | |
-| v1.10 | Azure / Outlook integration — OAuth2, calendar + tasks | ⬜ Pending | Hard |
-| **v1.11 — NLP** | | | |
-| v1.11 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |
+| v1.7 | `/task` — local task manager stored in Redis; rename current `/task` to `/gtask`; admin Tasks page replaces Google Tasks widget on dashboard | ✅ Done | Medium |
+| **v1.8 — Snooze** | | | |
+| v1.8 | Snooze for reminders, tasks, and work — Stage 1: web panel modal (1 day / 3 days / next Monday) + "Add reminder" for items without one. Stage 2: WhatsApp interactive buttons on reminder fire (Snooze 1 day / Next Monday / Dismiss) | ✅ Done | Medium |
+| **v1.9 — Multi-User** | | | |
+| v1.9 | User functionality — multi-user support, major open operation | ⬜ Pending | Hard |
+| **v1.10 — Todoist** | | | |
+| v1.10 | Todoist integration — create & list tasks via API key | ⬜ Pending | Medium |
+| **v1.11 — Microsoft / Outlook** | | | |
+| v1.11 | Azure / Outlook integration — OAuth2, calendar + tasks | ⬜ Pending | Hard |
+| **v1.12 — NLP** | | | |
+| v1.12 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |
 | ops | Better server — upgrade Render plan or migrate host | ⬜ Pending | Ops |

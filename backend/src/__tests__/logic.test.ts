@@ -341,6 +341,127 @@ describe('local task groupByProject()', () => {
   });
 });
 
+// ─── Snooze date logic ────────────────────────────────────────────────────────
+
+type SnoozeOption = '1d' | '3d' | 'monday';
+
+function nextMonday(from: Date): Date {
+  const d = new Date(from);
+  const day = d.getDay();
+  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
+  d.setDate(d.getDate() + daysUntilMonday);
+  d.setHours(9, 0, 0, 0);
+  return d;
+}
+
+function getSnoozeDate(option: SnoozeOption, defaultTime = '09:00', from = new Date()): Date {
+  const [hh, mm] = defaultTime.split(':').map(Number);
+  if (option === '1d') {
+    const d = new Date(from);
+    d.setDate(d.getDate() + 1);
+    d.setHours(hh, mm, 0, 0);
+    return d;
+  }
+  if (option === '3d') {
+    const d = new Date(from);
+    d.setDate(d.getDate() + 3);
+    d.setHours(hh, mm, 0, 0);
+    return d;
+  }
+  return nextMonday(from);
+}
+
+describe('getSnoozeDate', () => {
+  const base = new Date('2026-05-20T10:00:00.000Z'); // Wednesday UTC
+
+  it('1d adds exactly one day and sets default time', () => {
+    const result = getSnoozeDate('1d', '09:00', base);
+    expect(result.getDate()).toBe(base.getDate() + 1);
+    expect(result.getHours()).toBe(9);
+    expect(result.getMinutes()).toBe(0);
+  });
+
+  it('3d adds exactly three days and sets default time', () => {
+    const result = getSnoozeDate('3d', '08:30', base);
+    expect(result.getDate()).toBe(base.getDate() + 3);
+    expect(result.getHours()).toBe(8);
+    expect(result.getMinutes()).toBe(30);
+  });
+
+  it('monday always returns a Monday', () => {
+    const result = getSnoozeDate('monday', '09:00', base);
+    expect(result.getDay()).toBe(1); // 1 = Monday
+  });
+
+  it('monday from Monday advances to next Monday (not same day)', () => {
+    const monday = new Date('2026-05-18T10:00:00'); // a Monday
+    const result = getSnoozeDate('monday', '09:00', monday);
+    expect(result.getDay()).toBe(1);
+    expect(result.getDate()).toBe(25); // 2026-05-25 = next Monday
+  });
+
+  it('monday sets time to 09:00', () => {
+    const result = getSnoozeDate('monday', '15:00', base); // defaultTime ignored for monday
+    expect(result.getHours()).toBe(9);
+    expect(result.getMinutes()).toBe(0);
+  });
+});
+
+// ─── Button ID parsing ────────────────────────────────────────────────────────
+
+function parseButtonId(id: string): { action: 'snooze' | 'dismiss'; option: SnoozeOption | null; type: 'rem' | 'task' | 'work'; itemId: string } | null {
+  const parts = id.split('_');
+  if (parts.length < 3) return null;
+  const [rawAction, itemType, ...rest] = parts;
+  const itemId = rest.join('_');
+  if (!['rem', 'task', 'work'].includes(itemType)) return null;
+  const type = itemType as 'rem' | 'task' | 'work';
+  if (rawAction === 'dis') return { action: 'dismiss', option: null, type, itemId };
+  const optionMap: Record<string, SnoozeOption> = { s1d: '1d', s3d: '3d', smon: 'monday' };
+  const option = optionMap[rawAction];
+  if (!option) return null;
+  return { action: 'snooze', option, type, itemId };
+}
+
+describe('parseButtonId', () => {
+  it('parses dismiss for reminder', () => {
+    const r = parseButtonId('dis_rem_abc-123');
+    expect(r).toEqual({ action: 'dismiss', option: null, type: 'rem', itemId: 'abc-123' });
+  });
+
+  it('parses snooze 1d for task', () => {
+    const r = parseButtonId('s1d_task_5');
+    expect(r).toEqual({ action: 'snooze', option: '1d', type: 'task', itemId: '5' });
+  });
+
+  it('parses snooze 3d for work', () => {
+    const r = parseButtonId('s3d_work_12');
+    expect(r).toEqual({ action: 'snooze', option: '3d', type: 'work', itemId: '12' });
+  });
+
+  it('parses next Monday for reminder', () => {
+    const r = parseButtonId('smon_rem_uuid-val');
+    expect(r).toEqual({ action: 'snooze', option: 'monday', type: 'rem', itemId: 'uuid-val' });
+  });
+
+  it('handles item IDs with underscores', () => {
+    const r = parseButtonId('dis_task_10_extra');
+    expect(r?.itemId).toBe('10_extra');
+  });
+
+  it('returns null for unknown action', () => {
+    expect(parseButtonId('xxx_task_1')).toBeNull();
+  });
+
+  it('returns null for unknown type', () => {
+    expect(parseButtonId('s1d_foo_1')).toBeNull();
+  });
+
+  it('returns null for too few parts', () => {
+    expect(parseButtonId('s1d_task')).toBeNull();
+  });
+});
+
 describe('work item ID generation', () => {
   const now = new Date().toISOString();
 

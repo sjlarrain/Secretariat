@@ -12,6 +12,7 @@ import { ideasHandler } from '../handlers/ideas.handler';
 import { linksHandler } from '../handlers/links.handler';
 import { menuHandler } from '../handlers/menu.handler';
 import { workHandler } from '../handlers/work.handler';
+import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import type { ParsedCommand } from '../parser/command.parser';
 
 const router = Router();
@@ -40,9 +41,20 @@ router.post('/', webhookSignatureVerify, extractWebhookData, whitelistMiddleware
   const from = (req as WebhookRequest).senderPhone;
   const text = (req as WebhookRequest).webhookText;
   const messageId = (req as WebhookRequest).messageId;
+  const buttonReplyId = (req as WebhookRequest).buttonReplyId;
+
+  if (isDuplicate(messageId)) return;
+
+  if (buttonReplyId) {
+    try {
+      await buttonReplyHandler(buttonReplyId, from);
+    } catch (err) {
+      console.error('Button reply unhandled error:', err);
+    }
+    return;
+  }
 
   if (!text?.trim()) return;
-  if (isDuplicate(messageId)) return;
 
   try {
     // Auto-save bare URLs as links (no /prefix required)

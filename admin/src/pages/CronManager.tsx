@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, Settings, Reminder } from '../api/client';
+import { api, Settings, Reminder, SnoozeOption } from '../api/client';
+import SnoozeModal from '../components/SnoozeModal';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -33,6 +34,8 @@ export default function CronManager() {
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
   const [savingReminder, setSavingReminder] = useState(false);
+  const [snoozeTarget, setSnoozeTarget] = useState<Reminder | null>(null);
+  const [snoozing, setSnoozing] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
@@ -93,6 +96,18 @@ export default function CronManager() {
     setEditingReminder(r.id);
   }
 
+  async function handleSnoozeReminder(option: SnoozeOption) {
+    if (!snoozeTarget) return;
+    setSnoozing(true);
+    try {
+      const res = await api.snoozeReminder(snoozeTarget.id, option) as { ok: boolean; fireAt: string };
+      setReminders((prev) => prev.map((r) => r.id === snoozeTarget.id ? { ...r, fireAt: res.fireAt } : r));
+      setSnoozeTarget(null);
+    } finally {
+      setSnoozing(false);
+    }
+  }
+
   async function handleSaveReminder(id: string) {
     if (!editDate || !editTime) return;
     setSavingReminder(true);
@@ -150,6 +165,13 @@ export default function CronManager() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          className="btn-secondary"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          onClick={() => setSnoozeTarget(r)}
+                        >
+                          Snooze
+                        </button>
                         <button
                           className="btn-secondary"
                           style={{ fontSize: 11, padding: '3px 8px' }}
@@ -360,6 +382,16 @@ export default function CronManager() {
         </div>
 
       </div>
+
+      {snoozeTarget && (
+        <SnoozeModal
+          title={snoozeTarget.title}
+          mode="snooze"
+          loading={snoozing}
+          onSelect={handleSnoozeReminder}
+          onClose={() => setSnoozeTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -419,7 +419,8 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 | v1.4 | Fixes & /work | ✅ Done — bug fixes, /work list, Ideas done, disconnection detection |
 | v1.6 | Code Review & Hardening | ✅ Done — webhook sig, HKDF tokens, rate limit, XSS fixes |
 | v1.7 | Local Task Manager | ✅ Done — /task command, project tags, reminder scheduling, admin Tasks page |
-| v1.8 | Multi-User | User accounts, major open operation |
-| v1.9 | Todoist | Task integration via Todoist API |
-| v1.10 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
-| v1.11 | NLP | Natural language messages via Claude API |
+| v1.8 | Snooze | ✅ Done — snooze/remind for reminders, tasks, work; WhatsApp interactive buttons; admin modal |
+| v1.9 | Multi-User | User accounts, major open operation |
+| v1.10 | Todoist | Task integration via Todoist API |
+| v1.11 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
+| v1.12 | NLP | Natural language messages via Claude API |

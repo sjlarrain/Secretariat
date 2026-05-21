@@ -20,3 +20,23 @@ export async function sendMessage(to: string, text: string): Promise<void> {
     body: text,
   });
 }
+
+export interface InteractiveButton {
+  id: string;   // max 256 chars — encode action + type + itemId
+  title: string; // max 20 chars
+}
+
+export async function sendInteractiveButtons(
+  to: string,
+  bodyText: string,
+  buttons: InteractiveButton[],
+  footerText?: string,
+): Promise<void> {
+  await getClient().messages.sendInteractiveButtons({
+    phoneNumberId: env.KAPSO_PHONE_NUMBER_ID,
+    to,
+    bodyText,
+    buttons: buttons.map((b) => ({ id: b.id, title: b.title })),
+    ...(footerText ? { footerText } : {}),
+  });
+}

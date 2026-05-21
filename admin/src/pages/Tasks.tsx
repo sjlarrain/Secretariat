@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, LocalTask } from '../api/client';
+import { api, LocalTask, SnoozeOption } from '../api/client';
+import SnoozeModal from '../components/SnoozeModal';
 
 export default function TasksPage() {
   const [items, setItems] = useState<LocalTask[]>([]);
@@ -12,6 +13,8 @@ export default function TasksPage() {
   const [filterProject, setFilterProject] = useState('');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const [snoozeTarget, setSnoozeTarget] = useState<{ task: LocalTask; mode: 'snooze' | 'remind' } | null>(null);
+  const [snoozing, setSnoozing] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -55,6 +58,24 @@ export default function TasksPage() {
       flash('Marked as done!');
     } catch {
       flash('Failed to mark done.', true);
+    }
+  }
+
+  async function handleSnooze(option: SnoozeOption) {
+    if (!snoozeTarget) return;
+    setSnoozing(true);
+    try {
+      const { task, mode } = snoozeTarget;
+      const res = mode === 'snooze'
+        ? await api.snoozeTask(task.id, option) as { ok: boolean; fireAt: string }
+        : await api.remindTask(task.id, option) as { ok: boolean; fireAt: string };
+      setItems((prev) => prev.map((t) => t.id === task.id ? { ...t, qstashMessageId: res.fireAt } : t));
+      setSnoozeTarget(null);
+      flash(mode === 'snooze' ? 'Snoozed!' : 'Reminder added!');
+    } catch {
+      flash('Failed. Try again.', true);
+    } finally {
+      setSnoozing(false);
     }
   }
 
@@ -187,7 +208,20 @@ export default function TasksPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {task.qstashMessageId ? (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 12 }}
+                      onClick={() => setSnoozeTarget({ task, mode: 'snooze' })}
+                    >Snooze</button>
+                  ) : (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 12 }}
+                      onClick={() => setSnoozeTarget({ task, mode: 'remind' })}
+                    >+ Remind</button>
+                  )}
                   <button
                     className="btn-ghost"
                     style={{ fontSize: 12, color: 'var(--green)', borderColor: 'var(--green)' }}
@@ -235,6 +269,16 @@ export default function TasksPage() {
             </div>
           )}
         </div>
+      )}
+
+      {snoozeTarget && (
+        <SnoozeModal
+          title={snoozeTarget.task.title}
+          mode={snoozeTarget.mode}
+          loading={snoozing}
+          onSelect={handleSnooze}
+          onClose={() => setSnoozeTarget(null)}
+        />
       )}
     </div>
   );

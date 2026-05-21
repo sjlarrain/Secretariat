@@ -36,9 +36,10 @@ import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../integrations/local/plans';
 import { getReminders, removeReminder, updateReminder } from '../integrations/local/reminders';
-import { getWorkItems, getDoneWorkItems, addWorkItem, markWorkItemDone, deleteWorkItem } from '../integrations/local/work';
-import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask } from '../integrations/local/tasks';
+import { getWorkItems, getDoneWorkItems, addWorkItem, markWorkItemDone, deleteWorkItem, getWorkItem, updateWorkItemReminder } from '../integrations/local/work';
+import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask, updateTaskQStashId } from '../integrations/local/tasks';
 import { cancelMessage } from '../qstash/client';
+import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
 
 const router = Router();
 
@@ -545,6 +546,124 @@ router.patch('/tasks/:id/done', requireAuth, async (req, res) => {
 router.delete('/tasks/:id', requireAuth, async (req, res) => {
   const ok = await deleteTask(Number(req.params.id));
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
+});
+
+// --- Snooze / Remind helpers ---
+function ownerPhone(): string {
+  return env.WHITELISTED_NUMBERS.split(',')[0].trim();
+}
+
+function parseSnoozeOption(body: unknown): SnoozeOption | null {
+  const option = (body as { option?: string }).option;
+  if (option === '1d' || option === '3d' || option === 'monday') return option;
+  return null;
+}
+
+// Reminders — snooze
+router.post('/reminders/:id/snooze', requireAuth, async (req, res) => {
+  const option = parseSnoozeOption(req.body);
+  if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
+
+  const settings = await getSettings();
+  const reminders = await getReminders();
+  const reminder = reminders.find((r) => r.id === req.params.id);
+  if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
+
+  await cancelMessage(reminder.messageId).catch(() => {});
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const newMessageId = await scheduleOnce('/internal/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    reminderId: reminder.id,
+    title: reminder.title,
+    phoneNumber: reminder.phoneNumber,
+  });
+  await updateReminder(reminder.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
+  res.json({ ok: true, fireAt: fireAt.toISOString() });
+});
+
+// Tasks — snooze existing reminder
+router.post('/tasks/:id/snooze', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const option = parseSnoozeOption(req.body);
+  if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
+
+  const tasks = await getTasks();
+  const task = tasks.find((t) => t.id === id);
+  if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+
+  if (task.qstashMessageId) await cancelMessage(task.qstashMessageId).catch(() => {});
+
+  const settings = await getSettings();
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    taskId: id,
+    title: task.title,
+    phoneNumber: ownerPhone(),
+  });
+  await updateTaskQStashId(id, newMessageId);
+  res.json({ ok: true, fireAt: fireAt.toISOString() });
+});
+
+// Tasks — add reminder for tasks without one
+router.post('/tasks/:id/remind', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const option = parseSnoozeOption(req.body);
+  if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
+
+  const tasks = await getTasks();
+  const task = tasks.find((t) => t.id === id);
+  if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+
+  const settings = await getSettings();
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    taskId: id,
+    title: task.title,
+    phoneNumber: ownerPhone(),
+  });
+  await updateTaskQStashId(id, newMessageId);
+  res.json({ ok: true, fireAt: fireAt.toISOString() });
+});
+
+// Work — snooze existing reminder
+router.post('/work/:id/snooze', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const option = parseSnoozeOption(req.body);
+  if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
+
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+  if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
+
+  const settings = await getSettings();
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    workItemId: id,
+    text: item.text,
+    phoneNumber: ownerPhone(),
+  });
+  await updateWorkItemReminder(id, fireAt.toISOString(), newMessageId);
+  res.json({ ok: true, fireAt: fireAt.toISOString() });
+});
+
+// Work — add reminder for items without one
+router.post('/work/:id/remind', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const option = parseSnoozeOption(req.body);
+  if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
+
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+
+  const settings = await getSettings();
+  const fireAt = getSnoozeDate(option, settings.defaultTaskTime);
+  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    workItemId: id,
+    text: item.text,
+    phoneNumber: ownerPhone(),
+  });
+  await updateWorkItemReminder(id, fireAt.toISOString(), newMessageId);
+  res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
 // --- Google OAuth start (proxy from admin panel) ---

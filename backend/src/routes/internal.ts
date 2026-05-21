@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { qstashVerify } from '../middleware/qstash-verify';
-import { sendMessage } from '../kapso/client';
+import { sendMessage, sendInteractiveButtons } from '../kapso/client';
 import { fireMorningDigest } from '../cron/morning-digest';
 import { fireWeeklySummary } from '../cron/weekly-summary';
-import { removeReminder } from '../integrations/local/reminders';
 import { getWorkItems } from '../integrations/local/work';
 import { getSettings } from '../integrations/token-store';
 import { env } from '../env';
@@ -19,8 +18,19 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
   }
 
   try {
-    await sendMessage(phoneNumber, `⏰ *Reminder:* ${title}`);
-    if (reminderId) await removeReminder(reminderId).catch(() => {});
+    if (reminderId) {
+      await sendInteractiveButtons(
+        phoneNumber,
+        `⏰ *Reminder:* ${title}`,
+        [
+          { id: `s1d_rem_${reminderId}`, title: 'Snooze 1 day' },
+          { id: `smon_rem_${reminderId}`, title: 'Next Monday' },
+          { id: `dis_rem_${reminderId}`, title: 'Dismiss' },
+        ],
+      );
+    } else {
+      await sendMessage(phoneNumber, `⏰ *Reminder:* ${title}`);
+    }
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Reminder fire error:', err);
@@ -49,13 +59,25 @@ router.post('/digest/weekly', qstashVerify, async (_req: Request, res: Response)
 });
 
 router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Response) => {
-  const { text, phoneNumber } = req.body as { workItemId?: number; text?: string; phoneNumber?: string };
+  const { workItemId, text, phoneNumber } = req.body as { workItemId?: number; text?: string; phoneNumber?: string };
   if (!text || !phoneNumber) {
     res.status(400).json({ error: 'Missing text or phoneNumber' });
     return;
   }
   try {
-    await sendMessage(phoneNumber, `📋 *Work reminder:* ${text}`);
+    if (workItemId != null) {
+      await sendInteractiveButtons(
+        phoneNumber,
+        `📋 *Work reminder:* ${text}`,
+        [
+          { id: `s1d_work_${workItemId}`, title: 'Snooze 1 day' },
+          { id: `smon_work_${workItemId}`, title: 'Next Monday' },
+          { id: `dis_work_${workItemId}`, title: 'Dismiss' },
+        ],
+      );
+    } else {
+      await sendMessage(phoneNumber, `📋 *Work reminder:* ${text}`);
+    }
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Work reminder fire error:', err);
@@ -64,13 +86,25 @@ router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Respo
 });
 
 router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Response) => {
-  const { title, phoneNumber } = req.body as { taskId?: number; title?: string; phoneNumber?: string };
+  const { taskId, title, phoneNumber } = req.body as { taskId?: number; title?: string; phoneNumber?: string };
   if (!title || !phoneNumber) {
     res.status(400).json({ error: 'Missing title or phoneNumber' });
     return;
   }
   try {
-    await sendMessage(phoneNumber, `📌 *Task reminder:* ${title}`);
+    if (taskId != null) {
+      await sendInteractiveButtons(
+        phoneNumber,
+        `📌 *Task reminder:* ${title}`,
+        [
+          { id: `s1d_task_${taskId}`, title: 'Snooze 1 day' },
+          { id: `smon_task_${taskId}`, title: 'Next Monday' },
+          { id: `dis_task_${taskId}`, title: 'Dismiss' },
+        ],
+      );
+    } else {
+      await sendMessage(phoneNumber, `📌 *Task reminder:* ${title}`);
+    }
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Task reminder fire error:', err);

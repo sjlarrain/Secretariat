@@ -64,6 +64,16 @@ export async function updateWorkItemReminderId(id: number, qstashMessageId: stri
   }
 }
 
+export async function updateWorkItemReminder(id: number, reminderFor: string, qstashMessageId: string): Promise<void> {
+  const all = await getAllWorkRaw();
+  const idx = all.findIndex((w) => w.id === id);
+  if (idx !== -1) {
+    all[idx].reminderFor = reminderFor || undefined;
+    all[idx].qstashMessageId = qstashMessageId || undefined;
+    await redis.set(WORK_KEY, all);
+  }
+}
+
 export async function deleteWorkItem(id: number): Promise<boolean> {
   const all = await getAllWorkRaw();
   const filtered = all.filter((w) => w.id !== id);

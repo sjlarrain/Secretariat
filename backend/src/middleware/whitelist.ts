@@ -44,6 +44,7 @@ export interface WebhookExtras {
   senderPhone: string;
   webhookText: string | null;
   messageId: string | null;
+  buttonReplyId: string | null; // set when message.type === 'interactive' (button tap)
 }
 
 export type WebhookRequest = Request & WebhookExtras;
@@ -59,6 +60,12 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
     (req as WebhookRequest).senderPhone = phone;
     (req as WebhookRequest).webhookText =
       message?.type === 'text' ? (message.text?.body ?? null) : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawMsg = message as any;
+    (req as WebhookRequest).buttonReplyId =
+      rawMsg?.type === 'interactive' && rawMsg?.interactive?.type === 'button_reply'
+        ? (rawMsg.interactive.button_reply?.id ?? null)
+        : null;
     // Extract WhatsApp message ID from the raw payload for deduplication
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (req as WebhookRequest).messageId =
@@ -67,6 +74,7 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
     (req as WebhookRequest).senderPhone = '';
     (req as WebhookRequest).webhookText = null;
     (req as WebhookRequest).messageId = null;
+    (req as WebhookRequest).buttonReplyId = null;
   }
   next();
 }

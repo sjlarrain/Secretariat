@@ -87,6 +87,18 @@ export const api = {
     request<{ item: LocalTask }>('/tasks', { method: 'POST', body: JSON.stringify({ title, project }) }),
   markTaskDone: (id: number) => request(`/tasks/${id}/done`, { method: 'PATCH' }),
   deleteTask: (id: number) => request(`/tasks/${id}`, { method: 'DELETE' }),
+  snoozeTask: (id: number, option: SnoozeOption) =>
+    request(`/tasks/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
+  remindTask: (id: number, option: SnoozeOption) =>
+    request(`/tasks/${id}/remind`, { method: 'POST', body: JSON.stringify({ option }) }),
+
+  snoozeReminder: (id: string, option: SnoozeOption) =>
+    request(`/reminders/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
+
+  snoozeWork: (id: number, option: SnoozeOption) =>
+    request(`/work/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
+  remindWork: (id: number, option: SnoozeOption) =>
+    request(`/work/${id}/remind`, { method: 'POST', body: JSON.stringify({ option }) }),
 
   getLinks: (filter?: 'read') =>
     request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
@@ -199,6 +211,8 @@ export interface WorkItem {
   reminderFor?: string;
   qstashMessageId?: string;
 }
+
+export type SnoozeOption = '1d' | '3d' | 'monday';
 
 export interface DigestConfig {
   enabled: boolean;

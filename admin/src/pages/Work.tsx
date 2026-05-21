@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, WorkItem } from '../api/client';
+import { api, WorkItem, SnoozeOption } from '../api/client';
+import SnoozeModal from '../components/SnoozeModal';
 
 export default function WorkPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
@@ -10,6 +11,8 @@ export default function WorkPage() {
   const [showDone, setShowDone] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const [snoozeTarget, setSnoozeTarget] = useState<{ item: WorkItem; mode: 'snooze' | 'remind' } | null>(null);
+  const [snoozing, setSnoozing] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -52,6 +55,24 @@ export default function WorkPage() {
       flash('Marked as done!');
     } catch {
       flash('Failed to mark as done.', true);
+    }
+  }
+
+  async function handleSnooze(option: SnoozeOption) {
+    if (!snoozeTarget) return;
+    setSnoozing(true);
+    try {
+      const { item, mode } = snoozeTarget;
+      const res = mode === 'snooze'
+        ? await api.snoozeWork(item.id, option) as { ok: boolean; fireAt: string }
+        : await api.remindWork(item.id, option) as { ok: boolean; fireAt: string };
+      setItems((prev) => prev.map((w) => w.id === item.id ? { ...w, reminderFor: res.fireAt, qstashMessageId: res.fireAt } : w));
+      setSnoozeTarget(null);
+      flash(mode === 'snooze' ? 'Snoozed!' : 'Reminder added!');
+    } catch {
+      flash('Failed. Try again.', true);
+    } finally {
+      setSnoozing(false);
     }
   }
 
@@ -138,7 +159,20 @@ export default function WorkPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {item.qstashMessageId ? (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 12 }}
+                      onClick={() => setSnoozeTarget({ item, mode: 'snooze' })}
+                    >Snooze</button>
+                  ) : (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 12 }}
+                      onClick={() => setSnoozeTarget({ item, mode: 'remind' })}
+                    >+ Remind</button>
+                  )}
                   <button
                     className="btn-ghost"
                     style={{ fontSize: 12, color: 'var(--green)', borderColor: 'var(--green)' }}
@@ -181,6 +215,16 @@ export default function WorkPage() {
             </div>
           )}
         </div>
+      )}
+
+      {snoozeTarget && (
+        <SnoozeModal
+          title={snoozeTarget.item.text}
+          mode={snoozeTarget.mode}
+          loading={snoozing}
+          onSelect={handleSnooze}
+          onClose={() => setSnoozeTarget(null)}
+        />
       )}
     </div>
   );

@@ -87,6 +87,24 @@ export default function TimeConfig() {
         </select>
       </div>
 
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 14 }}>📌</span>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Default task reminder time</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              Used when a task is saved with <code>--for</code> but no <code>--at</code> time
+            </div>
+          </div>
+        </div>
+        <input
+          type="time"
+          value={settings.defaultTaskTime ?? '09:00'}
+          onChange={(e) => setSettings((prev) => prev ? { ...prev, defaultTaskTime: e.target.value } : prev)}
+          style={{ width: 120 }}
+        />
+      </div>
+
       {err && <p className="error-msg" style={{ marginBottom: 12 }}>⚠ {err}</p>}
       {msg && <p className="success-msg" style={{ marginBottom: 12 }}>✓ {msg}</p>}
 

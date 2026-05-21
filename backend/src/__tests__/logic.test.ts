@@ -207,6 +207,140 @@ describe('work item filtering', () => {
   });
 });
 
+// ─── Local task logic ─────────────────────────────────────────────────────────
+
+interface LocalTask {
+  id: number;
+  title: string;
+  project?: string;
+  dueDate?: string;
+  dueTime?: string;
+  status: 'open' | 'done';
+  createdAt: string;
+  doneAt?: string;
+  qstashMessageId?: string;
+}
+
+function getOpenTasks(all: LocalTask[]): LocalTask[] {
+  return all.filter((t) => t.status === 'open');
+}
+
+function getDoneTasks(all: LocalTask[]): LocalTask[] {
+  return all.filter((t) => t.status === 'done');
+}
+
+function nextTaskId(all: LocalTask[]): number {
+  return all.length ? Math.max(...all.map((t) => t.id)) + 1 : 1;
+}
+
+function groupByProject(tasks: LocalTask[]): Map<string, LocalTask[]> {
+  const map = new Map<string, LocalTask[]>();
+  for (const t of tasks) {
+    const key = t.project ?? 'General';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(t);
+  }
+  return map;
+}
+
+describe('local task filtering', () => {
+  const now = new Date().toISOString();
+
+  const tasks: LocalTask[] = [
+    { id: 1, title: 'Buy milk', status: 'open', createdAt: now },
+    { id: 2, title: 'Call dentist', status: 'done', createdAt: now, doneAt: now },
+    { id: 3, title: 'Submit report', status: 'open', createdAt: now, project: 'work' },
+    { id: 4, title: 'Pay rent', status: 'done', createdAt: now, doneAt: now, project: 'finance' },
+  ];
+
+  it('getOpenTasks returns only open tasks', () => {
+    const open = getOpenTasks(tasks);
+    expect(open).toHaveLength(2);
+    expect(open.map((t) => t.id)).toEqual([1, 3]);
+  });
+
+  it('getDoneTasks returns only done tasks', () => {
+    const done = getDoneTasks(tasks);
+    expect(done).toHaveLength(2);
+    expect(done.map((t) => t.id)).toEqual([2, 4]);
+  });
+
+  it('getOpenTasks returns all when none are done', () => {
+    const all: LocalTask[] = [
+      { id: 1, title: 'A', status: 'open', createdAt: now },
+      { id: 2, title: 'B', status: 'open', createdAt: now },
+    ];
+    expect(getOpenTasks(all)).toHaveLength(2);
+  });
+
+  it('getOpenTasks returns empty when all are done', () => {
+    const all: LocalTask[] = [
+      { id: 1, title: 'A', status: 'done', createdAt: now, doneAt: now },
+    ];
+    expect(getOpenTasks(all)).toHaveLength(0);
+  });
+});
+
+describe('local task ID generation', () => {
+  const now = new Date().toISOString();
+
+  it('starts at 1 for an empty list', () => {
+    expect(nextTaskId([])).toBe(1);
+  });
+
+  it('returns max id + 1', () => {
+    const tasks: LocalTask[] = [
+      { id: 1, title: 'A', status: 'open', createdAt: now },
+      { id: 5, title: 'B', status: 'open', createdAt: now },
+      { id: 3, title: 'C', status: 'open', createdAt: now },
+    ];
+    expect(nextTaskId(tasks)).toBe(6);
+  });
+
+  it('handles a single item', () => {
+    const tasks: LocalTask[] = [{ id: 7, title: 'X', status: 'open', createdAt: now }];
+    expect(nextTaskId(tasks)).toBe(8);
+  });
+});
+
+describe('local task groupByProject()', () => {
+  const now = new Date().toISOString();
+
+  it('groups tasks into correct project buckets', () => {
+    const tasks: LocalTask[] = [
+      { id: 1, title: 'Buy milk', status: 'open', createdAt: now, project: 'groceries' },
+      { id: 2, title: 'Submit report', status: 'open', createdAt: now, project: 'work' },
+      { id: 3, title: 'Buy bread', status: 'open', createdAt: now, project: 'groceries' },
+    ];
+    const grouped = groupByProject(tasks);
+    expect(grouped.get('groceries')?.map((t) => t.id)).toEqual([1, 3]);
+    expect(grouped.get('work')?.map((t) => t.id)).toEqual([2]);
+  });
+
+  it('tasks with no project go to "General"', () => {
+    const tasks: LocalTask[] = [
+      { id: 1, title: 'No project', status: 'open', createdAt: now },
+    ];
+    const grouped = groupByProject(tasks);
+    expect(grouped.has('General')).toBe(true);
+    expect(grouped.get('General')?.length).toBe(1);
+  });
+
+  it('returns empty map for empty input', () => {
+    expect(groupByProject([])).toHaveLength(0);
+  });
+
+  it('preserves insertion order within a project', () => {
+    const tasks: LocalTask[] = [
+      { id: 10, title: 'First', status: 'open', createdAt: now, project: 'p' },
+      { id: 11, title: 'Second', status: 'open', createdAt: now, project: 'p' },
+      { id: 12, title: 'Third', status: 'open', createdAt: now, project: 'p' },
+    ];
+    const grouped = groupByProject(tasks);
+    expect(grouped.get('p')?.map((t) => t.id)).toEqual([10, 11, 12]);
+  });
+});
+
 describe('work item ID generation', () => {
   const now = new Date().toISOString();
 

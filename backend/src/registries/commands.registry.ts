@@ -24,10 +24,16 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: ['title', 'for', 'at', 'invite', 'using', 'notes'],
     requiredFlags: ['for', 'at'],
   },
-  task: {
-    name: '/task',
+  gtask: {
+    name: '/gtask',
     description: 'Create a task in Google Tasks',
     acceptedFlags: ['title', 'for', 'notes'],
+    requiredFlags: [],
+  },
+  task: {
+    name: '/task',
+    description: 'Save a personal task. `/task <title>` to add, `/task` to list, `/task done <id>` to mark done. Use -p or # for project, --for for due date.',
+    acceptedFlags: ['project', 'for', 'at'],
     requiredFlags: [],
   },
   reminder: {

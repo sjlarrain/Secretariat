@@ -32,12 +32,12 @@ import {
 import { getLinks, getReadLinks, addLink, markLinkRead, deleteLink, updateLink } from '../integrations/local/links';
 import { resolveAccount } from '../integrations/registry';
 import { getEventsForDate, listCalendars } from '../integrations/google/calendar';
-import { getPendingTasks } from '../integrations/google/tasks';
 import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../integrations/local/plans';
 import { getReminders, removeReminder, updateReminder } from '../integrations/local/reminders';
 import { getWorkItems, getDoneWorkItems, addWorkItem, markWorkItemDone, deleteWorkItem } from '../integrations/local/work';
+import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask } from '../integrations/local/tasks';
 import { cancelMessage } from '../qstash/client';
 
 const router = Router();
@@ -334,16 +334,15 @@ router.get('/dashboard', requireAuth, async (_req, res) => {
   const settings = await getSettings();
   const tz = settings.timezone;
 
-  const [calAccount, tasksAccount, ideasRes] = await Promise.all([
+  const [calAccount, ideasRes, localTasks] = await Promise.all([
     resolveAccount('calendar'),
-    resolveAccount('tasks'),
     getIdeas(),
+    getTasks(),
   ]);
 
-  const [events, tasks] = await Promise.all([
-    calAccount ? getEventsForDate(calAccount, new Date(), tz).catch(() => []) : Promise.resolve([]),
-    tasksAccount ? getPendingTasks(tasksAccount).catch(() => []) : Promise.resolve([]),
-  ]);
+  const events = calAccount
+    ? await getEventsForDate(calAccount, new Date(), tz).catch(() => [])
+    : [];
 
   events.sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -355,9 +354,10 @@ router.get('/dashboard', requireAuth, async (_req, res) => {
       start: e.start.toISOString(),
       end: e.end.toISOString(),
     })),
-    tasks: tasks.map((t) => ({
+    tasks: localTasks.slice(0, 5).map((t) => ({
       title: t.title,
-      dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+      dueDate: t.dueDate ?? null,
+      project: t.project ?? null,
     })),
     ideas: recentIdeas,
   });
@@ -511,6 +511,39 @@ router.patch('/work/:id/done', requireAuth, async (req, res) => {
 
 router.delete('/work/:id', requireAuth, async (req, res) => {
   const ok = await deleteWorkItem(Number(req.params.id));
+  ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
+});
+
+// --- Local Tasks ---
+router.get('/tasks', requireAuth, async (_req, res) => {
+  const items = await getTasks();
+  res.json({ items });
+});
+
+router.get('/tasks/done', requireAuth, async (_req, res) => {
+  const items = await getDoneTasks();
+  res.json({ items });
+});
+
+router.post('/tasks', requireAuth, async (req, res) => {
+  const { title, project } = req.body as { title?: string; project?: string };
+  if (!title?.trim()) { res.status(400).json({ error: 'title required' }); return; }
+  const item = await addTask({ title: title.trim(), project });
+  res.json({ item });
+});
+
+router.patch('/tasks/:id/done', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const task = await markTaskDone(id);
+  if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+  if (task.qstashMessageId) {
+    await cancelMessage(task.qstashMessageId).catch(() => null);
+  }
+  res.json({ ok: true });
+});
+
+router.delete('/tasks/:id', requireAuth, async (req, res) => {
+  const ok = await deleteTask(Number(req.params.id));
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 

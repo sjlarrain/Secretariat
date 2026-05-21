@@ -87,7 +87,7 @@ describe('COMMANDS registry', () => {
 // ─── Cross-registry: expected commands exist ──────────────────────────────────
 
 describe('expected commands are registered', () => {
-  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'mytask', 'reminder', 'myschedule', 'ideas', 'links', 'work'];
+  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'gtask', 'mytask', 'reminder', 'myschedule', 'ideas', 'links', 'work'];
 
   for (const cmd of requiredCommands) {
     it(`/${cmd} is in COMMANDS`, () => {
@@ -145,6 +145,24 @@ describe('short alias resolution (per-command scope)', () => {
     expect(doneFlag).toBe('done');
   });
 
+  it('/task: -p resolves to "project"', () => {
+    const accepted = COMMANDS['task'].acceptedFlags;
+    const projectFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'p');
+    expect(projectFlag).toBe('project');
+  });
+
+  it('/task: -f resolves to "for"', () => {
+    const accepted = COMMANDS['task'].acceptedFlags;
+    const forFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'f');
+    expect(forFlag).toBe('for');
+  });
+
+  it('/task: -a resolves to "at"', () => {
+    const accepted = COMMANDS['task'].acceptedFlags;
+    const atFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'a');
+    expect(atFlag).toBe('at');
+  });
+
   it('/reminder: -f → "for", -a → "at"', () => {
     const accepted = COMMANDS['reminder'].acceptedFlags;
     const forFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'f');
@@ -177,6 +195,10 @@ describe('required flags contract', () => {
 
   it('/task has no required flags', () => {
     expect(COMMANDS['task'].requiredFlags).toHaveLength(0);
+  });
+
+  it('/gtask has no required flags', () => {
+    expect(COMMANDS['gtask'].requiredFlags).toHaveLength(0);
   });
 
   it('/ideas has no required flags', () => {

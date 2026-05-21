@@ -33,6 +33,7 @@ export interface Settings {
     time: string;    // HH:MM — fires every Monday
     scheduleId?: string;
   };
+  defaultTaskTime: string; // HH:MM — default reminder time when --for is set but --at is omitted
 }
 
 const ACCOUNTS_KEY = 'secretariat:accounts';
@@ -43,6 +44,7 @@ const DEFAULT_SETTINGS: Settings = {
   morningDigest: { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5] },
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
   workReminder: { enabled: true, time: '09:00' },
+  defaultTaskTime: '09:00',
 };
 
 let _redis: Redis | null = null;

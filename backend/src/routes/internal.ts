@@ -63,6 +63,21 @@ router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Respo
   }
 });
 
+router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Response) => {
+  const { title, phoneNumber } = req.body as { taskId?: number; title?: string; phoneNumber?: string };
+  if (!title || !phoneNumber) {
+    res.status(400).json({ error: 'Missing title or phoneNumber' });
+    return;
+  }
+  try {
+    await sendMessage(phoneNumber, `📌 *Task reminder:* ${title}`);
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('Task reminder fire error:', err);
+    res.status(500).json({ error: 'Failed to send task reminder' });
+  }
+});
+
 router.post('/digest/work', qstashVerify, async (_req: Request, res: Response) => {
   try {
     const items = await getWorkItems();

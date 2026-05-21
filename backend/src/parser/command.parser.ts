@@ -39,8 +39,10 @@ export function parseCommand(input: string): ParseResult {
   const flags: Record<string, string> = {};
 
   let i = 1;
-  // Collect positional args before any flag (-- or - or @)
-  while (i < tokens.length && !tokens[i].startsWith('--') && !tokens[i].startsWith('-') && !tokens[i].startsWith('@')) {
+  const acceptsProject = commandDef.acceptedFlags.includes('project');
+
+  // Collect positional args before any flag (-- or - or @, and # only when command accepts --project)
+  while (i < tokens.length && !tokens[i].startsWith('--') && !tokens[i].startsWith('-') && !tokens[i].startsWith('@') && !(acceptsProject && tokens[i].startsWith('#'))) {
     extraArgs.push(tokens[i]);
     i++;
   }
@@ -52,6 +54,13 @@ export function parseCommand(input: string): ParseResult {
     // @HH:MM alias for --at
     if (token.startsWith('@') && /^@\d{1,2}:\d{2}$/.test(token)) {
       flags['at'] = token.slice(1);
+      i++;
+      continue;
+    }
+
+    // #Tag alias for --project
+    if (token.startsWith('#') && token.length > 1 && commandDef.acceptedFlags.includes('project')) {
+      flags['project'] = token.slice(1);
       i++;
       continue;
     }
@@ -77,7 +86,7 @@ export function parseCommand(input: string): ParseResult {
 
       i++;
       const valueParts: string[] = [];
-      while (i < tokens.length && !tokens[i].startsWith('--') && !(/^-[a-z]$/.test(tokens[i])) && !tokens[i].startsWith('@')) {
+      while (i < tokens.length && !tokens[i].startsWith('--') && !(/^-[a-z]$/.test(tokens[i])) && !tokens[i].startsWith('@') && !(acceptsProject && tokens[i].startsWith('#'))) {
         valueParts.push(tokens[i]);
         i++;
       }

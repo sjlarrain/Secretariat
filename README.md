@@ -14,8 +14,9 @@ Send a command from WhatsApp and Secretariat handles the rest:
 |---------|-------------|
 | `/schedule` | Creates an event on Google Calendar |
 | `/myschedule` | Shows calendar events for a day or week, or free slots for a plan type |
-| `/task` | Creates a task in Google Tasks |
-| `/mytask` | Lists your pending tasks |
+| `/task` | Personal task manager (add, list by project, mark done) — stored in Secretariat |
+| `/gtask` | Creates a task in Google Tasks |
+| `/mytask` | Lists your Google Tasks pending tasks |
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
 | `/ideas` | Saves ideas, lists them, filters by project |
 | `/links` | Saves a link for later, lists unread links, or archives one |
@@ -103,7 +104,8 @@ NODE_ENV=production
 │       │   ├── start.handler.ts
 │       │   ├── menu.handler.ts
 │       │   ├── schedule.handler.ts
-│       │   ├── task.handler.ts
+│       │   ├── task.handler.ts     # /task — local task manager (add, list, mark done)
+│       │   ├── gtask.handler.ts    # /gtask — creates task in Google Tasks
 │       │   ├── reminder.handler.ts # Saves pending reminder to Redis; fires via QStash
 │       │   ├── mytask.handler.ts
 │       │   ├── myschedule.handler.ts  # Regular/week mode + --plan availability mode
@@ -126,7 +128,9 @@ NODE_ENV=production
 │       │       ├── ideas.ts        # Ideas + projects store (Upstash Redis)
 │       │       ├── plans.ts        # Plan types store (Upstash Redis) — Lunch, Coffee, etc.
 │       │       ├── reminders.ts    # Pending reminders store (Upstash Redis) — cleared on fire
-│       │       └── links.ts        # Links store (Upstash Redis) — unread/read archive
+│       │       ├── links.ts        # Links store (Upstash Redis) — unread/read archive
+│       │       ├── tasks.ts        # Local tasks store (Upstash Redis) — secretariat:tasks
+│       │       └── work.ts         # Work list store (Upstash Redis)
 │       │
 │       ├── cron/
 │       │   ├── morning-digest.ts   # Fetches today's events → sends WhatsApp morning summary
@@ -158,6 +162,7 @@ NODE_ENV=production
 │           ├── Whitelist.tsx       # View whitelisted WhatsApp numbers
 │           ├── CronManager.tsx     # Morning digest + weekly summary config; pending reminders list
 │           ├── Plans.tsx           # CRUD for meeting plan types (Lunch, Coffee, etc.)
+│           ├── Tasks.tsx           # Local task manager: list, filter by project, mark done
 │           ├── Ideas.tsx           # Folder-style ideas view with trash and inline editing
 │           ├── Links.tsx           # Link manager: tag folders, unread list, read archive
 │           ├── Commands.tsx        # Reference for all available commands and flags
@@ -219,25 +224,49 @@ In `--plan` / `-p` mode:
 
 Each plan defines its own **buffer** (minutes kept free before and after the slot as travel time). Plan types are managed in the admin panel → Plans.
 
-### `/task` — Create a Google Task
+### `/task` — Personal task manager
 
 ```
-/task <name> [--for <date>] [--notes <text>]
-/task -t <name> -f <date> -n <notes>
+/task <title>                               → save a task
+/task <title> -p <project>                  → save with project tag
+/task <title> #<project>                    → # shorthand for project
+/task <title> --for <date>                  → save with due date (reminder at default time)
+/task <title> --for <date> --at <HH:MM>     → save with due date and specific reminder time
+/task <title> -f <date> @<HH:MM>            → same with short flags
+/task                                        → list all open tasks grouped by project
+/task -p <project>                           → list tasks in that project
+/task -p                                     → list all project names
+/task done <id>                              → mark task #id as done (cancels reminder)
 ```
 
 ```
-/task Call Isabel
-/task Send quarterly report -f next friday -n include Q1 numbers
+/task Buy milk
+/task Submit Q1 report -p work --for next friday
+/task Buy milk #groceries --for friday @10:00
+/task done 3
 ```
 
-### `/mytask` — List pending tasks
+Tasks are stored in Secretariat's Redis. When a due date is set, a WhatsApp reminder fires at the due time (defaults to the "Default task reminder time" in admin Settings → Time Configuration). Marking a task done cancels any pending reminder.
+
+### `/gtask` — Create a Google Task
+
+```
+/gtask <name> [--for <date>] [--notes <text>]
+/gtask -f <date> -n <notes>
+```
+
+```
+/gtask Call Isabel
+/gtask Send quarterly report -f next friday -n include Q1 numbers
+```
+
+### `/mytask` — List pending Google Tasks
 
 ```
 /mytask
 ```
 
-Lists all incomplete tasks sorted by due date.
+Lists all incomplete Google Tasks sorted by due date.
 
 ### `/reminder` — Set a WhatsApp reminder
 
@@ -325,7 +354,8 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 
 | Page | What you can do |
 |------|----------------|
-| **Dashboard** | Upcoming events, pending tasks, recent ideas at a glance |
+| **Dashboard** | Upcoming events, pending local tasks, recent ideas at a glance |
+| **Tasks** | Local task manager: create, filter by project, mark done, view completed |
 | **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set default; select which sub-calendars to include; disconnect |
 | **Whitelist** | View allowed WhatsApp numbers (edit via `WHITELISTED_NUMBERS` env var) |
 | **Cron Manager** | Configure morning digest and weekly summary; view and cancel pending reminders |
@@ -333,7 +363,7 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Ideas** | Folder-style view by project; create, edit, delete, reassign; trash with 30-day auto-purge |
 | **Links** | Tag-folder view; add links, mark as read, delete; read archive sidebar section |
 | **Commands** | Reference for all commands and flags |
-| **Settings** | Timezone selector with live server clock to verify the setting |
+| **Settings** | Timezone selector, live server clock, and default task reminder time |
 
 ---
 
@@ -394,8 +424,9 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 | v1.2 | Flags Manager | ✅ Done — calendar, plans, schedule improvements |
 | v1.3 | Links Manager | ✅ Done — save & tag URLs from WhatsApp |
 | v1.4 | Fixes & /work | ✅ Done — bug fixes, /work list, Ideas done, disconnection detection |
-| v1.5 | Code Review & Hardening | Security audit + env/token manager from admin panel |
-| v1.6 | Multi-User | User accounts, major open operation |
-| v1.7 | Todoist | Task integration via Todoist API |
-| v1.8 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
-| v1.9 | NLP | Natural language messages via Claude API |
+| v1.6 | Code Review & Hardening | ✅ Done — webhook sig, HKDF tokens, rate limit, XSS fixes |
+| v1.7 | Local Task Manager | ✅ Done — /task command, project tags, reminder scheduling, admin Tasks page |
+| v1.8 | Multi-User | User accounts, major open operation |
+| v1.9 | Todoist | Task integration via Todoist API |
+| v1.10 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
+| v1.11 | NLP | Natural language messages via Claude API |

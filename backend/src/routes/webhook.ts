@@ -4,6 +4,7 @@ import { webhookSignatureVerify, extractWebhookData, whitelistMiddleware, Webhoo
 import { sendMessage } from '../kapso/client';
 import { startHandler } from '../handlers/start.handler';
 import { scheduleHandler } from '../handlers/schedule.handler';
+import { gtaskHandler } from '../handlers/gtask.handler';
 import { taskHandler } from '../handlers/task.handler';
 import { reminderHandler } from '../handlers/reminder.handler';
 import { mytaskHandler } from '../handlers/mytask.handler';
@@ -71,6 +72,9 @@ router.post('/', webhookSignatureVerify, extractWebhookData, whitelistMiddleware
         break;
       case 'schedule':
         await scheduleHandler(data, from);
+        break;
+      case 'gtask':
+        await gtaskHandler(data, from);
         break;
       case 'task':
         await taskHandler(data, from);

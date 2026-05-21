@@ -1,47 +1,142 @@
 import { ParsedCommand } from '../parser/command.parser';
-import { resolveAccount } from '../integrations/registry';
-import { createTask } from '../integrations/google/tasks';
-import { getSettings } from '../integrations/token-store';
-import { parseDate, formatDate } from '../utils/date';
 import { sendMessage } from '../kapso/client';
+import { getTasks, addTask, markTaskDone, updateTaskQStashId } from '../integrations/local/tasks';
+import { getSettings } from '../integrations/token-store';
+import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
+import { scheduleOnce, cancelMessage } from '../qstash/client';
 
 export async function taskHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags, extraArgs } = parsed;
-  const settings = await getSettings();
-
-  const title = flags['title'] || extraArgs.join(' ').trim();
-  if (!title) {
-    await sendMessage(from, '❌ Missing title. Use --title or write it right after /task.');
-    return;
-  }
-
-  const account = await resolveAccount('tasks');
-  if (!account) {
-    await sendMessage(from, '❌ No Google Tasks account connected. Visit the admin panel.');
-    return;
-  }
-
-  let dueDate: Date | undefined;
-  if (flags['for']) {
-    const parsed = parseDate(flags['for'], settings.timezone);
-    if (!parsed) {
-      await sendMessage(from, `❌ Could not parse date: "${flags['for']}".`);
-      return;
-    }
-    dueDate = parsed;
-  }
 
   try {
-    await createTask(account, {
-      title,
-      dueDate,
-      notes: flags['notes'],
-    });
+    const settings = await getSettings();
+    const tz = settings.timezone;
+    const projectFlag = flags['project'] as string | undefined;
+    const forFlag = flags['for'];
+    const atFlag = flags['at'];
 
-    const dueLine = dueDate ? `\n📅 Due ${formatDate(dueDate)}` : '';
-    await sendMessage(from, `✅ *Task created*\n📌 ${title}${dueLine}`);
+    // /task done <id>  →  mark task done
+    if (extraArgs[0] === 'done') {
+      const id = parseInt(extraArgs[1] ?? '', 10);
+      if (isNaN(id)) {
+        await sendMessage(from, '❌ Use `/task done <id>` — get the ID from `/task`.');
+        return;
+      }
+      const task = await markTaskDone(id);
+      if (!task) {
+        await sendMessage(from, `❌ Task #${id} not found or already done.`);
+        return;
+      }
+      if (task.qstashMessageId) {
+        await cancelMessage(task.qstashMessageId).catch(() => null);
+      }
+      await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
+      return;
+    }
+
+    const title = extraArgs.join(' ').trim();
+
+    // /task or /task -p <project>  →  list tasks
+    if (!title) {
+      const tasks = await getTasks();
+
+      if (projectFlag !== undefined) {
+        const name = projectFlag.trim();
+        if (!name) {
+          // /task -p  →  list all project names
+          const projects = [...new Set(tasks.map((t) => t.project ?? 'General').sort())];
+          if (projects.length === 0) {
+            await sendMessage(from, '📋 No open tasks yet. Send `/task <title>` to add one.');
+            return;
+          }
+          const lines = projects.map((p) => {
+            const count = tasks.filter((t) => (t.project ?? 'General') === p).length;
+            return `📁 ${p} — ${count} task${count !== 1 ? 's' : ''}`;
+          });
+          await sendMessage(from, `📁 *Task projects:*\n\n${lines.join('\n')}`);
+          return;
+        }
+        // /task -p groceries  →  list tasks in that project
+        const filtered = tasks.filter((t) => (t.project ?? 'General').toLowerCase() === name.toLowerCase());
+        if (filtered.length === 0) {
+          await sendMessage(from, `📋 No open tasks in *${name}*.`);
+          return;
+        }
+        const lines = filtered.map((t) => {
+          const due = t.dueDate ? ` _(📅 ${formatDate(new Date(t.dueDate), false, tz)} ${t.dueTime ?? ''})_`.trimEnd() : '';
+          return `${t.id}. ${t.title}${due}`;
+        });
+        await sendMessage(from, `📋 *${name}:*\n${lines.join('\n')}`);
+        return;
+      }
+
+      // /task  →  list all open tasks grouped by project
+      if (tasks.length === 0) {
+        await sendMessage(from, '📋 No open tasks. Send `/task <title>` to add one.');
+        return;
+      }
+      const grouped = new Map<string, typeof tasks>();
+      for (const t of tasks) {
+        const key = t.project ?? 'General';
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(t);
+      }
+      const sections: string[] = [];
+      for (const [project, items] of grouped) {
+        const lines = items.map((t) => {
+          const due = t.dueDate ? ` _(📅 ${formatDate(new Date(t.dueDate), false, tz)} ${t.dueTime ?? ''})_`.trimEnd() : '';
+          return `  ${t.id}. ${t.title}${due}`;
+        });
+        sections.push(`*${project}:*\n${lines.join('\n')}`);
+      }
+      sections.push('_Use `/task done <id>` to mark a task done._');
+      await sendMessage(from, `📋 *Tasks:*\n\n${sections.join('\n\n')}`);
+      return;
+    }
+
+    // /task <title> [flags]  →  create task
+    let dueDate: string | undefined;
+    let dueTime: string | undefined;
+    let qstashMessageId: string | undefined;
+
+    if (forFlag) {
+      const parsed = parseDate(forFlag, tz);
+      if (!parsed) {
+        await sendMessage(from, `❌ Could not parse date: "${forFlag}". Try "tomorrow", "next friday", or DD-MM-YYYY.`);
+        return;
+      }
+
+      const timeStr = atFlag ?? settings.defaultTaskTime;
+      const fireAt = combineDateAndTime(parsed, timeStr, tz);
+
+      if (fireAt.getTime() <= Date.now()) {
+        await sendMessage(from, '❌ Due date/time is in the past.');
+        return;
+      }
+
+      dueDate = parsed.toISOString();
+      dueTime = timeStr;
+
+      const task = await addTask({ title, project: projectFlag, dueDate, dueTime });
+      const msgId = await scheduleOnce(
+        '/internal/task/reminder/fire',
+        Math.floor((fireAt.getTime() - Date.now()) / 1000),
+        { taskId: task.id, title, phoneNumber: from }
+      );
+      await updateTaskQStashId(task.id, msgId);
+
+      const dateLabel = `${formatDate(fireAt, true, tz)} at ${formatTime(fireAt, tz)}`;
+      const projectLabel = projectFlag ? ` in *${projectFlag}*` : '';
+      await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}\n⏰ Reminder: ${dateLabel}`);
+      return;
+    }
+
+    // No date — just save
+    const task = await addTask({ title, project: projectFlag, dueDate, dueTime });
+    const projectLabel = projectFlag ? ` in *${projectFlag}*` : '';
+    await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await sendMessage(from, `❌ Could not create task: ${msg}`);
+    await sendMessage(from, `❌ Error: ${msg}`);
   }
 }

@@ -159,14 +159,25 @@ export default function Dashboard() {
 
         {/* Pending tasks */}
         <div className="card">
-          {sectionHeader('✅', 'Pending tasks')}
+          {sectionHeader('📋', 'Pending tasks')}
           {!dashboard || dashboard.tasks.length === 0
             ? emptyState('No pending tasks.')
             : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {dashboard.tasks.map((t, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <span style={{ fontSize: 13, lineHeight: 1.4 }}>• {t.title}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: 13, lineHeight: 1.4 }}>• {t.title}</span>
+                      {t.project && (
+                        <span style={{
+                          marginLeft: 6, fontSize: 10, fontWeight: 600,
+                          color: 'var(--blue-bright)', background: 'var(--blue-dim)',
+                          padding: '1px 5px', borderRadius: 4,
+                        }}>
+                          {t.project}
+                        </span>
+                      )}
+                    </div>
                     {t.dueDate && (
                       <span style={{ fontSize: 11, color: 'var(--text-dim)', flexShrink: 0 }}>
                         {formatTaskDue(t.dueDate)}
@@ -177,6 +188,11 @@ export default function Dashboard() {
               </div>
             )
           }
+          {dashboard && dashboard.tasks.length > 0 && (
+            <a href="/tasks" style={{ fontSize: 11, color: 'var(--blue-bright)', display: 'block', marginTop: 12 }}>
+              View all tasks →
+            </a>
+          )}
         </div>
 
         {/* Recent ideas */}

@@ -28,15 +28,20 @@
 | v1.4 | Em-dash fix — normalize WhatsApp autocorrected `—` back to `--` in parser | ✅ Done | Easy |
 | v1.4 | `/work` — weekend to-do list with optional per-item reminder; Monday morning digest | ✅ Done | Medium |
 | v1.4 | `/menu` refresh — required vs optional flags, shorthand aliases, all commands | ✅ Done | Easy |
-| **v1.5 — Code Review & Hardening** | | | |
-| v1.5 | Full code review — security audit, vulnerability check, command edge cases | ⬜ Pending | Medium |
+| **v1.5 — Secretariat for Groups** | | | |
+| v1.5 | Group chat support — bot in WhatsApp group, @mention activation, shared ideas + group reminders | 🔒 Blocked | Hard |
+| v1.5 | _Blocked: WhatsApp Business Cloud API does not support sending to group chats. Revisit when Kapso/Meta adds group messaging to the API._ | | |
+| **v1.6 — Code Review & Hardening** | | | |
+| v1.6 | Full code review — security audit, vulnerability check, command edge cases | ⬜ Pending | Medium |
 | v1.5 | Env/token manager — configure Kapso, QStash, Google OAuth, Upstash and other secrets directly from the admin panel (no server .env edit) | ⬜ Pending | Medium |
-| **v1.6 — Multi-User** | | | |
-| v1.6 | User functionality — multi-user support, major open operation | ⬜ Pending | Hard |
-| **v1.7 — Todoist** | | | |
-| v1.7 | Todoist integration — create & list tasks via API key | ⬜ Pending | Medium |
-| **v1.8 — Microsoft / Outlook** | | | |
-| v1.8 | Azure / Outlook integration — OAuth2, calendar + tasks | ⬜ Pending | Hard |
-| **v1.9 — NLP** | | | |
-| v1.9 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |
+| **v1.7 — Local Task Manager** | | | |
+| v1.7 | `/task` — local task manager stored in Redis; rename current `/task` to `/gtask`; admin Tasks page replaces Google Tasks widget on dashboard | ⬜ Pending | Medium |
+| **v1.8 — Multi-User** | | | |
+| v1.8 | User functionality — multi-user support, major open operation | ⬜ Pending | Hard |
+| **v1.9 — Todoist** | | | |
+| v1.9 | Todoist integration — create & list tasks via API key | ⬜ Pending | Medium |
+| **v1.10 — Microsoft / Outlook** | | | |
+| v1.10 | Azure / Outlook integration — OAuth2, calendar + tasks | ⬜ Pending | Hard |
+| **v1.11 — NLP** | | | |
+| v1.11 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |
 | ops | Better server — upgrade Render plan or migrate host | ⬜ Pending | Ops |

@@ -11,6 +11,7 @@ import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
 import TimeConfig from './pages/TimeConfig';
 import WorkPage from './pages/Work';
+import TasksPage from './pages/Tasks';
 import { api } from './api/client';
 
 const NAV_LINKS = [
@@ -18,6 +19,7 @@ const NAV_LINKS = [
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
   { to: '/cron', label: 'Cron Manager', icon: '⏰' },
+  { to: '/tasks', label: 'Tasks', icon: '📋' },
   { to: '/work', label: 'Work', icon: '🗂️' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
@@ -139,6 +141,7 @@ export default function App() {
         <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
         <Route path="/links" element={<Layout><Links /></Layout>} />
         <Route path="/cron" element={<Layout><CronManager /></Layout>} />
+        <Route path="/tasks" element={<Layout><TasksPage /></Layout>} />
         <Route path="/work" element={<Layout><WorkPage /></Layout>} />
 
         {/* Settings hub + sub-pages */}

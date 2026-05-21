@@ -81,6 +81,13 @@ export const api = {
   markWorkItemDone: (id: number) => request(`/work/${id}/done`, { method: 'PATCH' }),
   deleteWorkItem: (id: number) => request(`/work/${id}`, { method: 'DELETE' }),
 
+  getTasks: () => request<{ items: LocalTask[] }>('/tasks'),
+  getDoneTasks: () => request<{ items: LocalTask[] }>('/tasks/done'),
+  createTask: (title: string, project?: string) =>
+    request<{ item: LocalTask }>('/tasks', { method: 'POST', body: JSON.stringify({ title, project }) }),
+  markTaskDone: (id: number) => request(`/tasks/${id}/done`, { method: 'PATCH' }),
+  deleteTask: (id: number) => request(`/tasks/${id}`, { method: 'DELETE' }),
+
   getLinks: (filter?: 'read') =>
     request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
   createLink: (url: string, tags: string[]) =>
@@ -136,8 +143,20 @@ export interface PlanType {
 
 export interface DashboardData {
   events: { title: string; start: string; end: string }[];
-  tasks: { title: string; dueDate: string | null }[];
+  tasks: { title: string; dueDate: string | null; project: string | null }[];
   ideas: Idea[];
+}
+
+export interface LocalTask {
+  id: number;
+  title: string;
+  project?: string;
+  dueDate?: string;
+  dueTime?: string;
+  status: 'open' | 'done';
+  createdAt: string;
+  doneAt?: string;
+  qstashMessageId?: string;
 }
 
 export interface CommandFlagInfo {
@@ -194,4 +213,5 @@ export interface Settings {
   workReminder: DigestConfig;  // every Monday, enabled by default
   morningDigest: DigestConfig & { days: number[] };
   weeklySummary: DigestConfig & { day: number };
+  defaultTaskTime: string; // HH:MM — default reminder time for tasks with --for but no --at
 }

@@ -161,35 +161,165 @@ describe('/schedule', () => {
   });
 });
 
-// ─── /task ────────────────────────────────────────────────────────────────────
+// ─── /gtask (Google Tasks — renamed from /task) ───────────────────────────────
 
-describe('/task', () => {
+describe('/gtask', () => {
   it('succeeds with just text', () => {
-    const r = ok('/task Call Isabel');
-    expect(r.command).toBe('task');
+    const r = ok('/gtask Call Isabel');
+    expect(r.command).toBe('gtask');
     expect(r.extraArgs).toEqual(['Call', 'Isabel']);
     expect(r.flags).toEqual({});
   });
 
   it('accepts --for date', () => {
-    const r = ok('/task Send report --for next friday');
+    const r = ok('/gtask Send report --for next friday');
     expect(r.flags['for']).toBe('next friday');
   });
 
   it('accepts -f for --for', () => {
-    const r = ok('/task Do thing -f 15-06-2026');
+    const r = ok('/gtask Do thing -f 15-06-2026');
     expect(r.flags['for']).toBe('15-06-2026');
   });
 
   it('accepts --notes', () => {
-    const r = ok('/task Report -f tomorrow -n include Q1 numbers');
+    const r = ok('/gtask Report -f tomorrow -n include Q1 numbers');
     expect(r.flags['notes']).toBe('include Q1 numbers');
   });
 
-  it('succeeds with no arguments (bare /task)', () => {
-    const r = ok('/task');
+  it('succeeds with no arguments (bare /gtask)', () => {
+    const r = ok('/gtask');
     expect(r.extraArgs).toEqual([]);
     expect(r.flags).toEqual({});
+  });
+});
+
+// ─── /task (local task manager) ──────────────────────────────────────────────
+
+describe('/task', () => {
+  it('succeeds with no arguments — list all open tasks', () => {
+    const r = ok('/task');
+    expect(r.command).toBe('task');
+    expect(r.extraArgs).toEqual([]);
+    expect(r.flags).toEqual({});
+  });
+
+  it('captures title text in extraArgs', () => {
+    const r = ok('/task Buy milk');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags).toEqual({});
+  });
+
+  it('captures multi-word title in extraArgs', () => {
+    const r = ok('/task Call the dentist');
+    expect(r.extraArgs).toEqual(['Call', 'the', 'dentist']);
+  });
+
+  it('"done <id>" lands in extraArgs for mark-done flow', () => {
+    const r = ok('/task done 3');
+    expect(r.extraArgs).toEqual(['done', '3']);
+    expect(r.flags).toEqual({});
+  });
+
+  it('"done" alone lands in extraArgs', () => {
+    const r = ok('/task done');
+    expect(r.extraArgs).toEqual(['done']);
+  });
+
+  it('accepts --project with a name', () => {
+    const r = ok('/task Buy milk --project groceries');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags['project']).toBe('groceries');
+  });
+
+  it('accepts -p shorthand for --project', () => {
+    const r = ok('/task Buy milk -p groceries');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags['project']).toBe('groceries');
+  });
+
+  it('accepts # alias for --project', () => {
+    const r = ok('/task Buy milk #groceries');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags['project']).toBe('groceries');
+  });
+
+  it('accepts # alias with no preceding title (list by project)', () => {
+    const r = ok('/task #groceries');
+    expect(r.extraArgs).toEqual([]);
+    expect(r.flags['project']).toBe('groceries');
+  });
+
+  it('accepts -p with no value (list all projects)', () => {
+    const r = ok('/task -p');
+    expect(r.flags['project']).toBe('');
+  });
+
+  it('accepts --project with no value (list all projects)', () => {
+    const r = ok('/task --project');
+    expect(r.flags['project']).toBe('');
+  });
+
+  it('accepts --for date', () => {
+    const r = ok('/task Buy milk --for friday');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags['for']).toBe('friday');
+  });
+
+  it('accepts -f shorthand for --for', () => {
+    const r = ok('/task Buy milk -f next monday');
+    expect(r.flags['for']).toBe('next monday');
+  });
+
+  it('accepts --at time', () => {
+    const r = ok('/task Buy milk --for friday --at 15:00');
+    expect(r.flags['for']).toBe('friday');
+    expect(r.flags['at']).toBe('15:00');
+  });
+
+  it('accepts -a shorthand for --at', () => {
+    const r = ok('/task Buy milk --for friday -a 15:00');
+    expect(r.flags['at']).toBe('15:00');
+  });
+
+  it('accepts @ alias for --at', () => {
+    const r = ok('/task Buy milk --for friday @15:00');
+    expect(r.flags['for']).toBe('friday');
+    expect(r.flags['at']).toBe('15:00');
+  });
+
+  it('accepts # project combined with --for and @time', () => {
+    const r = ok('/task Buy milk #groceries --for friday @10:00');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags['project']).toBe('groceries');
+    expect(r.flags['for']).toBe('friday');
+    expect(r.flags['at']).toBe('10:00');
+  });
+
+  it('accepts -p combined with -f and -a', () => {
+    const r = ok('/task Submit report -p work -f next monday -a 09:00');
+    expect(r.extraArgs).toEqual(['Submit', 'report']);
+    expect(r.flags['project']).toBe('work');
+    expect(r.flags['for']).toBe('next monday');
+    expect(r.flags['at']).toBe('09:00');
+  });
+
+  it('accepts -p (list projects) with no title', () => {
+    const r = ok('/task -p work');
+    expect(r.extraArgs).toEqual([]);
+    expect(r.flags['project']).toBe('work');
+  });
+
+  it('normalizes em-dash before flags', () => {
+    const r = ok('/task Buy milk —for friday');
+    expect(r.flags['for']).toBe('friday');
+  });
+
+  it('rejects --notes (not accepted by /task)', () => {
+    expect(fail('/task Buy milk --notes extra info')).toMatch(/unknown flag/i);
+  });
+
+  it('rejects --invite (not accepted by /task)', () => {
+    expect(fail('/task Buy milk --invite a@b.com')).toMatch(/unknown flag/i);
   });
 });
 
@@ -431,7 +561,7 @@ describe('quoted values', () => {
   });
 
   it('groups quoted notes as single flag value', () => {
-    const r = ok('/task Report --notes "include the Q1 numbers please"');
+    const r = ok('/gtask Report --notes "include the Q1 numbers please"');
     expect(r.flags['notes']).toBe('include the Q1 numbers please');
   });
 });

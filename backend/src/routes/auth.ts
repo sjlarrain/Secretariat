@@ -48,7 +48,7 @@ router.get('/google/start', requireAuth, async (req: Request, res: Response) => 
     : 'calendar';
 
   const state = uuidv4();
-  await getRedis().set(stateKey(state), JSON.stringify({ alias, type }), { ex: STATE_TTL_SECONDS });
+  await getRedis().set(stateKey(state), { alias, type }, { ex: STATE_TTL_SECONDS });
 
   res.redirect(getAuthUrl(state));
 });
@@ -68,14 +68,13 @@ router.get('/google/callback', requireAuth, async (req: Request, res: Response) 
     return;
   }
 
-  const raw = await getRedis().get<string>(stateKey(state));
-  if (!raw) {
+  const pending = await getRedis().get<{ alias: string; type: typeof ALLOWED_TYPES[number] }>(stateKey(state));
+  if (!pending) {
     res.status(400).send('<h2>Unknown or expired OAuth state.</h2><a href="/">Back to admin</a>');
     return;
   }
 
   await getRedis().del(stateKey(state));
-  const pending = JSON.parse(raw) as { alias: string; type: typeof ALLOWED_TYPES[number] };
 
   try {
     const tokens = await exchangeCode(code);

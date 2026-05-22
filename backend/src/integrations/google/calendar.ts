@@ -19,7 +19,14 @@ export interface GoogleCalendar {
 }
 
 async function getCalendarClient(account: ConnectedAccount) {
-  const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
+  let tokens: GoogleTokens;
+  try {
+    tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
+  } catch {
+    await saveAccount({ ...account, isDisconnected: true });
+    throw new CalendarDisconnectedError(account.alias);
+  }
+
   try {
     const { client, refreshedTokens } = await getAuthenticatedClient(tokens, account.alias);
 

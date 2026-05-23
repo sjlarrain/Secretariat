@@ -25,7 +25,7 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
         [
           { id: `s1d_rem_${reminderId}`, title: 'Snooze 1 day' },
           { id: `smon_rem_${reminderId}`, title: 'Next Monday' },
-          { id: `dis_rem_${reminderId}`, title: 'Dismiss' },
+          { id: `done_rem_${reminderId}`, title: 'Done' },
         ],
       );
     } else {
@@ -72,7 +72,7 @@ router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Respo
         [
           { id: `s1d_work_${workItemId}`, title: 'Snooze 1 day' },
           { id: `smon_work_${workItemId}`, title: 'Next Monday' },
-          { id: `dis_work_${workItemId}`, title: 'Dismiss' },
+          { id: `done_work_${workItemId}`, title: 'Done' },
         ],
       );
     } else {
@@ -99,7 +99,7 @@ router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Respo
         [
           { id: `s1d_task_${taskId}`, title: 'Snooze 1 day' },
           { id: `smon_task_${taskId}`, title: 'Next Monday' },
-          { id: `dis_task_${taskId}`, title: 'Dismiss' },
+          { id: `done_task_${taskId}`, title: 'Done' },
         ],
       );
     } else {

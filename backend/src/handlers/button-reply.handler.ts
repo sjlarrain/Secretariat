@@ -1,19 +1,19 @@
 import { sendMessage } from '../kapso/client';
 import { getSettings } from '../integrations/token-store';
 import { getReminders, updateReminder, removeReminder } from '../integrations/local/reminders';
-import { getTasks, updateTaskQStashId } from '../integrations/local/tasks';
-import { getWorkItem, updateWorkItemReminder } from '../integrations/local/work';
+import { getTasks, markTaskDone, updateTaskQStashId } from '../integrations/local/tasks';
+import { getWorkItem, markWorkItemDone, updateWorkItemReminder } from '../integrations/local/work';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
 
 // Button ID format: <action>_<type>_<itemId>
-// action: s1d | s3d | smon | dis
+// action: s1d | s3d | smon | done
 // type:   rem | task | work
 // itemId: string (UUID for reminders, number for tasks/work)
 //
-// Examples: s1d_rem_abc123, smon_task_5, dis_work_3
+// Examples: s1d_rem_abc123, smon_task_5, done_work_3
 
-function parseButtonId(id: string): { action: 'snooze' | 'dismiss'; option: SnoozeOption | null; type: 'rem' | 'task' | 'work'; itemId: string } | null {
+function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeOption | null; type: 'rem' | 'task' | 'work'; itemId: string } | null {
   const parts = id.split('_');
   if (parts.length < 3) return null;
 
@@ -24,7 +24,7 @@ function parseButtonId(id: string): { action: 'snooze' | 'dismiss'; option: Snoo
 
   const type = itemType as 'rem' | 'task' | 'work';
 
-  if (rawAction === 'dis') return { action: 'dismiss', option: null, type, itemId };
+  if (rawAction === 'done') return { action: 'done', option: null, type, itemId };
 
   const optionMap: Record<string, SnoozeOption> = { s1d: '1d', s3d: '3d', smon: 'monday' };
   const option = optionMap[rawAction];
@@ -49,6 +49,7 @@ export async function buttonReplyHandler(buttonId: string, from: string): Promis
     } else {
       await handleWorkButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime, timezone);
     }
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Could not process button action: ${msg}`);
@@ -56,7 +57,7 @@ export async function buttonReplyHandler(buttonId: string, from: string): Promis
 }
 
 async function handleReminderButton(
-  action: 'snooze' | 'dismiss',
+  action: 'snooze' | 'done',
   option: SnoozeOption | null,
   reminderId: string,
   from: string,
@@ -72,9 +73,9 @@ async function handleReminderButton(
 
   await cancelMessage(reminder.messageId).catch(() => null);
 
-  if (action === 'dismiss') {
+  if (action === 'done') {
     await removeReminder(reminderId);
-    await sendMessage(from, `✅ Reminder dismissed: _"${reminder.title}"_`);
+    await sendMessage(from, `✅ Done: _"${reminder.title}"_`);
     return;
   }
 
@@ -89,7 +90,7 @@ async function handleReminderButton(
 }
 
 async function handleTaskButton(
-  action: 'snooze' | 'dismiss',
+  action: 'snooze' | 'done',
   option: SnoozeOption | null,
   taskId: number,
   from: string,
@@ -107,9 +108,9 @@ async function handleTaskButton(
     await cancelMessage(task.qstashMessageId).catch(() => null);
   }
 
-  if (action === 'dismiss') {
-    await updateTaskQStashId(taskId, '');
-    await sendMessage(from, `✅ Task reminder dismissed: _"${task.title}"_`);
+  if (action === 'done') {
+    await markTaskDone(taskId);
+    await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
     return;
   }
 
@@ -124,7 +125,7 @@ async function handleTaskButton(
 }
 
 async function handleWorkButton(
-  action: 'snooze' | 'dismiss',
+  action: 'snooze' | 'done',
   option: SnoozeOption | null,
   workId: number,
   from: string,
@@ -141,9 +142,9 @@ async function handleWorkButton(
     await cancelMessage(item.qstashMessageId).catch(() => null);
   }
 
-  if (action === 'dismiss') {
-    await updateWorkItemReminder(workId, '', '');
-    await sendMessage(from, `✅ Work reminder dismissed: _"${item.text}"_`);
+  if (action === 'done') {
+    await markWorkItemDone(workId);
+    await sendMessage(from, `✅ Done! _"${item.text}"_ marked as completed.`);
     return;
   }
 

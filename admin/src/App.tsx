@@ -65,7 +65,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.2px' }}>
               Secretariat
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.4</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.8</div>
           </div>
         </div>
 

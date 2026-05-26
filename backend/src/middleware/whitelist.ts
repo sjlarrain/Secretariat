@@ -35,7 +35,7 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
     const rawMsg = message as any;
     (req as WebhookRequest).buttonReplyId =
       rawMsg?.type === 'interactive' && rawMsg?.interactive?.type === 'button_reply'
-        ? (rawMsg.interactive.button_reply?.id ?? null)
+        ? (rawMsg.interactive.buttonReply?.id ?? null)
         : null;
     // Extract WhatsApp message ID from the raw payload for deduplication
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

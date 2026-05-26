@@ -37,6 +37,7 @@ export default function CronManager() {
   const [savingReminder, setSavingReminder] = useState(false);
   const [snoozeTarget, setSnoozeTarget] = useState<Reminder | null>(null);
   const [snoozing, setSnoozing] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     api.getSettings().then(setSettings);
@@ -128,7 +129,6 @@ export default function CronManager() {
     }
   }
 
-  const isMobile = useIsMobile();
   const morningDayLabels = settings.morningDigest.days.map((d) => DAYS[d]).join(', ');
 
   return (
@@ -140,6 +140,9 @@ export default function CronManager() {
           Scheduled digests and pending reminders
         </p>
       </div>
+
+      {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
+      {err && <p className="error-msg" style={{ marginBottom: 14 }}>⚠ {err}</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24, alignItems: 'start' }}>
         {/* Left: pending reminders */}
@@ -380,9 +383,6 @@ export default function CronManager() {
               </div>
             )}
           </div>
-
-          {err && <p className="error-msg" style={{ marginBottom: 12 }}>⚠ {err}</p>}
-          {msg && <p className="success-msg" style={{ marginBottom: 12 }}>✓ {msg}</p>}
 
           <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: 120 }}>
             {saving ? 'Saving…' : 'Save settings'}

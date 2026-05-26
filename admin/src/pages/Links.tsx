@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, Link } from '../api/client';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type View = 'all' | 'read' | string;
 
@@ -20,6 +21,8 @@ export default function LinksPage() {
   const [editTagInput, setEditTagInput] = useState('');
   const [editTagList, setEditTagList] = useState<string[]>([]);
   const [savingTags, setSavingTags] = useState(false);
+
+  const isMobile = useIsMobile();
 
   async function load() {
     setLoading(true);
@@ -145,10 +148,175 @@ export default function LinksPage() {
   const viewCount = visibleLinks.length;
   const isReadView = view === 'read';
 
+  // ── Mobile: full-width with horizontal filter bar ─────
+  if (isMobile) {
+    return (
+      <div>
+        {/* Horizontal filter bar */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 }}>
+          <button
+            className={view === 'all' ? 'btn-primary' : 'btn-ghost'}
+            style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={() => setView('all')}
+          >
+            📥 All ({links.length})
+          </button>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              className={view === tag ? 'btn-primary' : 'btn-ghost'}
+              style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}
+              onClick={() => setView(tag)}
+            >
+              📁 {tag}
+            </button>
+          ))}
+          <button
+            className={view === 'read' ? 'btn-primary' : 'btn-ghost'}
+            style={{ fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={() => setView('read')}
+          >
+            ✅ Read ({read.length})
+          </button>
+        </div>
+
+        {/* Header */}
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>{viewTitle}</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+            {viewCount} link{viewCount !== 1 ? 's' : ''}
+          </p>
+        </div>
+
+        {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
+        {err && <p className="error-msg" style={{ marginBottom: 14 }}>✕ {err}</p>}
+
+        {/* Add link form */}
+        {!isReadView && (
+          <form onSubmit={handleCreateLink} className="card" style={{ padding: '14px 16px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input
+              type="url"
+              className="input"
+              placeholder="https://example.com"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              style={{ fontSize: 13 }}
+            />
+            <input
+              type="text"
+              className="input"
+              placeholder="Tags: fintech-elements tech-news"
+              value={newTags}
+              onChange={(e) => setNewTags(e.target.value)}
+              style={{ fontSize: 13 }}
+            />
+            <button type="submit" className="btn-primary" disabled={saving || !newUrl.trim()}>
+              {saving ? 'Saving…' : 'Add link'}
+            </button>
+          </form>
+        )}
+
+        {/* Link list */}
+        {visibleLinks.length === 0 ? (
+          <div className="card" style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
+            {isReadView ? 'No read links yet.' : 'No links here. Save one above or send a URL from WhatsApp.'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {visibleLinks.map((link) => (
+              <div key={link.id} className="card" style={{ padding: '14px 16px' }}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: 13, fontWeight: 600, color: 'var(--blue-bright)',
+                    textDecoration: 'none', display: 'block',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    marginBottom: 4,
+                  }}
+                  title={link.url}
+                >
+                  {link.url}
+                </a>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 8 }}>
+                  {shortUrl(link.url)} · {formatDate(isReadView && link.readAt ? link.readAt : link.createdAt)}
+                </div>
+
+                {/* Tags */}
+                {editingTagsId === link.id ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginBottom: 10 }}>
+                    {editTagList.map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          fontSize: 10, fontWeight: 600, padding: '2px 8px',
+                          borderRadius: 99, background: 'var(--blue-dim)',
+                          color: 'var(--blue-bright)', display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                      >
+                        {tag}
+                        <span onClick={() => setEditTagList((prev) => prev.filter((t) => t !== tag))} style={{ cursor: 'pointer', opacity: 0.7, fontSize: 11 }}>×</span>
+                      </span>
+                    ))}
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editTagInput}
+                      onChange={(e) => setEditTagInput(e.target.value)}
+                      onKeyDown={handleTagInputKeyDown}
+                      onBlur={() => { if (editTagInput.trim()) addEditTag(editTagInput); }}
+                      placeholder="add tag…"
+                      style={{ fontSize: 11, padding: '2px 6px', width: 90, borderRadius: 6 }}
+                    />
+                    <button className="btn-primary" style={{ fontSize: 11, padding: '2px 8px' }} disabled={savingTags} onClick={() => handleSaveTags(link.id)}>
+                      {savingTags ? '…' : 'Save'}
+                    </button>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setEditingTagsId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                    {link.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        onClick={() => setView(tag)}
+                        style={{
+                          fontSize: 10, fontWeight: 600, padding: '2px 8px',
+                          borderRadius: 99, background: 'var(--blue-dim)',
+                          color: 'var(--blue-bright)', cursor: 'pointer',
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    <span onClick={() => openTagEditor(link)} style={{ fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 2 }} title="Edit tags">✏️</span>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {!isReadView && (
+                    <button className="btn-ghost" style={{ fontSize: 12, flex: 1 }} onClick={() => handleMarkRead(link.id)}>
+                      Mark read
+                    </button>
+                  )}
+                  <button className="btn-ghost" style={{ fontSize: 12, flex: 1, color: 'var(--red)' }} onClick={() => handleDelete(link.id, isReadView)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Desktop: sidebar + right pane ─────────────────────
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', minHeight: '70vh' }}>
 
-      {/* ── Left sidebar ─────────────────────────────── */}
+      {/* Left sidebar */}
       <div style={{
         width: 220,
         flexShrink: 0,
@@ -161,7 +329,6 @@ export default function LinksPage() {
           <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.2px' }}>🌐 Links</div>
         </div>
 
-        {/* All unread */}
         <button
           onClick={() => setView('all')}
           style={{
@@ -182,7 +349,6 @@ export default function LinksPage() {
           )}
         </button>
 
-        {/* Tags section */}
         {allTags.length > 0 && (
           <>
             <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -214,7 +380,6 @@ export default function LinksPage() {
           </>
         )}
 
-        {/* Read archive */}
         <div style={{ borderTop: '1px solid var(--border)', marginTop: 4 }} />
         <button
           onClick={() => setView('read')}
@@ -234,9 +399,8 @@ export default function LinksPage() {
         </button>
       </div>
 
-      {/* ── Right pane ───────────────────────────────── */}
+      {/* Right pane */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Header */}
         <div style={{ marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>{viewTitle}</h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
@@ -247,7 +411,6 @@ export default function LinksPage() {
         {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
         {err && <p className="error-msg" style={{ marginBottom: 14 }}>✕ {err}</p>}
 
-        {/* Add link form (unread views only) */}
         {!isReadView && (
           <form onSubmit={handleCreateLink} className="card" style={{ padding: '16px 18px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <input
@@ -274,7 +437,6 @@ export default function LinksPage() {
           </form>
         )}
 
-        {/* Link list */}
         {visibleLinks.length === 0 ? (
           <div className="card" style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
             {isReadView ? 'No read links yet.' : 'No links here. Save one above or send a URL from WhatsApp.'}
@@ -283,7 +445,6 @@ export default function LinksPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {visibleLinks.map((link) => (
               <div key={link.id} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                {/* URL + meta */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <a
                     href={link.url}
@@ -301,7 +462,6 @@ export default function LinksPage() {
                   <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 3 }}>
                     {shortUrl(link.url)} · {formatDate(isReadView && link.readAt ? link.readAt : link.createdAt)}
                   </div>
-                  {/* Tags row: pills or inline editor */}
                   {editingTagsId === link.id ? (
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
                       {editTagList.map((tag) => (
@@ -314,10 +474,7 @@ export default function LinksPage() {
                           }}
                         >
                           {tag}
-                          <span
-                            onClick={() => setEditTagList((prev) => prev.filter((t) => t !== tag))}
-                            style={{ cursor: 'pointer', opacity: 0.7, fontSize: 11 }}
-                          >×</span>
+                          <span onClick={() => setEditTagList((prev) => prev.filter((t) => t !== tag))} style={{ cursor: 'pointer', opacity: 0.7, fontSize: 11 }}>×</span>
                         </span>
                       ))}
                       <input
@@ -330,21 +487,10 @@ export default function LinksPage() {
                         placeholder="add tag…"
                         style={{ fontSize: 11, padding: '2px 6px', width: 90, borderRadius: 6 }}
                       />
-                      <button
-                        className="btn-primary"
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                        disabled={savingTags}
-                        onClick={() => handleSaveTags(link.id)}
-                      >
+                      <button className="btn-primary" style={{ fontSize: 11, padding: '2px 8px' }} disabled={savingTags} onClick={() => handleSaveTags(link.id)}>
                         {savingTags ? '…' : 'Save'}
                       </button>
-                      <button
-                        className="btn-ghost"
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                        onClick={() => setEditingTagsId(null)}
-                      >
-                        Cancel
-                      </button>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setEditingTagsId(null)}>Cancel</button>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
@@ -361,33 +507,18 @@ export default function LinksPage() {
                           {tag}
                         </span>
                       ))}
-                      <span
-                        onClick={() => openTagEditor(link)}
-                        style={{ fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 2 }}
-                        title="Edit tags"
-                      >
-                        ✏️
-                      </span>
+                      <span onClick={() => openTagEditor(link)} style={{ fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', marginLeft: 2 }} title="Edit tags">✏️</span>
                     </div>
                   )}
                 </div>
 
-                {/* Actions */}
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {!isReadView && (
-                    <button
-                      className="btn-ghost"
-                      style={{ fontSize: 12, padding: '4px 10px' }}
-                      onClick={() => handleMarkRead(link.id)}
-                    >
+                    <button className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => handleMarkRead(link.id)}>
                       Mark read
                     </button>
                   )}
-                  <button
-                    className="btn-ghost"
-                    style={{ fontSize: 12, padding: '4px 10px', color: 'var(--red)' }}
-                    onClick={() => handleDelete(link.id, isReadView)}
-                  >
+                  <button className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px', color: 'var(--red)' }} onClick={() => handleDelete(link.id, isReadView)}>
                     Delete
                   </button>
                 </div>

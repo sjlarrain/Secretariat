@@ -13,6 +13,7 @@ import TimeConfig from './pages/TimeConfig';
 import WorkPage from './pages/Work';
 import TasksPage from './pages/Tasks';
 import { api } from './api/client';
+import { useIsMobile } from './hooks/useIsMobile';
 
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard', icon: '🏠', end: true },
@@ -24,6 +25,16 @@ const NAV_LINKS = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
+const MOBILE_NAV = [
+  { to: '/ideas', label: 'Ideas', icon: '💡' },
+  { to: '/links', label: 'Links', icon: '🌐' },
+  { to: '/cron', label: 'Reminders', icon: '⏰' },
+  { to: '/tasks', label: 'Tasks', icon: '📋' },
+  { to: '/work', label: 'Work', icon: '🗂️' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
+];
+
+// ── Desktop layout ─────────────────────────────────────────
 function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
@@ -34,7 +45,6 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Sidebar */}
       <nav style={{
         width: 210,
         background: 'var(--bg-nav)',
@@ -43,7 +53,6 @@ function Layout({ children }: { children: React.ReactNode }) {
         flexDirection: 'column',
         flexShrink: 0,
       }}>
-        {/* Brand */}
         <div style={{
           padding: '18px 16px',
           borderBottom: '1px solid var(--border)',
@@ -69,7 +78,6 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Nav links */}
         <div style={{ flex: 1, padding: '8px 0' }}>
           <div style={{
             padding: '10px 16px 4px',
@@ -112,7 +120,6 @@ function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </div>
 
-        {/* Footer */}
         <div style={{ padding: '10px 8px', borderTop: '1px solid var(--border)' }}>
           <button
             className="btn-ghost"
@@ -124,7 +131,6 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      {/* Main */}
       <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', background: 'var(--bg)' }}>
         {children}
       </main>
@@ -132,34 +138,156 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Mobile home (root nav screen) ─────────────────────────
+function MobileHome({ onLogout }: { onLogout: () => void }) {
+  const navigate = useNavigate();
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+      <div style={{ padding: '28px 20px 24px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 44, height: 44,
+            background: 'var(--blue-dim)',
+            border: '1px solid rgba(59,130,246,0.2)',
+            borderRadius: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22,
+          }}>🤖</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 20, letterSpacing: '-0.3px' }}>Secretariat</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>v1.8</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1 }}>
+        {MOBILE_NAV.map((item) => (
+          <button
+            key={item.to}
+            onClick={() => navigate(item.to)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 16,
+              padding: '18px 20px',
+              background: 'none', border: 'none', borderBottom: '1px solid var(--border)',
+              cursor: 'pointer', color: 'var(--text)', textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 22, width: 30, textAlign: 'center' }}>{item.icon}</span>
+            <span style={{ flex: 1, fontSize: 16, fontWeight: 500 }}>{item.label}</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 20 }}>›</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+        <button
+          className="btn-ghost"
+          style={{ width: '100%', justifyContent: 'center', display: 'flex', gap: 6 }}
+          onClick={onLogout}
+        >
+          ↩ Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Mobile sub-page layout ─────────────────────────────────
+function MobileLayout({ children, title }: { children: React.ReactNode; title: string }) {
+  const navigate = useNavigate();
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 100,
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '0 8px',
+        height: 52,
+        background: 'var(--bg-nav)', borderBottom: '1px solid var(--border)',
+      }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--blue-bright)', fontSize: 24, padding: '8px 10px',
+            lineHeight: 1, display: 'flex', alignItems: 'center',
+          }}
+        >
+          ‹
+        </button>
+        <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.2px' }}>{title}</span>
+      </div>
+
+      <main style={{ flex: 1, padding: '20px 16px' }}>
+        {children}
+      </main>
+    </div>
+  );
+}
+
+// ── Route tree ────────────────────────────────────────────
+function AppInner() {
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await api.logout();
+    navigate('/login');
+  }
+
+  if (isMobile) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<MobileHome onLogout={handleLogout} />} />
+        <Route path="/ideas" element={<MobileLayout title="Ideas"><Ideas /></MobileLayout>} />
+        <Route path="/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
+        <Route path="/cron" element={<MobileLayout title="Reminders"><CronManager /></MobileLayout>} />
+        <Route path="/tasks" element={<MobileLayout title="Tasks"><TasksPage /></MobileLayout>} />
+        <Route path="/work" element={<MobileLayout title="Work"><WorkPage /></MobileLayout>} />
+        <Route path="/settings" element={<MobileLayout title="Settings"><SettingsPage /></MobileLayout>} />
+        <Route path="/settings/accounts" element={<MobileLayout title="Accounts"><Accounts /></MobileLayout>} />
+        <Route path="/settings/plans" element={<MobileLayout title="Plans"><Plans /></MobileLayout>} />
+        <Route path="/settings/time" element={<MobileLayout title="Time Config"><TimeConfig /></MobileLayout>} />
+        <Route path="/settings/whitelist" element={<Navigate to="/settings" replace />} />
+        <Route path="/settings/commands" element={<Navigate to="/settings" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Layout><Dashboard /></Layout>} />
+      <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
+      <Route path="/links" element={<Layout><Links /></Layout>} />
+      <Route path="/cron" element={<Layout><CronManager /></Layout>} />
+      <Route path="/tasks" element={<Layout><TasksPage /></Layout>} />
+      <Route path="/work" element={<Layout><WorkPage /></Layout>} />
+
+      <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+      <Route path="/settings/accounts" element={<Layout><Accounts /></Layout>} />
+      <Route path="/settings/whitelist" element={<Layout><Whitelist /></Layout>} />
+      <Route path="/settings/plans" element={<Layout><Plans /></Layout>} />
+      <Route path="/settings/commands" element={<Layout><Commands /></Layout>} />
+      <Route path="/settings/time" element={<Layout><TimeConfig /></Layout>} />
+
+      <Route path="/accounts" element={<Navigate to="/settings/accounts" replace />} />
+      <Route path="/whitelist" element={<Navigate to="/settings/whitelist" replace />} />
+      <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
+      <Route path="/commands" element={<Navigate to="/settings/commands" replace />} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={<Layout><Dashboard /></Layout>} />
-        <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
-        <Route path="/links" element={<Layout><Links /></Layout>} />
-        <Route path="/cron" element={<Layout><CronManager /></Layout>} />
-        <Route path="/tasks" element={<Layout><TasksPage /></Layout>} />
-        <Route path="/work" element={<Layout><WorkPage /></Layout>} />
-
-        {/* Settings hub + sub-pages */}
-        <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-        <Route path="/settings/accounts" element={<Layout><Accounts /></Layout>} />
-        <Route path="/settings/whitelist" element={<Layout><Whitelist /></Layout>} />
-        <Route path="/settings/plans" element={<Layout><Plans /></Layout>} />
-        <Route path="/settings/commands" element={<Layout><Commands /></Layout>} />
-        <Route path="/settings/time" element={<Layout><TimeConfig /></Layout>} />
-
-        {/* Legacy redirects */}
-        <Route path="/accounts" element={<Navigate to="/settings/accounts" replace />} />
-        <Route path="/whitelist" element={<Navigate to="/settings/whitelist" replace />} />
-        <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
-        <Route path="/commands" element={<Navigate to="/settings/commands" replace />} />
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppInner />
     </BrowserRouter>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, LocalTask, SnoozeOption } from '../api/client';
 import SnoozeModal from '../components/SnoozeModal';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export default function TasksPage() {
   const [items, setItems] = useState<LocalTask[]>([]);
@@ -90,6 +91,8 @@ export default function TasksPage() {
     }
   }
 
+  const isMobile = useIsMobile();
+
   if (loading) {
     return (
       <div className="loading-wrap">
@@ -148,10 +151,11 @@ export default function TasksPage() {
         style={{
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16,
-          display: 'flex', gap: 10, alignItems: 'flex-end',
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          gap: 10, alignItems: isMobile ? 'stretch' : 'flex-end',
         }}
       >
-        <div style={{ flex: 2 }}>
+        <div style={{ flex: isMobile ? undefined : 2 }}>
           <label className="field-label">New task</label>
           <input
             value={newTitle}
@@ -159,7 +163,7 @@ export default function TasksPage() {
             placeholder="What needs to be done?"
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: isMobile ? undefined : 1 }}>
           <label className="field-label">Project (optional)</label>
           <input
             value={newProject}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, Settings, Reminder, SnoozeOption } from '../api/client';
 import SnoozeModal from '../components/SnoozeModal';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -127,6 +128,7 @@ export default function CronManager() {
     }
   }
 
+  const isMobile = useIsMobile();
   const morningDayLabels = settings.morningDigest.days.map((d) => DAYS[d]).join(', ');
 
   return (
@@ -139,7 +141,7 @@ export default function CronManager() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24, alignItems: 'start' }}>
         {/* Left: pending reminders */}
         <div>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
@@ -225,8 +227,8 @@ export default function CronManager() {
           )}
         </div>
 
-        {/* Right: digest configs */}
-        <div>
+        {/* Right: digest configs — desktop only */}
+        {!isMobile && <div>
           {/* Morning Digest */}
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
@@ -385,7 +387,7 @@ export default function CronManager() {
           <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: 120 }}>
             {saving ? 'Saving…' : 'Save settings'}
           </button>
-        </div>
+        </div>}
 
       </div>
 

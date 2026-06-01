@@ -103,7 +103,13 @@ export default function CronManager() {
     setSnoozing(true);
     try {
       const res = await api.snoozeReminder(snoozeTarget.id, option) as { ok: boolean; fireAt: string };
-      setReminders((prev) => prev.map((r) => r.id === snoozeTarget.id ? { ...r, fireAt: res.fireAt } : r));
+      setReminders((prev) => prev.map((r) => r.id === snoozeTarget!.id ? { ...r, fireAt: res.fireAt } : r));
+      // Sync edit form if it's open for the same reminder
+      if (editingReminder === snoozeTarget.id) {
+        const d = new Date(res.fireAt);
+        setEditDate(d.toLocaleDateString('en-CA'));
+        setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
+      }
       setSnoozeTarget(null);
       setMsg('Snoozed!');
       setTimeout(() => setMsg(''), 3000);
@@ -119,11 +125,14 @@ export default function CronManager() {
   async function handleSaveReminder(id: string) {
     if (!editDate || !editTime) return;
     setSavingReminder(true);
+    setErr('');
     try {
       const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
       await api.updateReminder(id, fireAt);
       setReminders((prev) => prev.map((r) => r.id === id ? { ...r, fireAt } : r));
       setEditingReminder(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not update reminder. Check the date and time.');
     } finally {
       setSavingReminder(false);
     }
@@ -179,14 +188,14 @@ export default function CronManager() {
                         <button
                           className="btn-secondary"
                           style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => setSnoozeTarget(r)}
+                          onClick={() => { setSnoozeTarget(r); setEditingReminder(null); }}
                         >
                           Snooze
                         </button>
                         <button
                           className="btn-secondary"
                           style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => editingReminder === r.id ? setEditingReminder(null) : openEditReminder(r)}
+                          onClick={() => { setSnoozeTarget(null); editingReminder === r.id ? setEditingReminder(null) : openEditReminder(r); }}
                         >
                           {editingReminder === r.id ? 'Close' : 'Edit'}
                         </button>

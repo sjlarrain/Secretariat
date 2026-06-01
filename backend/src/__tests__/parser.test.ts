@@ -565,3 +565,14 @@ describe('raw field', () => {
     expect(r.raw).toBe('/myschedule --plan Lunch');
   });
 });
+
+// ─── /status ──────────────────────────────────────────────────────────────────
+
+describe('/status', () => {
+  it('parses /status with no flags', () => {
+    const r = ok('/status');
+    expect(r.command).toBe('status');
+    expect(r.flags).toEqual({});
+    expect(r.extraArgs).toEqual([]);
+  });
+});

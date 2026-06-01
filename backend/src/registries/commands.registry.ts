@@ -66,4 +66,10 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: ['done', 'for', 'at'],
     requiredFlags: [],
   },
+  status: {
+    name: '/status',
+    description: 'Show system status: Google calendar connections, Kapso health, and monthly message usage.',
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
 };

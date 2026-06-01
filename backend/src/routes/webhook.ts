@@ -12,6 +12,7 @@ import { ideasHandler } from '../handlers/ideas.handler';
 import { linksHandler } from '../handlers/links.handler';
 import { menuHandler } from '../handlers/menu.handler';
 import { workHandler } from '../handlers/work.handler';
+import { statusHandler } from '../handlers/status.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import type { ParsedCommand } from '../parser/command.parser';
 
@@ -104,6 +105,9 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
         break;
       case 'work':
         await workHandler(data, from);
+        break;
+      case 'status':
+        await statusHandler(data, from);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

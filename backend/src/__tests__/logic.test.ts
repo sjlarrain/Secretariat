@@ -540,3 +540,104 @@ describe('work item ID generation', () => {
     expect(nextId([{ id: 7, text: 'X', createdAt: now }])).toBe(8);
   });
 });
+
+// ─── /status handler — formatStatusMessage ───────────────────────────────────
+// Local copy of the pure formatting function from status.handler.ts
+
+function formatStatusMessage(params: {
+  accounts: { alias: string; type: string; isDefault: boolean; isDisconnected: boolean }[];
+  kapsoStatus: string;
+  messagingHealth: string | null;
+  sentThisMonth: number | null;
+  receivedThisMonth: number | null;
+  monthLabel: string;
+}): string {
+  const { accounts, kapsoStatus, messagingHealth, sentThisMonth, receivedThisMonth, monthLabel } = params;
+  const lines: string[] = ['📊 *Secretariat Status*\n'];
+  lines.push('*Calendars:*');
+  if (accounts.length === 0) {
+    lines.push('  No accounts connected.');
+  } else {
+    for (const a of accounts) {
+      const icon = a.isDisconnected ? '❌' : '✅';
+      const dflt = a.isDefault ? ' _(default)_' : '';
+      const disc = a.isDisconnected ? ' — disconnected' : '';
+      lines.push(`${icon} ${a.alias} [${a.type}]${dflt}${disc}`);
+    }
+  }
+  lines.push('\n*Kapso:*');
+  const statusIcon = kapsoStatus === 'healthy' ? '✅' : kapsoStatus === 'degraded' ? '⚠️' : '❌';
+  lines.push(`${statusIcon} ${kapsoStatus.charAt(0).toUpperCase() + kapsoStatus.slice(1)}`);
+  if (messagingHealth) lines.push(`  Messaging: ${messagingHealth}`);
+  lines.push('\n*Usage (this month — ' + monthLabel + '):*');
+  if (sentThisMonth !== null) lines.push(`  📤 Sent: ${sentThisMonth.toLocaleString()} messages`);
+  if (receivedThisMonth !== null) lines.push(`  📥 Received: ${receivedThisMonth.toLocaleString()} messages`);
+  if (sentThisMonth === null && receivedThisMonth === null) lines.push('  Could not fetch usage data.');
+  return lines.join('\n');
+}
+
+describe('formatStatusMessage()', () => {
+  const base = {
+    kapsoStatus: 'healthy',
+    messagingHealth: 'Available',
+    sentThisMonth: 42,
+    receivedThisMonth: 18,
+    monthLabel: 'May 2026',
+  };
+
+  it('shows connected accounts with default marker', () => {
+    const result = formatStatusMessage({
+      ...base,
+      accounts: [{ alias: 'GG', type: 'calendar', isDefault: true, isDisconnected: false }],
+    });
+    expect(result).toContain('✅ GG [calendar]');
+    expect(result).toContain('_(default)_');
+  });
+
+  it('shows disconnected accounts with ❌', () => {
+    const result = formatStatusMessage({
+      ...base,
+      accounts: [{ alias: 'old', type: 'calendar', isDefault: false, isDisconnected: true }],
+    });
+    expect(result).toContain('❌ old [calendar]');
+    expect(result).toContain('disconnected');
+  });
+
+  it('shows no accounts message when list is empty', () => {
+    const result = formatStatusMessage({ ...base, accounts: [] });
+    expect(result).toContain('No accounts connected.');
+  });
+
+  it('shows healthy Kapso status with ✅', () => {
+    const result = formatStatusMessage({ ...base, accounts: [] });
+    expect(result).toContain('✅ Healthy');
+    expect(result).toContain('Messaging: Available');
+  });
+
+  it('shows degraded Kapso status with ⚠️', () => {
+    const result = formatStatusMessage({ ...base, accounts: [], kapsoStatus: 'degraded', messagingHealth: null });
+    expect(result).toContain('⚠️ Degraded');
+  });
+
+  it('shows error Kapso status with ❌', () => {
+    const result = formatStatusMessage({ ...base, accounts: [], kapsoStatus: 'error', messagingHealth: null });
+    expect(result).toContain('❌ Error');
+  });
+
+  it('shows sent and received counts', () => {
+    const result = formatStatusMessage({ ...base, accounts: [] });
+    expect(result).toContain('Sent: 42 messages');
+    expect(result).toContain('Received: 18 messages');
+    expect(result).toContain('May 2026');
+  });
+
+  it('shows fallback when usage data unavailable', () => {
+    const result = formatStatusMessage({ ...base, accounts: [], sentThisMonth: null, receivedThisMonth: null });
+    expect(result).toContain('Could not fetch usage data.');
+  });
+
+  it('omits messaging health line when null', () => {
+    const result = formatStatusMessage({ ...base, accounts: [], messagingHealth: null });
+    expect(result).not.toContain('Messaging:');
+  });
+});

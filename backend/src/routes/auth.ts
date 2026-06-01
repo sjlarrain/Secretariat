@@ -30,6 +30,64 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+type CallbackPageVariant = 'success' | 'error';
+
+function callbackPage(variant: CallbackPageVariant, title: string, message: string): string {
+  const isSuccess = variant === 'success';
+  const icon = isSuccess ? '✓' : '✕';
+  const iconColor = isSuccess ? '#4ade80' : '#f87171';
+  const iconBg = isSuccess ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)';
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)} — Secretariat</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f; color: #e2e2e2;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
+      padding: 40px 36px; max-width: 420px; width: 100%; text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: ${iconBg}; color: ${iconColor};
+      font-size: 26px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+    }
+    h1 { font-size: 18px; font-weight: 700; color: #f0f0f0; margin-bottom: 10px; letter-spacing: -0.2px; }
+    p { font-size: 14px; color: #8a8a8a; line-height: 1.6; margin-bottom: 28px; }
+    strong { color: #d0d0d0; font-weight: 600; }
+    a.btn {
+      display: inline-block; background: #2a2a2a; color: #e2e2e2;
+      border: 1px solid #3a3a3a; border-radius: 8px;
+      padding: 9px 22px; font-size: 13px; font-weight: 500;
+      text-decoration: none; transition: background 0.15s;
+    }
+    a.btn:hover { background: #333; }
+    .brand { font-size: 11px; color: #444; margin-top: 24px; letter-spacing: 0.5px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">${icon}</div>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${message}</p>
+    <a class="btn" href="/">Back to admin panel</a>
+    <div class="brand">SECRETARIAT</div>
+  </div>
+</body>
+</html>`;
+}
+
 function requireAuth(req: Request, res: Response, next: () => void): void {
   if ((req.session as { authenticated?: boolean }).authenticated) {
     next();
@@ -59,18 +117,18 @@ router.get('/google/callback', requireAuth, async (req: Request, res: Response) 
   const error = req.query['error'] as string | undefined;
 
   if (error) {
-    res.status(400).send(`<h2>OAuth Error: ${escapeHtml(String(error))}</h2><a href="/">Back to admin</a>`);
+    res.status(400).send(callbackPage('error', 'OAuth Error', `Google returned: <strong>${escapeHtml(String(error))}</strong>`));
     return;
   }
 
   if (!code || !state) {
-    res.status(400).send('<h2>Missing code or state.</h2><a href="/">Back to admin</a>');
+    res.status(400).send(callbackPage('error', 'Missing Parameters', 'The OAuth callback is missing a code or state parameter.'));
     return;
   }
 
   const pending = await getRedis().get<{ alias: string; type: typeof ALLOWED_TYPES[number] }>(stateKey(state));
   if (!pending) {
-    res.status(400).send('<h2>Unknown or expired OAuth state.</h2><a href="/">Back to admin</a>');
+    res.status(400).send(callbackPage('error', 'Session Expired', 'This OAuth link has expired or already been used. Please start the connection flow again from the admin panel.'));
     return;
   }
 
@@ -95,14 +153,14 @@ router.get('/google/callback', requireAuth, async (req: Request, res: Response) 
       isDisconnected: false,
     });
 
-    res.send(`
-      <h2>✅ Connected!</h2>
-      <p>Google ${escapeHtml(pending.type)} account "<strong>${escapeHtml(pending.alias)}</strong>" connected successfully.</p>
-      <a href="/">Back to admin panel</a>
-    `);
+    res.send(callbackPage(
+      'success',
+      'Connected!',
+      `Google <strong>${escapeHtml(pending.type)}</strong> account <strong>"${escapeHtml(pending.alias)}"</strong> was connected successfully.`,
+    ));
   } catch (err) {
     console.error('Google OAuth callback error:', err);
-    res.status(500).send('<h2>❌ Connection failed. Check server logs for details.</h2><a href="/">Back to admin</a>');
+    res.status(500).send(callbackPage('error', 'Connection Failed', 'Something went wrong on the server. Check the server logs for details.'));
   }
 });
 

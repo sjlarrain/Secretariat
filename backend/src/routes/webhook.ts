@@ -14,6 +14,7 @@ import { menuHandler } from '../handlers/menu.handler';
 import { workHandler } from '../handlers/work.handler';
 import { statusHandler } from '../handlers/status.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
+import { replyRescheduleHandler } from '../handlers/reply-reschedule.handler';
 import type { ParsedCommand } from '../parser/command.parser';
 
 const router = Router();
@@ -43,6 +44,7 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   const text = (req as WebhookRequest).webhookText;
   const messageId = (req as WebhookRequest).messageId;
   const buttonReplyId = (req as WebhookRequest).buttonReplyId;
+  const contextMessageId = (req as WebhookRequest).contextMessageId;
 
   if (isDuplicate(messageId)) return;
 
@@ -56,6 +58,16 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   }
 
   if (!text?.trim()) return;
+
+  // If this is a reply to a bot reminder/task/work message, attempt reschedule
+  if (contextMessageId) {
+    try {
+      const handled = await replyRescheduleHandler(contextMessageId, text.trim(), from);
+      if (handled) return;
+    } catch (err) {
+      console.error('Reply reschedule error:', err);
+    }
+  }
 
   try {
     // Auto-save bare URLs as links (no /prefix required)

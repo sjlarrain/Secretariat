@@ -16,6 +16,10 @@ export default function TasksPage() {
   const [err, setErr] = useState('');
   const [snoozeTarget, setSnoozeTarget] = useState<{ task: LocalTask; mode: 'snooze' | 'remind' } | null>(null);
   const [snoozing, setSnoozing] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<number | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [savingReminder, setSavingReminder] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -78,6 +82,33 @@ export default function TasksPage() {
       flash('Failed. Try again.', true);
     } finally {
       setSnoozing(false);
+    }
+  }
+
+  function openEditReminder(task: LocalTask) {
+    const d = task.dueDate ? new Date(`${task.dueDate}T${task.dueTime ?? '09:00'}:00`) : new Date();
+    setEditDate(d.toLocaleDateString('en-CA'));
+    setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setEditingReminderId(task.id);
+    setSnoozeTarget(null);
+  }
+
+  async function handleSaveReminder(id: number) {
+    if (!editDate || !editTime) return;
+    setSavingReminder(true);
+    setErr('');
+    try {
+      const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
+      await api.updateTaskReminder(id, fireAt);
+      setItems((prev) => prev.map((t) => t.id === id
+        ? { ...t, dueDate: editDate, dueTime: editTime, qstashMessageId: t.qstashMessageId ?? 'scheduled' }
+        : t));
+      setEditingReminderId(null);
+      flash('Reminder updated.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not update reminder. Check the date and time.');
+    } finally {
+      setSavingReminder(false);
     }
   }
 
@@ -215,11 +246,18 @@ export default function TasksPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {task.qstashMessageId ? (
-                    <button
-                      className="btn-secondary"
-                      style={{ fontSize: 12 }}
-                      onClick={() => setSnoozeTarget({ task, mode: 'snooze' })}
-                    >Snooze</button>
+                    <>
+                      <button
+                        className="btn-secondary"
+                        style={{ fontSize: 12 }}
+                        onClick={() => setSnoozeTarget({ task, mode: 'snooze' })}
+                      >Snooze</button>
+                      <button
+                        className="btn-secondary"
+                        style={{ fontSize: 12 }}
+                        onClick={() => editingReminderId === task.id ? setEditingReminderId(null) : openEditReminder(task)}
+                      >{editingReminderId === task.id ? 'Close' : 'Edit'}</button>
+                    </>
                   ) : (
                     <button
                       className="btn-secondary"
@@ -237,6 +275,30 @@ export default function TasksPage() {
                   </button>
                 </div>
               </div>
+              {editingReminderId === task.id && (
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    style={{ fontSize: 12, padding: '3px 6px' }}
+                  />
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    style={{ fontSize: 12, padding: '3px 6px' }}
+                  />
+                  <button
+                    className="btn-primary"
+                    style={{ fontSize: 11, padding: '3px 10px' }}
+                    disabled={savingReminder}
+                    onClick={() => handleSaveReminder(task.id)}
+                  >
+                    {savingReminder ? '…' : 'Save'}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

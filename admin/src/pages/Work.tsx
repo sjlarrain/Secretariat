@@ -13,6 +13,10 @@ export default function WorkPage() {
   const [err, setErr] = useState('');
   const [snoozeTarget, setSnoozeTarget] = useState<{ item: WorkItem; mode: 'snooze' | 'remind' } | null>(null);
   const [snoozing, setSnoozing] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<number | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [savingReminder, setSavingReminder] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -75,6 +79,33 @@ export default function WorkPage() {
       flash('Failed. Try again.', true);
     } finally {
       setSnoozing(false);
+    }
+  }
+
+  function openEditReminder(item: WorkItem) {
+    const d = item.reminderFor ? new Date(item.reminderFor) : new Date();
+    setEditDate(d.toLocaleDateString('en-CA'));
+    setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setEditingReminderId(item.id);
+    setSnoozeTarget(null);
+  }
+
+  async function handleSaveReminder(id: number) {
+    if (!editDate || !editTime) return;
+    setSavingReminder(true);
+    setErr('');
+    try {
+      const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
+      await api.updateWorkReminder(id, fireAt);
+      setItems((prev) => prev.map((w) => w.id === id
+        ? { ...w, reminderFor: fireAt, qstashMessageId: w.qstashMessageId ?? 'scheduled' }
+        : w));
+      setEditingReminderId(null);
+      flash('Reminder updated.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not update reminder. Check the date and time.');
+    } finally {
+      setSavingReminder(false);
     }
   }
 
@@ -163,11 +194,18 @@ export default function WorkPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {item.qstashMessageId ? (
-                    <button
-                      className="btn-secondary"
-                      style={{ fontSize: 12 }}
-                      onClick={() => setSnoozeTarget({ item, mode: 'snooze' })}
-                    >Snooze</button>
+                    <>
+                      <button
+                        className="btn-secondary"
+                        style={{ fontSize: 12 }}
+                        onClick={() => setSnoozeTarget({ item, mode: 'snooze' })}
+                      >Snooze</button>
+                      <button
+                        className="btn-secondary"
+                        style={{ fontSize: 12 }}
+                        onClick={() => editingReminderId === item.id ? setEditingReminderId(null) : openEditReminder(item)}
+                      >{editingReminderId === item.id ? 'Close' : 'Edit'}</button>
+                    </>
                   ) : (
                     <button
                       className="btn-secondary"
@@ -185,6 +223,30 @@ export default function WorkPage() {
                   </button>
                 </div>
               </div>
+              {editingReminderId === item.id && (
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    style={{ fontSize: 12, padding: '3px 6px' }}
+                  />
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    style={{ fontSize: 12, padding: '3px 6px' }}
+                  />
+                  <button
+                    className="btn-primary"
+                    style={{ fontSize: 11, padding: '3px 10px' }}
+                    disabled={savingReminder}
+                    onClick={() => handleSaveReminder(item.id)}
+                  >
+                    {savingReminder ? '…' : 'Save'}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

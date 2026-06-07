@@ -31,12 +31,13 @@ export async function sendInteractiveButtons(
   bodyText: string,
   buttons: InteractiveButton[],
   footerText?: string,
-): Promise<void> {
-  await getClient().messages.sendInteractiveButtons({
+): Promise<string> {
+  const res = await getClient().messages.sendInteractiveButtons({
     phoneNumberId: env.KAPSO_PHONE_NUMBER_ID,
     to,
     bodyText,
     buttons: buttons.map((b) => ({ id: b.id, title: b.title })),
     ...(footerText ? { footerText } : {}),
   });
+  return res.messages[0]?.id ?? '';
 }

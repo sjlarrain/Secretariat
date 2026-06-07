@@ -665,7 +665,7 @@ export default function IdeasPage() {
 
                 return (
                   <div key={idea.id} className="card" style={{ padding: '14px 18px', opacity: 0.85 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--text-muted)', textDecoration: 'line-through' }}>
                           {idea.text}
@@ -685,7 +685,7 @@ export default function IdeasPage() {
                           )}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 6, flexShrink: 0 }}>
                         <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => handleRestore(idea.id)}>
                           Restore
                         </button>
@@ -766,7 +766,7 @@ export default function IdeasPage() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: 12 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 14, lineHeight: 1.45 }}>{idea.text}</div>
                             <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
@@ -785,7 +785,7 @@ export default function IdeasPage() {
                               </span>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 6, flexShrink: 0 }}>
                             <button
                               className="btn-ghost"
                               style={{ fontSize: 12, color: 'var(--green)', borderColor: 'var(--green)' }}

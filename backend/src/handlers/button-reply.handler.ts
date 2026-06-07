@@ -26,7 +26,7 @@ function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeO
 
   if (rawAction === 'done') return { action: 'done', option: null, type, itemId };
 
-  const optionMap: Record<string, SnoozeOption> = { s1d: '1d', s3d: '3d', smon: 'monday' };
+  const optionMap: Record<string, SnoozeOption> = { s1h: '1h', s1d: '1d', smon: 'monday' };
   const option = optionMap[rawAction];
   if (!option) return null;
 

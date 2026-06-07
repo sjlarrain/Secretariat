@@ -5,6 +5,7 @@ import { fireMorningDigest } from '../cron/morning-digest';
 import { fireWeeklySummary } from '../cron/weekly-summary';
 import { getWorkItems } from '../integrations/local/work';
 import { getSettings } from '../integrations/token-store';
+import { storeReplyTarget } from '../integrations/local/wa-reply-map';
 import { env } from '../env';
 
 const router = Router();
@@ -19,15 +20,16 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
 
   try {
     if (reminderId) {
-      await sendInteractiveButtons(
+      const waMessageId = await sendInteractiveButtons(
         phoneNumber,
         `⏰ *Reminder:* ${title}`,
         [
+          { id: `s1h_rem_${reminderId}`, title: 'Snooze 1 hour' },
           { id: `s1d_rem_${reminderId}`, title: 'Snooze 1 day' },
           { id: `smon_rem_${reminderId}`, title: 'Next Monday' },
-          { id: `done_rem_${reminderId}`, title: 'Done' },
         ],
       );
+      await storeReplyTarget(waMessageId, { type: 'rem', id: reminderId, title, phoneNumber }).catch(() => null);
     } else {
       await sendMessage(phoneNumber, `⏰ *Reminder:* ${title}`);
     }
@@ -66,15 +68,16 @@ router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Respo
   }
   try {
     if (workItemId != null) {
-      await sendInteractiveButtons(
+      const waMessageId = await sendInteractiveButtons(
         phoneNumber,
         `📋 *Work reminder:* ${text}`,
         [
+          { id: `s1h_work_${workItemId}`, title: 'Snooze 1 hour' },
           { id: `s1d_work_${workItemId}`, title: 'Snooze 1 day' },
           { id: `smon_work_${workItemId}`, title: 'Next Monday' },
-          { id: `done_work_${workItemId}`, title: 'Done' },
         ],
       );
+      await storeReplyTarget(waMessageId, { type: 'work', id: String(workItemId), title: text, phoneNumber }).catch(() => null);
     } else {
       await sendMessage(phoneNumber, `📋 *Work reminder:* ${text}`);
     }
@@ -93,15 +96,16 @@ router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Respo
   }
   try {
     if (taskId != null) {
-      await sendInteractiveButtons(
+      const waMessageId = await sendInteractiveButtons(
         phoneNumber,
         `📌 *Task reminder:* ${title}`,
         [
+          { id: `s1h_task_${taskId}`, title: 'Snooze 1 hour' },
           { id: `s1d_task_${taskId}`, title: 'Snooze 1 day' },
           { id: `smon_task_${taskId}`, title: 'Next Monday' },
-          { id: `done_task_${taskId}`, title: 'Done' },
         ],
       );
+      await storeReplyTarget(waMessageId, { type: 'task', id: String(taskId), title, phoneNumber }).catch(() => null);
     } else {
       await sendMessage(phoneNumber, `📌 *Task reminder:* ${title}`);
     }

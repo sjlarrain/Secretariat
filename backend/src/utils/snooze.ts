@@ -1,6 +1,6 @@
 import { combineDateAndTime } from './date';
 
-export type SnoozeOption = '1d' | '3d' | 'monday';
+export type SnoozeOption = '1h' | '1d' | 'monday';
 
 // Returns the next Monday after `from` (never `from` itself if it is already Monday)
 // Uses the target timezone to determine the local calendar date and day of week.
@@ -17,17 +17,17 @@ function nextMonday(from: Date, timezone: string): Date {
 
 export function getSnoozeDate(option: SnoozeOption, defaultTime = '09:00', timezone = 'America/Santiago'): Date {
   const now = new Date();
+
+  if (option === '1h') {
+    return new Date(now.getTime() + 60 * 60 * 1000);
+  }
+
   // Get today's calendar date in the user's timezone to avoid day-boundary issues
   const dateStr = now.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD
   const [year, month, day] = dateStr.split('-').map(Number);
 
   if (option === '1d') {
     const noon = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
-    return combineDateAndTime(noon, defaultTime, timezone);
-  }
-
-  if (option === '3d') {
-    const noon = new Date(Date.UTC(year, month - 1, day + 3, 12, 0, 0));
     return combineDateAndTime(noon, defaultTime, timezone);
   }
 

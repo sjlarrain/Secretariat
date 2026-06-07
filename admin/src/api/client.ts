@@ -95,6 +95,11 @@ export const api = {
   snoozeReminder: (id: string, option: SnoozeOption) =>
     request(`/reminders/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
 
+  updateTaskReminder: (id: number, fireAt: string) =>
+    request(`/tasks/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
+  updateWorkReminder: (id: number, fireAt: string) =>
+    request(`/work/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
+
   snoozeWork: (id: number, option: SnoozeOption) =>
     request(`/work/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
   remindWork: (id: number, option: SnoozeOption) =>
@@ -212,7 +217,7 @@ export interface WorkItem {
   qstashMessageId?: string;
 }
 
-export type SnoozeOption = '1d' | '3d' | 'monday';
+export type SnoozeOption = '1h' | '1d' | 'monday';
 
 export interface DigestConfig {
   enabled: boolean;

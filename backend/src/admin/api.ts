@@ -577,7 +577,7 @@ function ownerPhone(): string {
 
 function parseSnoozeOption(body: unknown): SnoozeOption | null {
   const option = (body as { option?: string }).option;
-  if (option === '1d' || option === '3d' || option === 'monday') return option;
+  if (option === '1h' || option === '1d' || option === 'monday') return option;
   return null;
 }
 
@@ -668,6 +668,28 @@ router.post('/work/:id/snooze', requireAuth, async (req, res) => {
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
+// Tasks — update reminder to a specific date/time
+router.put('/tasks/:id/reminder', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { fireAt } = req.body as { fireAt?: string };
+  if (!fireAt) { res.status(400).json({ error: 'Missing fireAt' }); return; }
+  const newFireAt = new Date(fireAt);
+  if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
+    res.status(400).json({ error: 'Invalid or past date' }); return;
+  }
+  const tasks = await getTasks();
+  const task = tasks.find((t) => t.id === id);
+  if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+  if (task.qstashMessageId) await cancelMessage(task.qstashMessageId).catch(() => {});
+  const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
+    taskId: id,
+    title: task.title,
+    phoneNumber: ownerPhone(),
+  });
+  await updateTaskQStashId(id, newMessageId);
+  res.json({ ok: true, fireAt: newFireAt.toISOString() });
+});
+
 // Work — add reminder for items without one
 router.post('/work/:id/remind', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
@@ -686,6 +708,27 @@ router.post('/work/:id/remind', requireAuth, async (req, res) => {
   });
   await updateWorkItemReminder(id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
+});
+
+// Work — update reminder to a specific date/time
+router.put('/work/:id/reminder', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { fireAt } = req.body as { fireAt?: string };
+  if (!fireAt) { res.status(400).json({ error: 'Missing fireAt' }); return; }
+  const newFireAt = new Date(fireAt);
+  if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
+    res.status(400).json({ error: 'Invalid or past date' }); return;
+  }
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+  if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
+  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
+    workItemId: id,
+    text: item.text,
+    phoneNumber: ownerPhone(),
+  });
+  await updateWorkItemReminder(id, newFireAt.toISOString(), newMessageId);
+  res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 
 // --- Google OAuth start (proxy from admin panel) ---

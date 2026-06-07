@@ -9,8 +9,8 @@ interface Props {
 }
 
 const OPTIONS: { value: SnoozeOption; label: string }[] = [
+  { value: '1h', label: '1 hour' },
   { value: '1d', label: '1 day' },
-  { value: '3d', label: '3 days' },
   { value: 'monday', label: 'Next Monday' },
 ];
 

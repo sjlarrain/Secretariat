@@ -32,20 +32,27 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
 
   const delaySeconds = Math.floor((target.getTime() - now) / 1000);
   const id = randomUUID();
+  const MAX_QSTASH_DELAY = 7 * 24 * 60 * 60; // 7 days in seconds
 
   try {
-    const messageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
-      reminderId: id,
-      title,
-      phoneNumber: from,
-    });
-
-    await saveReminder({ id, title, phoneNumber: from, fireAt: target.toISOString(), messageId });
-
-    await sendMessage(
-      from,
-      `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target, false, settings.timezone)} at ${formatTime(target, settings.timezone)}`
-    );
+    if (delaySeconds > MAX_QSTASH_DELAY) {
+      await saveReminder({ id, title, phoneNumber: from, fireAt: target.toISOString(), messageId: '', deferred: true });
+      await sendMessage(
+        from,
+        `⏰ *Reminder set (deferred)*\n📌 ${title}\n📅 ${formatDate(target, false, settings.timezone)} at ${formatTime(target, settings.timezone)}\n_Will be promoted to queue within 7 days of fire time._`
+      );
+    } else {
+      const messageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
+        reminderId: id,
+        title,
+        phoneNumber: from,
+      });
+      await saveReminder({ id, title, phoneNumber: from, fireAt: target.toISOString(), messageId });
+      await sendMessage(
+        from,
+        `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target, false, settings.timezone)} at ${formatTime(target, settings.timezone)}`
+      );
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Could not set reminder: ${msg}`);

@@ -34,6 +34,11 @@ export interface Settings {
     scheduleId?: string;
   };
   defaultTaskTime: string; // HH:MM — default reminder time when --for is set but --at is omitted
+  reminderPromoter: {
+    enabled: boolean;
+    time: string;    // HH:MM — weekly run time to promote deferred reminders to QStash
+    scheduleId?: string;
+  };
 }
 
 const ACCOUNTS_KEY = 'secretariat:accounts';
@@ -45,6 +50,7 @@ const DEFAULT_SETTINGS: Settings = {
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
   workReminder: { enabled: true, time: '09:00' },
   defaultTaskTime: '09:00',
+  reminderPromoter: { enabled: false, time: '08:00' },
 };
 
 let _redis: Redis | null = null;

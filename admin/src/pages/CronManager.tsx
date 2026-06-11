@@ -30,6 +30,7 @@ export default function CronManager() {
   const [err, setErr] = useState('');
   const [editingMorning, setEditingMorning] = useState(false);
   const [editingWeekly, setEditingWeekly] = useState(false);
+  const [editingPromoter, setEditingPromoter] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingReminder, setEditingReminder] = useState<string | null>(null);
   const [editDate, setEditDate] = useState('');
@@ -61,6 +62,10 @@ export default function CronManager() {
     setSettings((prev) => prev ? { ...prev, weeklySummary: { ...prev.weeklySummary, [key]: val } } : prev);
   }
 
+  function updatePromoter<K extends keyof Settings['reminderPromoter']>(key: K, val: Settings['reminderPromoter'][K]) {
+    setSettings((prev) => prev ? { ...prev, reminderPromoter: { ...(prev.reminderPromoter ?? { enabled: false, time: '08:00' }), [key]: val } } : prev);
+  }
+
   function toggleMorningDay(day: number) {
     const days = settings!.morningDigest.days;
     updateMorning('days', days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort());
@@ -74,6 +79,7 @@ export default function CronManager() {
       setMsg('Settings saved.');
       setEditingMorning(false);
       setEditingWeekly(false);
+      setEditingPromoter(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Save failed.');
     } finally {
@@ -298,6 +304,51 @@ export default function CronManager() {
                     ))}
                   </div>
                 </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Reminder Promoter */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <span style={{ fontSize: 16 }}>📅</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Reminder Promoter</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                  Weekly cron — promotes deferred reminders to QStash
+                </div>
+              </div>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.reminderPromoter?.enabled ?? false}
+                  onChange={(e) => {
+                    updatePromoter('enabled', e.target.checked);
+                    if (!e.target.checked) setEditingPromoter(false);
+                  }}
+                />
+                <span className="toggle-track" />
+              </label>
+            </div>
+
+            {(settings.reminderPromoter?.enabled ?? false) && !editingPromoter ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <StatusPill label={`at ${settings.reminderPromoter?.time ?? '08:00'}`} />
+                  <StatusPill label="every Sunday" />
+                </div>
+                <button className="btn-ghost" style={{ fontSize: 12, flexShrink: 0 }} onClick={() => setEditingPromoter(true)}>
+                  Edit
+                </button>
+              </div>
+            ) : (settings.reminderPromoter?.enabled ?? false) ? (
+              <div style={{ maxWidth: 180 }}>
+                <label className="field-label">Run at</label>
+                <input
+                  type="time"
+                  value={settings.reminderPromoter?.time ?? '08:00'}
+                  onChange={(e) => updatePromoter('time', e.target.value)}
+                />
               </div>
             ) : null}
           </div>

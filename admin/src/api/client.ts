@@ -233,4 +233,5 @@ export interface Settings {
   morningDigest: DigestConfig & { days: number[] };
   weeklySummary: DigestConfig & { day: number };
   defaultTaskTime: string; // HH:MM — default reminder time for tasks with --for but no --at
+  reminderPromoter: DigestConfig; // weekly cron to promote deferred reminders to QStash
 }

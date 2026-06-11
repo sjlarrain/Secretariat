@@ -7,6 +7,7 @@ export interface PendingReminder {
   phoneNumber: string;
   fireAt: string; // ISO string
   messageId: string;
+  deferred?: boolean; // true when fireAt is beyond QStash free-tier delay limit
 }
 
 const KEY = 'secretariat:reminders';
@@ -35,7 +36,7 @@ export async function removeReminder(id: string): Promise<boolean> {
   return true;
 }
 
-export async function updateReminder(id: string, updates: Partial<Pick<PendingReminder, 'fireAt' | 'messageId'>>): Promise<boolean> {
+export async function updateReminder(id: string, updates: Partial<Pick<PendingReminder, 'fireAt' | 'messageId' | 'deferred'>>): Promise<boolean> {
   const list = await getReminders();
   const idx = list.findIndex((r) => r.id === id);
   if (idx === -1) return false;

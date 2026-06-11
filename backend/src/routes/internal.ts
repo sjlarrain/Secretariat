@@ -3,9 +3,11 @@ import { qstashVerify } from '../middleware/qstash-verify';
 import { sendMessage, sendInteractiveButtons } from '../kapso/client';
 import { fireMorningDigest } from '../cron/morning-digest';
 import { fireWeeklySummary } from '../cron/weekly-summary';
+import { promoteDeferred } from '../cron/reminder-promoter';
 import { getWorkItems } from '../integrations/local/work';
 import { getSettings } from '../integrations/token-store';
 import { storeReplyTarget } from '../integrations/local/wa-reply-map';
+import { removeReminder } from '../integrations/local/reminders';
 import { env } from '../env';
 
 const router = Router();
@@ -30,6 +32,7 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
         ],
       );
       await storeReplyTarget(waMessageId, { type: 'rem', id: reminderId, title, phoneNumber }).catch(() => null);
+      await removeReminder(reminderId).catch(() => null);
     } else {
       await sendMessage(phoneNumber, `⏰ *Reminder:* ${title}`);
     }
@@ -72,7 +75,7 @@ router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Respo
         phoneNumber,
         `📋 *Work reminder:* ${text}`,
         [
-          { id: `s1h_work_${workItemId}`, title: 'Snooze 1 hour' },
+          { id: `done_work_${workItemId}`, title: 'Done' },
           { id: `s1d_work_${workItemId}`, title: 'Snooze 1 day' },
           { id: `smon_work_${workItemId}`, title: 'Next Monday' },
         ],
@@ -100,7 +103,7 @@ router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Respo
         phoneNumber,
         `📌 *Task reminder:* ${title}`,
         [
-          { id: `s1h_task_${taskId}`, title: 'Snooze 1 hour' },
+          { id: `done_task_${taskId}`, title: 'Done' },
           { id: `s1d_task_${taskId}`, title: 'Snooze 1 day' },
           { id: `smon_task_${taskId}`, title: 'Next Monday' },
         ],
@@ -131,6 +134,16 @@ router.post('/digest/work', qstashVerify, async (_req: Request, res: Response) =
   } catch (err) {
     console.error('Work digest error:', err);
     res.status(500).json({ error: 'Work digest failed' });
+  }
+});
+
+router.post('/reminder/promote', qstashVerify, async (_req: Request, res: Response) => {
+  try {
+    const result = await promoteDeferred();
+    res.status(200).json({ ok: true, ...result });
+  } catch (err) {
+    console.error('Reminder promote error:', err);
+    res.status(500).json({ error: 'Promotion failed' });
   }
 });
 

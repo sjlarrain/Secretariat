@@ -248,6 +248,25 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
   next.workReminder = nextWork;
 
+  // Handle reminder promoter cron (weekly, runs at configured time on Sunday)
+  const prevPromoter = current.reminderPromoter ?? { enabled: false, time: '08:00' };
+  const nextPromoter = next.reminderPromoter ?? prevPromoter;
+
+  if (prevPromoter.scheduleId && (!nextPromoter.enabled || prevPromoter.time !== nextPromoter.time)) {
+    try { await deleteSchedule(prevPromoter.scheduleId); } catch { /* ignore */ }
+    nextPromoter.scheduleId = undefined;
+  }
+
+  if (nextPromoter.enabled && !nextPromoter.scheduleId) {
+    const cron = localTimeToCron(nextPromoter.time, next.timezone, [0]); // every Sunday
+    try {
+      nextPromoter.scheduleId = await scheduleCron('/internal/reminder/promote', cron, {});
+    } catch (err) {
+      console.error('Failed to create reminder promoter schedule:', err);
+    }
+  }
+  next.reminderPromoter = nextPromoter;
+
   await saveSettings(next);
   res.json({ ok: true, settings: next });
 });

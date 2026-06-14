@@ -2,7 +2,7 @@
 
 A personal WhatsApp command bot that lets you manage your calendar, tasks, reminders, ideas, links, and weekend work list — all from a WhatsApp chat. Backed by a web admin panel to configure integrations, digest schedules, meeting plan types, and more.
 
-**Owner:** Single user (Santiago). Only whitelisted WhatsApp numbers can trigger commands.
+**Owner:** Single user (Santiago). Whitelisted numbers get full command access. Third-party contacts (e.g. family) can send `/set` to create events that Santiago reviews and confirms.
 
 ---
 
@@ -24,6 +24,13 @@ Send a command from WhatsApp and Secretariat handles the rest:
 | `/start` | Wakes up the bot (useful after Render cold start) |
 
 You can also send a bare `https://...` URL without any command — it will be auto-saved as a link.
+
+Third-party contacts (registered in the admin panel) have access to a limited command set:
+
+| Command | What it does |
+|---------|-------------|
+| `/set <title> -f <date> -a <time>` | Proposes an event to Santiago — auto-saved as reminder, reclassifiable via buttons |
+| `/menu` | Shows available flags and usage examples |
 
 ---
 
@@ -103,13 +110,15 @@ NODE_ENV=production
 │       │   ├── start.handler.ts
 │       │   ├── menu.handler.ts
 │       │   ├── schedule.handler.ts
-│       │   ├── task.handler.ts     # /task — local task manager (add, list, mark done)
-│       │   ├── gtask.handler.ts    # /gtask — creates task in Google Tasks
-│       │   ├── reminder.handler.ts # Saves pending reminder to Redis; fires via QStash
+│       │   ├── task.handler.ts        # /task — local task manager (add, list, mark done)
+│       │   ├── gtask.handler.ts       # /gtask — creates task in Google Tasks
+│       │   ├── reminder.handler.ts    # Saves pending reminder to Redis; fires via QStash
 │       │   ├── mytask.handler.ts
 │       │   ├── myschedule.handler.ts  # Regular/week mode + --plan availability mode
 │       │   ├── ideas.handler.ts
-│       │   └── links.handler.ts    # Save, list, and archive links; auto-triggered by bare URLs
+│       │   ├── links.handler.ts       # Save, list, and archive links; auto-triggered by bare URLs
+│       │   ├── third-party.handler.ts # /set and /menu for third-party contacts
+│       │   └── button-reply.handler.ts # Interactive button taps (snooze, done, tp_ reclassify)
 │       │
 │       ├── routes/
 │       │   ├── webhook.ts          # POST /webhook/whatsapp — entry point; auto-detects bare URLs
@@ -129,7 +138,8 @@ NODE_ENV=production
 │       │       ├── reminders.ts    # Pending reminders store (Upstash Redis) — cleared on fire
 │       │       ├── links.ts        # Links store (Upstash Redis) — unread/read archive
 │       │       ├── tasks.ts        # Local tasks store (Upstash Redis) — secretariat:tasks
-│       │       └── work.ts         # Work list store (Upstash Redis)
+│       │       ├── work.ts         # Work list store (Upstash Redis)
+│       │       └── third-party.ts  # Third-party contacts + pending events (Upstash Redis)
 │       │
 │       ├── cron/
 │       │   ├── morning-digest.ts   # Fetches today's events → sends WhatsApp morning summary
@@ -350,7 +360,7 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Dashboard** | Upcoming events, pending local tasks, recent ideas at a glance |
 | **Tasks** | Local task manager: create, filter by project, mark done, view completed |
 | **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set default; select which sub-calendars to include; disconnect |
-| **Whitelist** | View allowed WhatsApp numbers (edit via `WHITELISTED_NUMBERS` env var) |
+| **Whitelist** | View owner numbers (edit via `WHITELISTED_NUMBERS` env var); manage third-party contacts with name + number |
 | **Cron Manager** | Configure morning digest and weekly summary; view and cancel pending reminders |
 | **Plans** | Create and manage meeting plan types (name, days, time slots, duration, buffer) for `/myschedule --plan` |
 | **Ideas** | Folder-style view by project; create, edit, delete, reassign; trash with 30-day auto-purge |
@@ -420,7 +430,7 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 | v1.6 | Code Review & Hardening | ✅ Done — webhook sig, HKDF tokens, rate limit, XSS fixes |
 | v1.7 | Local Task Manager | ✅ Done — /task command, project tags, reminder scheduling, admin Tasks page |
 | v1.8 | Snooze | ✅ Done — snooze/remind for reminders, tasks, work; WhatsApp interactive buttons; admin modal |
-| v1.9 | Multi-User | User accounts, major open operation |
+| v1.9 | Multi-User | ✅ Done (partial) — third-party contacts: /set, /menu, reclassify buttons, done notification |
 | v1.10 | Todoist | Task integration via Todoist API |
 | v1.11 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
 | v1.12 | NLP | Natural language messages via Claude API |

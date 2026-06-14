@@ -8,7 +8,7 @@
 
 A personal WhatsApp-based command bot that lets the owner send structured commands to schedule calendar events, create tasks, set reminders, and receive daily/weekly digests. All via WhatsApp messages. A web-based admin panel manages integrations, accounts, and digest schedules.
 
-**Owner:** Single user (Santiago). Only his WhatsApp number can trigger commands.
+**Owner:** Single user (Santiago). Whitelisted numbers have full command access. Third-party contacts (registered in the admin panel) can send `/set` and `/menu` to propose events that Santiago reviews via interactive buttons.
 
 ---
 
@@ -26,7 +26,7 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   ├── parser/
 │   │   │   └── command.parser.ts     # Parses raw WhatsApp text into structured commands
 │   │   ├── middleware/
-│   │   │   ├── whitelist.ts          # Rejects requests from non-whitelisted numbers
+│   │   │   ├── whitelist.ts          # Allows whitelisted + third-party numbers; tags isThirdParty on request
 │   │   │   └── qstash-verify.ts      # Verifies QStash webhook signatures
 │   │   ├── handlers/
 │   │   │   ├── start.handler.ts
@@ -34,7 +34,9 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │   ├── task.handler.ts
 │   │   │   ├── reminder.handler.ts
 │   │   │   ├── mytask.handler.ts
-│   │   │   └── myschedule.handler.ts
+│   │   │   ├── myschedule.handler.ts
+│   │   │   ├── third-party.handler.ts  # /set and /menu for third-party contacts
+│   │   │   └── button-reply.handler.ts # Snooze/done buttons + tp_ reclassify buttons
 │   │   ├── cron/
 │   │   │   ├── morning-digest.ts     # Called by QStash cron
 │   │   │   └── weekly-summary.ts     # Called by QStash cron
@@ -45,9 +47,14 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │   │   ├── oauth.ts          # Google OAuth flow
 │   │   │   │   ├── calendar.ts       # Google Calendar API calls
 │   │   │   │   └── tasks.ts          # Google Tasks API calls
-│   │   │   └── microsoft/
-│   │   │       ├── oauth.ts          # Microsoft OAuth flow
-│   │   │       └── calendar.ts       # Microsoft Graph calendar calls
+│   │   │   └── local/
+│   │   │       ├── reminders.ts      # Pending reminders (secretariat:reminders)
+│   │   │       ├── tasks.ts          # Local tasks (secretariat:tasks)
+│   │   │       ├── ideas.ts          # Ideas + projects (secretariat:ideas, secretariat:projects)
+│   │   │       ├── links.ts          # Saved links (secretariat:links)
+│   │   │       ├── plans.ts          # Meeting plan types (secretariat:plans)
+│   │   │       ├── work.ts           # Weekend work list (secretariat:work)
+│   │   │       └── third-party.ts    # Third-party contacts + pending events (secretariat:third-party-*)
 │   │   ├── kapso/
 │   │   │   └── client.ts             # Kapso SDK wrapper — send WhatsApp messages
 │   │   ├── qstash/
@@ -302,13 +309,41 @@ Always resolve relative dates against the user's configured timezone (stored in 
 Flow:
 1. Receive Kapso webhook payload
 2. Use `normalizeWebhook()` from `@kapso/whatsapp-cloud-api/server` to parse
-3. Extract message text and sender phone number
-4. Run whitelist middleware — if not whitelisted, send WhatsApp reply: `"❌ Unauthorized number."` and return 200
-5. Parse message with command parser
-6. If parse error → send WhatsApp error reply and return 200
-7. Route to correct handler based on command name
-8. Handler sends WhatsApp reply on success or failure
+3. Extract message text, sender phone, button reply ID, and context message ID
+4. Run whitelist middleware:
+   - If sender is in `WHITELISTED_NUMBERS` → owner path, full command access
+   - If sender is in `secretariat:third-party-contacts` → third-party path, sets `isThirdParty: true`
+   - Otherwise → send `"❌ Unauthorized number."` and return 200
+5. If `isThirdParty` → route to `thirdPartyHandler` (handles `/set` and `/menu` only), return
+6. If `buttonReplyId` → route to `buttonReplyHandler` (snooze/done/tp_ reclassify), return
+7. If reply to a bot message → attempt `replyRescheduleHandler`, return if handled
+8. Parse message with command parser → route to correct handler
 9. Always return HTTP 200 to Kapso (even on errors — prevents retries)
+
+---
+
+## 8a. Third-Party Contacts
+
+Third-party contacts are external numbers (e.g. family members) that can propose events to the owner.
+
+**Redis keys:**
+- `secretariat:third-party-contacts` — `ThirdPartyContact[]` (`number`, `alias`)
+- `secretariat:third-party-pending` — `ThirdPartyPending[]` — pending proposed events, cleared once the owner taps a button
+
+**Flow:**
+1. Third-party sends `/set Doctor -f tomorrow -a 10am`
+2. Bot auto-saves as a reminder (fires to owner at the scheduled time — the default)
+3. Bot sends owner an interactive message with 3 buttons: **Reminder** · **Task** · **Schedule**
+4. Owner taps a button:
+   - **Reminder** — reminder already exists, just confirms and deletes pending entry
+   - **Task** — cancels the reminder, creates a local task; if the task is later marked done, the sender is notified
+   - **Schedule** — cancels the reminder, creates a Google Calendar event
+5. If owner never taps → reminder fires normally at the scheduled time
+6. Third-party sends `/menu` → receives flag usage and examples
+
+**Button ID format:** `tp_<type>_<pendingId>` where type is `rem`, `task`, or `cal`.
+
+**Admin panel:** Whitelist page → "Third-party contacts" section. Add by alias + E.164 number. Remove any time.
 
 ---
 
@@ -595,9 +630,10 @@ POST   /api/admin/logout
 GET    /api/admin/accounts                  # List all connected accounts
 DELETE /api/admin/accounts/:id              # Disconnect account
 PATCH  /api/admin/accounts/:id              # Update alias or set as default
-GET    /api/admin/whitelist                 # List whitelisted numbers
-POST   /api/admin/whitelist                 # Add number
-DELETE /api/admin/whitelist/:number         # Remove number
+GET    /api/admin/whitelist                        # List whitelisted numbers (read-only, env var)
+GET    /api/admin/third-party-contacts             # List third-party contacts
+POST   /api/admin/third-party-contacts             # Add contact { number, alias }
+DELETE /api/admin/third-party-contacts/:number     # Remove contact
 GET    /api/admin/settings                  # Get timezone + digest config
 PUT    /api/admin/settings                  # Update timezone + digest config
                                             # Also calls QStash to create/update/delete cron schedules

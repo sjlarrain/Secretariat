@@ -40,7 +40,10 @@
 | **v1.8 — Snooze** | | | |
 | v1.8 | Snooze for reminders, tasks, and work — Stage 1: web panel modal (1 day / 3 days / next Monday) + "Add reminder" for items without one. Stage 2: WhatsApp interactive buttons on reminder fire (Snooze 1 day / Next Monday / Dismiss) | ✅ Done | Medium |
 | **v1.9 — Multi-User** | | | |
-| v1.9 | User functionality — multi-user support, major open operation | ⬜ Pending | Hard |
+| v1.9 | Third-party contacts — register named contacts (e.g. wife) who can send `/set` and `/menu` to create events for Santiago | ✅ Done | Medium |
+| v1.9 | `/set` auto-saves as reminder by default; owner taps Reminder / Task / Schedule button to reclassify | ✅ Done | Medium |
+| v1.9 | Done notification — when a task created via `/set` is marked done, the original sender is notified | ✅ Done | Easy |
+| v1.9 | Full multi-user support (shared state, per-user permissions, multiple owners) | ⬜ Pending | Hard |
 | **v1.10 — Todoist** | | | |
 | v1.10 | Todoist integration — create & list tasks via API key | ⬜ Pending | Medium |
 | **v1.11 — Microsoft / Outlook** | | | |

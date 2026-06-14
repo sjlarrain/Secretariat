@@ -31,6 +31,9 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
         await cancelMessage(task.qstashMessageId).catch(() => null);
       }
       await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
+      if (task.thirdPartyPhone) {
+        await sendMessage(task.thirdPartyPhone, `✅ _"${task.title}"_ is done!`).catch(() => null);
+      }
       return;
     }
 

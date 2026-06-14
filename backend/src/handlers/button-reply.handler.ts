@@ -124,6 +124,9 @@ async function handleTaskButton(
   if (action === 'done') {
     await markTaskDone(taskId);
     await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
+    if (task.thirdPartyPhone) {
+      await sendMessage(task.thirdPartyPhone, `✅ _"${task.title}"_ is done!`).catch(() => null);
+    }
     return;
   }
 
@@ -209,7 +212,7 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
       }
       await removeReminder(pending.reminderId).catch(() => null);
 
-      const task = await addTask({ title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue });
+      const task = await addTask({ title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue, thirdPartyPhone: pending.senderPhone });
       const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
       if (delaySeconds > 0) {
         const msgId = await scheduleOnce(

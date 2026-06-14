@@ -14,6 +14,7 @@ export interface LocalTask {
   createdAt: string;
   doneAt?: string;
   qstashMessageId?: string;
+  thirdPartyPhone?: string; // set when task was created via third-party /set
 }
 
 async function getAllTasksRaw(): Promise<LocalTask[]> {
@@ -29,7 +30,7 @@ export async function getDoneTasks(): Promise<LocalTask[]> {
 }
 
 export async function addTask(
-  data: Pick<LocalTask, 'title' | 'project' | 'dueDate' | 'dueTime'>
+  data: Pick<LocalTask, 'title' | 'project' | 'dueDate' | 'dueTime' | 'thirdPartyPhone'>
 ): Promise<LocalTask> {
   const all = await getAllTasksRaw();
   const id = all.length ? Math.max(...all.map((t) => t.id)) + 1 : 1;
@@ -41,6 +42,7 @@ export async function addTask(
     dueTime: data.dueTime,
     status: 'open',
     createdAt: new Date().toISOString(),
+    ...(data.thirdPartyPhone ? { thirdPartyPhone: data.thirdPartyPhone } : {}),
   };
   await redis.set(TASKS_KEY, [...all, task]);
   return task;

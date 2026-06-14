@@ -9,7 +9,6 @@ import { removePendingEvent } from '../integrations/local/third-party';
 import { resolveAccount } from '../integrations/registry';
 import { createEvent } from '../integrations/google/calendar';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
-import { randomUUID } from 'crypto';
 
 // Button ID format: <action>_<type>_<itemId>
 // action: s1d | s3d | smon | done
@@ -200,42 +199,36 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
 
   try {
     if (type === 'rem') {
-      const id = randomUUID();
-      const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
-      const MAX_QSTASH_DELAY = 7 * 24 * 60 * 60;
-
-      if (delaySeconds <= 0) {
-        await sendMessage(from, '❌ That time is now in the past.');
-        return;
-      }
-
-      if (delaySeconds > MAX_QSTASH_DELAY) {
-        await saveReminder({ id, title: pending.title || pending.senderAlias, phoneNumber: from, fireAt: target.toISOString(), messageId: '', deferred: true });
-      } else {
-        const messageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
-          reminderId: id,
-          title: pending.title || `From ${pending.senderAlias}`,
-          phoneNumber: from,
-        });
-        await saveReminder({ id, title: pending.title || `From ${pending.senderAlias}`, phoneNumber: from, fireAt: target.toISOString(), messageId });
-      }
-
-      await sendMessage(from, `⏰ *Reminder set*\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
-      await sendMessage(pending.senderPhone, `✅ Santiago saved your reminder: _"${titleDisplay}"_ for ${dateLabel}.`);
+      // Reminder was already saved when /set was received — just confirm
+      await sendMessage(from, `⏰ *Kept as reminder*\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
 
     } else if (type === 'task') {
-      const task = await addTask({ title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue });
-      const msgId = await scheduleOnce(
-        '/internal/task/reminder/fire',
-        Math.floor((target.getTime() - Date.now()) / 1000),
-        { taskId: task.id, title: task.title, phoneNumber: from }
-      );
-      await updateTaskQStashId(task.id, msgId);
+      // Cancel the auto-saved reminder, create task instead
+      if (pending.reminderMessageId) {
+        await cancelMessage(pending.reminderMessageId).catch(() => null);
+      }
+      await removeReminder(pending.reminderId).catch(() => null);
 
-      await sendMessage(from, `✅ *Task saved* (#${task.id})\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
-      await sendMessage(pending.senderPhone, `✅ Santiago saved your task: _"${titleDisplay}"_ for ${dateLabel}.`);
+      const task = await addTask({ title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue });
+      const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
+      if (delaySeconds > 0) {
+        const msgId = await scheduleOnce(
+          '/internal/task/reminder/fire',
+          delaySeconds,
+          { taskId: task.id, title: task.title, phoneNumber: from }
+        );
+        await updateTaskQStashId(task.id, msgId);
+      }
+
+      await sendMessage(from, `✅ *Moved to task* (#${task.id})\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
 
     } else if (type === 'cal') {
+      // Cancel the auto-saved reminder, create calendar event instead
+      if (pending.reminderMessageId) {
+        await cancelMessage(pending.reminderMessageId).catch(() => null);
+      }
+      await removeReminder(pending.reminderId).catch(() => null);
+
       const account = await resolveAccount('calendar');
       if (!account) {
         await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
@@ -251,8 +244,7 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
         timezone,
       });
 
-      await sendMessage(from, `📅 *Event scheduled*\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
-      await sendMessage(pending.senderPhone, `✅ Santiago added to calendar: _"${titleDisplay}"_ for ${dateLabel}.`);
+      await sendMessage(from, `📅 *Moved to calendar*\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

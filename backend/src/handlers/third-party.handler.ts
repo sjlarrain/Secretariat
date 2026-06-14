@@ -1,5 +1,7 @@
 import { sendMessage, sendInteractiveButtons } from '../kapso/client';
 import { savePendingEvent } from '../integrations/local/third-party';
+import { saveReminder } from '../integrations/local/reminders';
+import { scheduleOnce } from '../qstash/client';
 import { getSettings } from '../integrations/token-store';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { randomUUID } from 'crypto';
@@ -138,32 +140,57 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
       return;
     }
 
-    const id = randomUUID();
+    const ownerPhone = whitelistedNumbers[0];
+    const reminderId = randomUUID();
+    const pendingId = randomUUID();
+    const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
+    const MAX_QSTASH_DELAY = 7 * 24 * 60 * 60;
+    const reminderTitle = parsed.title || `From ${alias}`;
+
+    let reminderMessageId = '';
+    if (delaySeconds <= MAX_QSTASH_DELAY) {
+      reminderMessageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
+        reminderId,
+        title: reminderTitle,
+        phoneNumber: ownerPhone,
+      });
+    }
+
+    await saveReminder({
+      id: reminderId,
+      title: reminderTitle,
+      phoneNumber: ownerPhone,
+      fireAt: target.toISOString(),
+      messageId: reminderMessageId,
+      deferred: delaySeconds > MAX_QSTASH_DELAY,
+    });
+
     await savePendingEvent({
-      id,
+      id: pendingId,
       title: parsed.title,
       forValue: parsed.forValue!,
       atValue: parsed.atValue!,
       senderPhone: from,
       senderAlias: alias,
       createdAt: new Date().toISOString(),
+      reminderId,
+      reminderMessageId,
     });
 
     const dateLabel = `${formatDate(target, true, timezone)} at ${formatTime(target, timezone)}`;
     const titleLine = parsed.title ? `\n📌 *${parsed.title}*` : '';
 
-    const ownerPhone = whitelistedNumbers[0];
     await sendInteractiveButtons(
       ownerPhone,
-      `📩 *${alias}* wants to set an event:${titleLine}\n📅 ${dateLabel}\n\nSave as:`,
+      `📩 *${alias}* wants to set an event:${titleLine}\n📅 ${dateLabel}\n\nSaved as reminder. Move to:`,
       [
-        { id: `tp_rem_${id}`, title: 'Reminder' },
-        { id: `tp_task_${id}`, title: 'Task' },
-        { id: `tp_cal_${id}`, title: 'Schedule' },
+        { id: `tp_rem_${pendingId}`, title: 'Reminder' },
+        { id: `tp_task_${pendingId}`, title: 'Task' },
+        { id: `tp_cal_${pendingId}`, title: 'Schedule' },
       ]
     );
 
-    await sendMessage(from, `✅ Sent! Santiago will confirm it.`);
+    await sendMessage(from, `✅ Sent! Saved as reminder by default.`);
     return;
   }
 

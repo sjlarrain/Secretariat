@@ -14,6 +14,8 @@ export interface ThirdPartyPending {
   senderPhone: string;
   senderAlias: string;
   createdAt: string; // ISO
+  reminderId: string;       // UUID of the auto-saved reminder
+  reminderMessageId: string; // QStash message ID (empty if deferred)
 }
 
 const CONTACTS_KEY = 'secretariat:third-party-contacts';

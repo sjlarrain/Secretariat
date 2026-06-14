@@ -12,6 +12,7 @@ import {
 import { setDefault } from '../integrations/registry';
 import { scheduleCron, deleteSchedule, scheduleOnce } from '../qstash/client';
 import { whitelistedNumbers } from '../env';
+import { getThirdPartyContacts, addThirdPartyContact, removeThirdPartyContact } from '../integrations/local/third-party';
 import {
   getIdeas,
   addIdea,
@@ -181,6 +182,33 @@ router.delete('/whitelist/:number', requireAuth, (_req, res) => {
   res.status(501).json({
     error: 'Runtime whitelist modification not supported in v1. Update WHITELISTED_NUMBERS env var and redeploy.',
   });
+});
+
+// --- Third-party contacts ---
+router.get('/third-party-contacts', requireAuth, async (_req, res) => {
+  const contacts = await getThirdPartyContacts();
+  res.json({ contacts });
+});
+
+router.post('/third-party-contacts', requireAuth, async (req, res) => {
+  const { number, alias } = req.body as { number?: string; alias?: string };
+  if (!number || !alias) {
+    res.status(400).json({ error: 'number and alias are required' });
+    return;
+  }
+  const normalized = number.startsWith('+') ? number : `+${number}`;
+  await addThirdPartyContact({ number: normalized, alias: alias.trim() });
+  res.json({ ok: true });
+});
+
+router.delete('/third-party-contacts/:number', requireAuth, async (req, res) => {
+  const number = decodeURIComponent(req.params['number'] as string);
+  const removed = await removeThirdPartyContact(number);
+  if (!removed) {
+    res.status(404).json({ error: 'Contact not found' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 // --- Settings ---

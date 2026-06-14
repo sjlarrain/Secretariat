@@ -1,17 +1,25 @@
 import { sendMessage } from '../kapso/client';
 import { getSettings } from '../integrations/token-store';
-import { getReminders, updateReminder, removeReminder } from '../integrations/local/reminders';
-import { getTasks, markTaskDone, updateTaskQStashId } from '../integrations/local/tasks';
+import { getReminders, updateReminder, removeReminder, saveReminder } from '../integrations/local/reminders';
+import { getTasks, markTaskDone, updateTaskQStashId, addTask } from '../integrations/local/tasks';
 import { getWorkItem, markWorkItemDone, updateWorkItemReminder } from '../integrations/local/work';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
+import { removePendingEvent } from '../integrations/local/third-party';
+import { resolveAccount } from '../integrations/registry';
+import { createEvent } from '../integrations/google/calendar';
+import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
+import { randomUUID } from 'crypto';
 
 // Button ID format: <action>_<type>_<itemId>
 // action: s1d | s3d | smon | done
 // type:   rem | task | work
 // itemId: string (UUID for reminders, number for tasks/work)
 //
-// Examples: s1d_rem_abc123, smon_task_5, done_work_3
+// Third-party format: tp_<type>_<pendingId>
+// type: rem | task | cal
+//
+// Examples: s1d_rem_abc123, smon_task_5, done_work_3, tp_rem_uuid
 
 function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeOption | null; type: 'rem' | 'task' | 'work'; itemId: string } | null {
   const parts = id.split('_');
@@ -34,6 +42,12 @@ function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeO
 }
 
 export async function buttonReplyHandler(buttonId: string, from: string): Promise<void> {
+  // Third-party pending event buttons
+  if (buttonId.startsWith('tp_')) {
+    await handleThirdPartyButton(buttonId, from);
+    return;
+  }
+
   const parsed = parseButtonId(buttonId);
   if (!parsed) return; // unrecognised button — silently ignore
 
@@ -156,4 +170,92 @@ async function handleWorkButton(
   });
   await updateWorkItemReminder(workId, fireAt.toISOString(), newMessageId);
   await sendMessage(from, `⏰ Work item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
+}
+
+// tp_rem_<id> | tp_task_<id> | tp_cal_<id>
+async function handleThirdPartyButton(buttonId: string, from: string): Promise<void> {
+  const parts = buttonId.split('_');
+  if (parts.length < 3 || parts[0] !== 'tp') return;
+  const type = parts[1] as 'rem' | 'task' | 'cal';
+  const pendingId = parts.slice(2).join('_');
+
+  const pending = await removePendingEvent(pendingId);
+  if (!pending) {
+    await sendMessage(from, '❌ This request has already been handled or expired.');
+    return;
+  }
+
+  const settings = await getSettings();
+  const timezone = settings.timezone ?? 'America/Santiago';
+
+  const date = parseDate(pending.forValue, timezone);
+  if (!date) {
+    await sendMessage(from, `❌ Could not parse date from ${pending.senderAlias}'s request.`);
+    return;
+  }
+
+  const target = combineDateAndTime(date, pending.atValue, timezone);
+  const dateLabel = `${formatDate(target, true, timezone)} at ${formatTime(target, timezone)}`;
+  const titleDisplay = pending.title || '(no title)';
+
+  try {
+    if (type === 'rem') {
+      const id = randomUUID();
+      const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
+      const MAX_QSTASH_DELAY = 7 * 24 * 60 * 60;
+
+      if (delaySeconds <= 0) {
+        await sendMessage(from, '❌ That time is now in the past.');
+        return;
+      }
+
+      if (delaySeconds > MAX_QSTASH_DELAY) {
+        await saveReminder({ id, title: pending.title || pending.senderAlias, phoneNumber: from, fireAt: target.toISOString(), messageId: '', deferred: true });
+      } else {
+        const messageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
+          reminderId: id,
+          title: pending.title || `From ${pending.senderAlias}`,
+          phoneNumber: from,
+        });
+        await saveReminder({ id, title: pending.title || `From ${pending.senderAlias}`, phoneNumber: from, fireAt: target.toISOString(), messageId });
+      }
+
+      await sendMessage(from, `⏰ *Reminder set*\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
+      await sendMessage(pending.senderPhone, `✅ Santiago saved your reminder: _"${titleDisplay}"_ for ${dateLabel}.`);
+
+    } else if (type === 'task') {
+      const task = await addTask({ title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue });
+      const msgId = await scheduleOnce(
+        '/internal/task/reminder/fire',
+        Math.floor((target.getTime() - Date.now()) / 1000),
+        { taskId: task.id, title: task.title, phoneNumber: from }
+      );
+      await updateTaskQStashId(task.id, msgId);
+
+      await sendMessage(from, `✅ *Task saved* (#${task.id})\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
+      await sendMessage(pending.senderPhone, `✅ Santiago saved your task: _"${titleDisplay}"_ for ${dateLabel}.`);
+
+    } else if (type === 'cal') {
+      const account = await resolveAccount('calendar');
+      if (!account) {
+        await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
+        return;
+      }
+
+      const endDatetime = new Date(target.getTime() + 60 * 60 * 1000);
+      await createEvent(account, {
+        title: pending.title || `From ${pending.senderAlias}`,
+        startDatetime: target,
+        endDatetime,
+        attendees: [],
+        timezone,
+      });
+
+      await sendMessage(from, `📅 *Event scheduled*\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
+      await sendMessage(pending.senderPhone, `✅ Santiago added to calendar: _"${titleDisplay}"_ for ${dateLabel}.`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await sendMessage(from, `❌ Could not save: ${msg}`);
+  }
 }

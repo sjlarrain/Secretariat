@@ -15,6 +15,7 @@ import { workHandler } from '../handlers/work.handler';
 import { statusHandler } from '../handlers/status.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import { replyRescheduleHandler } from '../handlers/reply-reschedule.handler';
+import { thirdPartyHandler } from '../handlers/third-party.handler';
 import type { ParsedCommand } from '../parser/command.parser';
 
 const router = Router();
@@ -47,6 +48,15 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   const contextMessageId = (req as WebhookRequest).contextMessageId;
 
   if (isDuplicate(messageId)) return;
+
+  if ((req as WebhookRequest).isThirdParty) {
+    try {
+      await thirdPartyHandler(text, from, (req as WebhookRequest).thirdPartyAlias);
+    } catch (err) {
+      console.error('Third-party handler error:', err);
+    }
+    return;
+  }
 
   if (buttonReplyId) {
     try {

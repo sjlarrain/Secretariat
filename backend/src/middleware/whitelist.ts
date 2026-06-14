@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { whitelistedNumbers } from '../env';
 import { sendMessage } from '../kapso/client';
+import { findThirdPartyContact } from '../integrations/local/third-party';
 
 // require() works around the package-exports subpath limitation in CommonJS moduleResolution
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -17,6 +18,8 @@ export interface WebhookExtras {
   messageId: string | null;
   buttonReplyId: string | null; // set when message.type === 'interactive' (button tap)
   contextMessageId: string | null; // set when the user replies to a specific message
+  isThirdParty: boolean;
+  thirdPartyAlias: string;
 }
 
 export type WebhookRequest = Request & WebhookExtras;
@@ -49,6 +52,8 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
     (req as WebhookRequest).buttonReplyId = null;
     (req as WebhookRequest).contextMessageId = null;
   }
+  (req as WebhookRequest).isThirdParty = false;
+  (req as WebhookRequest).thirdPartyAlias = '';
   next();
 }
 
@@ -61,6 +66,13 @@ export async function whitelistMiddleware(
 
   if (!phone || !whitelistedNumbers.includes(phone)) {
     if (phone) {
+      const contact = await findThirdPartyContact(phone).catch(() => null);
+      if (contact) {
+        (req as WebhookRequest).isThirdParty = true;
+        (req as WebhookRequest).thirdPartyAlias = contact.alias;
+        next();
+        return;
+      }
       try {
         await sendMessage(phone, '❌ Unauthorized number.');
       } catch {

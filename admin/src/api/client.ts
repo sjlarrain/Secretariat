@@ -30,6 +30,12 @@ export const api = {
 
   getWhitelist: () => request<{ numbers: string[] }>('/whitelist'),
 
+  getThirdPartyContacts: () => request<{ contacts: ThirdPartyContact[] }>('/third-party-contacts'),
+  addThirdPartyContact: (number: string, alias: string) =>
+    request('/third-party-contacts', { method: 'POST', body: JSON.stringify({ number, alias }) }),
+  removeThirdPartyContact: (number: string) =>
+    request(`/third-party-contacts/${encodeURIComponent(number)}`, { method: 'DELETE' }),
+
   getSettings: () => request<Settings>('/settings'),
   saveSettings: (settings: Settings) =>
     request('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
@@ -114,6 +120,11 @@ export const api = {
   markLinkRead: (id: number) => request(`/links/${id}/read`, { method: 'POST' }),
   deleteLink: (id: number) => request(`/links/${id}`, { method: 'DELETE' }),
 };
+
+export interface ThirdPartyContact {
+  number: string;
+  alias: string;
+}
 
 export interface GoogleCalendar {
   id: string;

@@ -141,6 +141,11 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
     }
 
     const ownerPhone = whitelistedNumbers[0];
+    if (!ownerPhone) {
+      await sendMessage(from, '❌ Bot is misconfigured — no owner phone set.');
+      return;
+    }
+
     const reminderId = randomUUID();
     const pendingId = randomUUID();
     const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
@@ -170,6 +175,7 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
       title: parsed.title,
       forValue: parsed.forValue!,
       atValue: parsed.atValue!,
+      fireAt: target.toISOString(),
       senderPhone: from,
       senderAlias: alias,
       createdAt: new Date().toISOString(),

@@ -11,6 +11,7 @@ export interface ThirdPartyPending {
   title: string;
   forValue: string;
   atValue: string;
+  fireAt: string;           // resolved ISO datetime — avoids re-parsing relative dates at tap time
   senderPhone: string;
   senderAlias: string;
   createdAt: string; // ISO

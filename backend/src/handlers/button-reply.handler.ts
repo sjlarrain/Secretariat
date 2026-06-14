@@ -8,7 +8,7 @@ import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
 import { removePendingEvent } from '../integrations/local/third-party';
 import { resolveAccount } from '../integrations/registry';
 import { createEvent } from '../integrations/google/calendar';
-import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
+import { formatDate, formatTime } from '../utils/date';
 
 // Button ID format: <action>_<type>_<itemId>
 // action: s1d | s3d | smon | done
@@ -178,8 +178,13 @@ async function handleWorkButton(
 async function handleThirdPartyButton(buttonId: string, from: string): Promise<void> {
   const parts = buttonId.split('_');
   if (parts.length < 3 || parts[0] !== 'tp') return;
-  const type = parts[1] as 'rem' | 'task' | 'cal';
+  const type = parts[1];
   const pendingId = parts.slice(2).join('_');
+
+  if (!['rem', 'task', 'cal'].includes(type)) {
+    await sendMessage(from, '❌ Unrecognized action type.');
+    return;
+  }
 
   const pending = await removePendingEvent(pendingId);
   if (!pending) {
@@ -190,13 +195,7 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
   const settings = await getSettings();
   const timezone = settings.timezone ?? 'America/Santiago';
 
-  const date = parseDate(pending.forValue, timezone);
-  if (!date) {
-    await sendMessage(from, `❌ Could not parse date from ${pending.senderAlias}'s request.`);
-    return;
-  }
-
-  const target = combineDateAndTime(date, pending.atValue, timezone);
+  const target = new Date(pending.fireAt);
   const dateLabel = `${formatDate(target, true, timezone)} at ${formatTime(target, timezone)}`;
   const titleDisplay = pending.title || '(no title)';
 

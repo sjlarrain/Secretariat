@@ -4,6 +4,7 @@ import { env } from '../../env';
 export interface ThirdPartyContact {
   number: string; // E.164
   alias: string;
+  lastMessageAt?: string; // ISO — last inbound message; used to check 24h WhatsApp session window
 }
 
 export interface ThirdPartyPending {
@@ -50,6 +51,21 @@ export async function removeThirdPartyContact(number: string): Promise<boolean> 
 export async function findThirdPartyContact(number: string): Promise<ThirdPartyContact | null> {
   const list = await getThirdPartyContacts();
   return list.find((c) => c.number === number) ?? null;
+}
+
+export async function updateThirdPartyLastMessage(number: string): Promise<void> {
+  const list = await getThirdPartyContacts();
+  const idx = list.findIndex((c) => c.number === number);
+  if (idx === -1) return;
+  list[idx].lastMessageAt = new Date().toISOString();
+  await getRedis().set(CONTACTS_KEY, list);
+}
+
+export async function canNotifyThirdParty(number: string): Promise<boolean> {
+  const contact = await findThirdPartyContact(number);
+  if (!contact?.lastMessageAt) return false;
+  const elapsed = Date.now() - new Date(contact.lastMessageAt).getTime();
+  return elapsed < 24 * 60 * 60 * 1000;
 }
 
 export async function getPendingEvents(): Promise<ThirdPartyPending[]> {

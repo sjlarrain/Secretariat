@@ -1,5 +1,5 @@
 import { sendMessage, sendInteractiveButtons } from '../kapso/client';
-import { savePendingEvent } from '../integrations/local/third-party';
+import { savePendingEvent, updateThirdPartyLastMessage } from '../integrations/local/third-party';
 import { saveReminder } from '../integrations/local/reminders';
 import { scheduleOnce } from '../qstash/client';
 import { getSettings } from '../integrations/token-store';
@@ -95,6 +95,7 @@ function isFlag(token: string): boolean {
 
 export async function thirdPartyHandler(text: string | null, from: string, alias: string): Promise<void> {
   if (!text?.trim()) return;
+  await updateThirdPartyLastMessage(from).catch(() => null);
 
   const normalized = text.replace(/[—–]/g, '--').trim();
   const tokens = tokenize(normalized);

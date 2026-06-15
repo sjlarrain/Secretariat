@@ -5,7 +5,7 @@ import { getTasks, markTaskDone, updateTaskQStashId, addTask } from '../integrat
 import { getWorkItem, markWorkItemDone, updateWorkItemReminder } from '../integrations/local/work';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
-import { removePendingEvent } from '../integrations/local/third-party';
+import { removePendingEvent, canNotifyThirdParty } from '../integrations/local/third-party';
 import { resolveAccount } from '../integrations/registry';
 import { createEvent } from '../integrations/google/calendar';
 import { formatDate, formatTime } from '../utils/date';
@@ -124,7 +124,7 @@ async function handleTaskButton(
   if (action === 'done') {
     await markTaskDone(taskId);
     await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
-    if (task.thirdPartyPhone) {
+    if (task.thirdPartyPhone && await canNotifyThirdParty(task.thirdPartyPhone)) {
       await sendMessage(task.thirdPartyPhone, `✅ _"${task.title}"_ is done!`).catch(() => null);
     }
     return;

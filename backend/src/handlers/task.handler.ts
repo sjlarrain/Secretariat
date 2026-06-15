@@ -1,6 +1,7 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
 import { getTasks, addTask, markTaskDone, updateTaskQStashId } from '../integrations/local/tasks';
+import { canNotifyThirdParty } from '../integrations/local/third-party';
 import { getSettings } from '../integrations/token-store';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
@@ -31,7 +32,7 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
         await cancelMessage(task.qstashMessageId).catch(() => null);
       }
       await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
-      if (task.thirdPartyPhone) {
+      if (task.thirdPartyPhone && await canNotifyThirdParty(task.thirdPartyPhone)) {
         await sendMessage(task.thirdPartyPhone, `✅ _"${task.title}"_ is done!`).catch(() => null);
       }
       return;

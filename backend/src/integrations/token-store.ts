@@ -39,6 +39,11 @@ export interface Settings {
     time: string;    // HH:MM — weekly run time to promote deferred reminders to QStash
     scheduleId?: string;
   };
+  googleTasksSync: {
+    enabled: boolean;      // default false — opt in via admin panel
+    scheduleId?: string;
+    lastSyncAt?: string;   // ISO cursor used as updatedMin for the next poll
+  };
 }
 
 const ACCOUNTS_KEY = 'secretariat:accounts';
@@ -51,6 +56,7 @@ const DEFAULT_SETTINGS: Settings = {
   workReminder: { enabled: true, time: '09:00' },
   defaultTaskTime: '09:00',
   reminderPromoter: { enabled: false, time: '08:00' },
+  googleTasksSync: { enabled: false },
 };
 
 let _redis: Redis | null = null;

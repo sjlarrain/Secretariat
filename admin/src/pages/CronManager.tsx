@@ -353,6 +353,39 @@ export default function CronManager() {
             ) : null}
           </div>
 
+          {/* Google Tasks Sync */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <span style={{ fontSize: 16 }}>🔄</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Google Tasks Sync</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                  Two-way sync between local tasks and Google Tasks, every 15 minutes
+                </div>
+              </div>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.googleTasksSync?.enabled ?? false}
+                  onChange={(e) => setSettings((prev) => prev ? {
+                    ...prev,
+                    googleTasksSync: { ...(prev.googleTasksSync ?? { enabled: false }), enabled: e.target.checked },
+                  } : prev)}
+                />
+                <span className="toggle-track" />
+              </label>
+            </div>
+
+            {settings.googleTasksSync?.enabled ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <StatusPill label="every 15 minutes" />
+                {settings.googleTasksSync.lastSyncAt && (
+                  <StatusPill label={`last synced ${new Date(settings.googleTasksSync.lastSyncAt).toLocaleString()}`} />
+                )}
+              </div>
+            ) : null}
+          </div>
+
           {/* Weekly Summary */}
           <div className="card" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>

@@ -50,4 +50,6 @@
 | v1.11 | Azure / Outlook integration — OAuth2, calendar + tasks | ⬜ Pending | Hard |
 | **v1.12 — NLP** | | | |
 | v1.12 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |
+| **v1.13 — Google Tasks Sync** | | | |
+| v1.13 | `/task` ↔ Google Tasks two-way sync — local-wins conflict resolution, 15-min poll for Google-side changes, admin toggle | ✅ Done | Medium |
 | ops | Better server — upgrade Render plan or migrate host | ⬜ Pending | Ops |

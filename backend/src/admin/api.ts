@@ -295,6 +295,24 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
   next.reminderPromoter = nextPromoter;
 
+  // Handle Google Tasks sync cron (fixed interval, every 15 minutes)
+  const prevTasksSync = current.googleTasksSync ?? { enabled: false };
+  const nextTasksSync = next.googleTasksSync ?? prevTasksSync;
+
+  if (prevTasksSync.scheduleId && !nextTasksSync.enabled) {
+    try { await deleteSchedule(prevTasksSync.scheduleId); } catch { /* ignore */ }
+    nextTasksSync.scheduleId = undefined;
+  }
+
+  if (nextTasksSync.enabled && !nextTasksSync.scheduleId) {
+    try {
+      nextTasksSync.scheduleId = await scheduleCron('/internal/tasks/sync', '*/15 * * * *', {});
+    } catch (err) {
+      console.error('Failed to create Google Tasks sync schedule:', err);
+    }
+  }
+  next.googleTasksSync = nextTasksSync;
+
   await saveSettings(next);
   res.json({ ok: true, settings: next });
 });

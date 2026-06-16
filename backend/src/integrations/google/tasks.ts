@@ -7,6 +7,8 @@ export interface Task {
   title: string;
   dueDate?: Date;
   notes?: string;
+  status: 'needsAction' | 'completed';
+  updated: string;
 }
 
 async function getTasksClient(account: ConnectedAccount) {
@@ -54,16 +56,54 @@ export async function getPendingTasks(account: ConnectedAccount): Promise<Task[]
 
   return (res.data.items ?? [])
     .filter((t) => t.status !== 'completed')
-    .map((t) => ({
-      id: t.id ?? '',
-      title: t.title ?? '(no title)',
-      dueDate: t.due ? new Date(t.due) : undefined,
-      notes: t.notes ?? undefined,
-    }))
+    .map(mapGoogleTask)
     .sort((a, b) => {
       if (!a.dueDate && !b.dueDate) return 0;
       if (!a.dueDate) return 1;
       if (!b.dueDate) return -1;
       return a.dueDate.getTime() - b.dueDate.getTime();
     });
+}
+
+function mapGoogleTask(t: {
+  id?: string | null;
+  title?: string | null;
+  due?: string | null;
+  notes?: string | null;
+  status?: string | null;
+  updated?: string | null;
+}): Task {
+  return {
+    id: t.id ?? '',
+    title: t.title ?? '(no title)',
+    dueDate: t.due ? new Date(t.due) : undefined,
+    notes: t.notes ?? undefined,
+    status: t.status === 'completed' ? 'completed' : 'needsAction',
+    updated: t.updated ?? new Date().toISOString(),
+  };
+}
+
+export async function completeTask(account: ConnectedAccount, taskId: string): Promise<void> {
+  const tasks = await getTasksClient(account);
+  await tasks.tasks.patch({
+    tasklist: '@default',
+    task: taskId,
+    requestBody: { status: 'completed' },
+  });
+}
+
+export async function getTasksUpdatedSince(
+  account: ConnectedAccount,
+  updatedMinISO: string
+): Promise<Task[]> {
+  const tasks = await getTasksClient(account);
+
+  const res = await tasks.tasks.list({
+    tasklist: '@default',
+    showCompleted: true,
+    showHidden: true,
+    updatedMin: updatedMinISO,
+  });
+
+  return (res.data.items ?? []).map(mapGoogleTask);
 }

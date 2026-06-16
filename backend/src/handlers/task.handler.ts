@@ -1,10 +1,36 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
-import { getTasks, addTask, markTaskDone, updateTaskQStashId } from '../integrations/local/tasks';
+import { getTasks, addTask, markTaskDone, updateTaskQStashId, setTaskGoogleId, LocalTask } from '../integrations/local/tasks';
 import { canNotifyThirdParty } from '../integrations/local/third-party';
 import { getSettings } from '../integrations/token-store';
+import { resolveAccount } from '../integrations/registry';
+import { createTask as createGoogleTask, completeTask as completeGoogleTask } from '../integrations/google/tasks';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
+
+async function pushTaskToGoogle(task: LocalTask): Promise<void> {
+  try {
+    const account = await resolveAccount('tasks');
+    if (!account || account.isDisconnected) return;
+    const tz = (await getSettings()).timezone;
+    const dueDate = task.dueDate ? combineDateAndTime(new Date(task.dueDate), task.dueTime ?? '00:00', tz) : undefined;
+    const { taskId } = await createGoogleTask(account, { title: task.title, dueDate });
+    await setTaskGoogleId(task.id, taskId);
+  } catch (err) {
+    console.error('Best-effort Google Tasks push (create) failed:', err);
+  }
+}
+
+async function pushTaskDoneToGoogle(task: LocalTask): Promise<void> {
+  if (!task.googleTaskId) return;
+  try {
+    const account = await resolveAccount('tasks');
+    if (!account || account.isDisconnected) return;
+    await completeGoogleTask(account, task.googleTaskId);
+  } catch (err) {
+    console.error('Best-effort Google Tasks push (complete) failed:', err);
+  }
+}
 
 export async function taskHandler(parsed: ParsedCommand, from: string): Promise<void> {
   const { flags, extraArgs } = parsed;
@@ -31,6 +57,7 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
       if (task.qstashMessageId) {
         await cancelMessage(task.qstashMessageId).catch(() => null);
       }
+      await pushTaskDoneToGoogle(task);
       await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
       if (task.thirdPartyPhone && await canNotifyThirdParty(task.thirdPartyPhone)) {
         await sendMessage(task.thirdPartyPhone, `✅ _"${task.title}"_ is done!`).catch(() => null);
@@ -128,6 +155,7 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
         { taskId: task.id, title, phoneNumber: from }
       );
       await updateTaskQStashId(task.id, msgId);
+      await pushTaskToGoogle(task);
 
       const dateLabel = `${formatDate(fireAt, true, tz)} at ${formatTime(fireAt, tz)}`;
       const projectLabel = projectFlag ? ` in *${projectFlag}*` : '';
@@ -137,6 +165,7 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
 
     // No date — just save
     const task = await addTask({ title, project: projectFlag, dueDate, dueTime });
+    await pushTaskToGoogle(task);
     const projectLabel = projectFlag ? ` in *${projectFlag}*` : '';
     await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}`);
   } catch (err) {

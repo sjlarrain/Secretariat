@@ -245,4 +245,9 @@ export interface Settings {
   weeklySummary: DigestConfig & { day: number };
   defaultTaskTime: string; // HH:MM — default reminder time for tasks with --for but no --at
   reminderPromoter: DigestConfig; // weekly cron to promote deferred reminders to QStash
+  googleTasksSync: {
+    enabled: boolean;
+    scheduleId?: string;
+    lastSyncAt?: string;
+  };
 }

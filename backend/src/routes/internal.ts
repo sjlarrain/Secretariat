@@ -4,6 +4,7 @@ import { sendMessage, sendInteractiveButtons } from '../kapso/client';
 import { fireMorningDigest } from '../cron/morning-digest';
 import { fireWeeklySummary } from '../cron/weekly-summary';
 import { promoteDeferred } from '../cron/reminder-promoter';
+import { syncGoogleTasks } from '../cron/google-tasks-sync';
 import { getWorkItems } from '../integrations/local/work';
 import { getSettings } from '../integrations/token-store';
 import { storeReplyTarget } from '../integrations/local/wa-reply-map';
@@ -144,6 +145,16 @@ router.post('/reminder/promote', qstashVerify, async (_req: Request, res: Respon
   } catch (err) {
     console.error('Reminder promote error:', err);
     res.status(500).json({ error: 'Promotion failed' });
+  }
+});
+
+router.post('/tasks/sync', qstashVerify, async (_req: Request, res: Response) => {
+  try {
+    const result = await syncGoogleTasks();
+    res.status(200).json({ ok: true, ...result });
+  } catch (err) {
+    console.error('Google Tasks sync error:', err);
+    res.status(500).json({ error: 'Sync failed' });
   }
 });
 

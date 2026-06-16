@@ -60,7 +60,7 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
 
   if (buttonReplyId) {
     try {
-      await buttonReplyHandler(buttonReplyId, from);
+      await buttonReplyHandler(buttonReplyId, from, contextMessageId);
     } catch (err) {
       console.error('Button reply unhandled error:', err);
     }

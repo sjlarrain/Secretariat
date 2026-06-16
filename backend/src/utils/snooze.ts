@@ -2,9 +2,15 @@ import { combineDateAndTime } from './date';
 
 export type SnoozeOption = '1h' | '1d' | 'monday';
 
-// Returns the next Monday after `from` (never `from` itself if it is already Monday)
-// Uses the target timezone to determine the local calendar date and day of week.
-function nextMonday(from: Date, timezone: string): Date {
+// Returns "HH:MM" for `date` in the given timezone — used to preserve the
+// reply's time-of-day when snoozing to a different calendar date.
+function timeOfDay(date: Date, timezone: string): string {
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone });
+}
+
+// Returns the next Monday after `from` (never `from` itself if it is already Monday),
+// at `timeStr` in the target timezone.
+function nextMonday(from: Date, timezone: string, timeStr: string): Date {
   const dateStr = from.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD
   const [year, month, day] = dateStr.split('-').map(Number);
   // Noon UTC on the local date — safe reference point (noon can't cross a day boundary for ±14h timezones)
@@ -12,25 +18,22 @@ function nextMonday(from: Date, timezone: string): Date {
   const dayOfWeek = localNoon.getUTCDay(); // 0=Sun, 1=Mon ... 6=Sat (noon UTC = noon local for date purposes)
   const daysUntilMonday = dayOfWeek === 1 ? 7 : (8 - dayOfWeek) % 7;
   const mondayNoon = new Date(Date.UTC(year, month - 1, day + daysUntilMonday, 12, 0, 0));
-  return combineDateAndTime(mondayNoon, '09:00', timezone);
+  return combineDateAndTime(mondayNoon, timeStr, timezone);
 }
 
-export function getSnoozeDate(option: SnoozeOption, defaultTime = '09:00', timezone = 'America/Santiago'): Date {
+// Snooze is always relative to the moment of the reply (`now`), preserving its
+// time-of-day rather than snapping to a fixed default time.
+export function getSnoozeDate(option: SnoozeOption, timezone = 'America/Santiago'): Date {
   const now = new Date();
 
   if (option === '1h') {
     return new Date(now.getTime() + 60 * 60 * 1000);
   }
 
-  // Get today's calendar date in the user's timezone to avoid day-boundary issues
-  const dateStr = now.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD
-  const [year, month, day] = dateStr.split('-').map(Number);
-
   if (option === '1d') {
-    const noon = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
-    return combineDateAndTime(noon, defaultTime, timezone);
+    return new Date(now.getTime() + 24 * 60 * 60 * 1000);
   }
 
   // monday
-  return nextMonday(now, timezone);
+  return nextMonday(now, timezone, timeOfDay(now, timezone));
 }

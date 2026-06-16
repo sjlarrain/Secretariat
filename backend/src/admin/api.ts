@@ -639,7 +639,7 @@ router.post('/reminders/:id/snooze', requireAuth, async (req, res) => {
   if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
 
   await cancelMessage(reminder.messageId).catch(() => {});
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
+  const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     reminderId: reminder.id,
     title: reminder.title,
@@ -662,7 +662,7 @@ router.post('/tasks/:id/snooze', requireAuth, async (req, res) => {
   if (task.qstashMessageId) await cancelMessage(task.qstashMessageId).catch(() => {});
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
+  const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
@@ -683,7 +683,7 @@ router.post('/tasks/:id/remind', requireAuth, async (req, res) => {
   if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
+  const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
@@ -705,7 +705,7 @@ router.post('/work/:id/snooze', requireAuth, async (req, res) => {
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
+  const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     workItemId: id,
     text: item.text,
@@ -747,7 +747,7 @@ router.post('/work/:id/remind', requireAuth, async (req, res) => {
   if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
 
   const settings = await getSettings();
-  const fireAt = getSnoozeDate(option, settings.defaultTaskTime, settings.timezone);
+  const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     workItemId: id,
     text: item.text,

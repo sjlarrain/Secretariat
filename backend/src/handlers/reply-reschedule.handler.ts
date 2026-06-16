@@ -3,7 +3,7 @@ import { getSettings } from '../integrations/token-store';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
-import { getReminders, updateReminder } from '../integrations/local/reminders';
+import { getReminders, updateReminder, saveReminder } from '../integrations/local/reminders';
 import { getTasks, updateTaskQStashId } from '../integrations/local/tasks';
 import { getWorkItem, updateWorkItemReminder } from '../integrations/local/work';
 
@@ -50,20 +50,25 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
 
   try {
     if (target.type === 'rem') {
+      // The reminder is deleted from Redis the moment it fires (routes/internal.ts),
+      // so fall back to the title/phone cached in the wa-reply-map (`target`) and
+      // re-save the reminder if it's no longer there.
       const reminders = await getReminders();
       const reminder = reminders.find((r) => r.id === target.id);
-      if (!reminder) {
-        await sendMessage(from, '❌ Reminder not found — it may have been dismissed.');
-        return true;
+      if (reminder) {
+        await cancelMessage(reminder.messageId).catch(() => null);
       }
-      await cancelMessage(reminder.messageId).catch(() => null);
       const newMessageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
-        reminderId: reminder.id,
-        title: reminder.title,
-        phoneNumber: from,
+        reminderId: target.id,
+        title: target.title,
+        phoneNumber: target.phoneNumber,
       });
-      await updateReminder(reminder.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
-      await sendMessage(from, `⏰ Rescheduled: _"${reminder.title}"_\nNew time: ${label}`);
+      if (reminder) {
+        await updateReminder(target.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
+      } else {
+        await saveReminder({ id: target.id, title: target.title, phoneNumber: target.phoneNumber, fireAt: fireAt.toISOString(), messageId: newMessageId });
+      }
+      await sendMessage(from, `⏰ Rescheduled: _"${target.title}"_\nNew time: ${label}`);
 
     } else if (target.type === 'task') {
       const taskId = Number(target.id);

@@ -1,6 +1,7 @@
 import { sendMessage } from '../kapso/client';
 import { getSettings } from '../integrations/token-store';
-import { getReminders, updateReminder, removeReminder, saveReminder } from '../integrations/local/reminders';
+import { getReminders, updateReminder, removeReminder, saveReminder, PendingReminder } from '../integrations/local/reminders';
+import { getReplyTarget } from '../integrations/local/wa-reply-map';
 import { getTasks, markTaskDone, updateTaskQStashId, addTask } from '../integrations/local/tasks';
 import { getWorkItem, markWorkItemDone, updateWorkItemReminder } from '../integrations/local/work';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
@@ -40,7 +41,7 @@ function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeO
   return { action: 'snooze', option, type, itemId };
 }
 
-export async function buttonReplyHandler(buttonId: string, from: string): Promise<void> {
+export async function buttonReplyHandler(buttonId: string, from: string, contextMessageId: string | null = null): Promise<void> {
   // Third-party pending event buttons
   if (buttonId.startsWith('tp_')) {
     await handleThirdPartyButton(buttonId, from);
@@ -51,16 +52,15 @@ export async function buttonReplyHandler(buttonId: string, from: string): Promis
   if (!parsed) return; // unrecognised button — silently ignore
 
   const settings = await getSettings();
-  const defaultTime = settings.defaultTaskTime ?? '09:00';
   const timezone = settings.timezone ?? 'America/Santiago';
 
   try {
     if (parsed.type === 'rem') {
-      await handleReminderButton(parsed.action, parsed.option, parsed.itemId, from, defaultTime, timezone);
+      await handleReminderButton(parsed.action, parsed.option, parsed.itemId, from, timezone, contextMessageId);
     } else if (parsed.type === 'task') {
-      await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime, timezone);
+      await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
     } else {
-      await handleWorkButton(parsed.action, parsed.option, Number(parsed.itemId), from, defaultTime, timezone);
+      await handleWorkButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
     }
 
   } catch (err) {
@@ -69,37 +69,60 @@ export async function buttonReplyHandler(buttonId: string, from: string): Promis
   }
 }
 
+// Reminders are deleted from Redis the moment they fire (see routes/internal.ts).
+// So by the time a snooze/done button is tapped, the record is usually gone —
+// fall back to the title/phone cached in the wa-reply-map for the fired message,
+// and only re-save the reminder (with a new fire time) if the user snoozes it.
 async function handleReminderButton(
   action: 'snooze' | 'done',
   option: SnoozeOption | null,
   reminderId: string,
   from: string,
-  defaultTime: string,
   timezone: string,
+  contextMessageId: string | null,
 ) {
   const reminders = await getReminders();
   const reminder = reminders.find((r) => r.id === reminderId);
-  if (!reminder) {
+
+  let title = reminder?.title;
+  let phoneNumber = reminder?.phoneNumber;
+  if (!title) {
+    const target = contextMessageId ? await getReplyTarget(contextMessageId) : null;
+    title = target?.title;
+    phoneNumber = target?.phoneNumber;
+  }
+
+  if (!title) {
     await sendMessage(from, '❌ Reminder not found — it may have already been dismissed.');
     return;
   }
+  phoneNumber = phoneNumber ?? from;
 
-  await cancelMessage(reminder.messageId).catch(() => null);
+  if (reminder) {
+    await cancelMessage(reminder.messageId).catch(() => null);
+  }
 
   if (action === 'done') {
-    await removeReminder(reminderId);
-    await sendMessage(from, `✅ Done: _"${reminder.title}"_`);
+    if (reminder) await removeReminder(reminderId);
+    await sendMessage(from, `✅ Done: _"${title}"_`);
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, defaultTime, timezone);
+  const fireAt = getSnoozeDate(option!, timezone);
   const newMessageId = await scheduleOnce('/internal/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     reminderId,
-    title: reminder.title,
-    phoneNumber: from,
+    title,
+    phoneNumber,
   });
-  await updateReminder(reminderId, { fireAt: fireAt.toISOString(), messageId: newMessageId });
-  await sendMessage(from, `⏰ Snoozed: _"${reminder.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
+
+  if (reminder) {
+    await updateReminder(reminderId, { fireAt: fireAt.toISOString(), messageId: newMessageId });
+  } else {
+    const fresh: PendingReminder = { id: reminderId, title, phoneNumber, fireAt: fireAt.toISOString(), messageId: newMessageId };
+    await saveReminder(fresh);
+  }
+
+  await sendMessage(from, `⏰ Snoozed: _"${title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
 }
 
 async function handleTaskButton(
@@ -107,7 +130,6 @@ async function handleTaskButton(
   option: SnoozeOption | null,
   taskId: number,
   from: string,
-  defaultTime: string,
   timezone: string,
 ) {
   const tasks = await getTasks();
@@ -130,7 +152,7 @@ async function handleTaskButton(
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, defaultTime, timezone);
+  const fireAt = getSnoozeDate(option!, timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId,
     title: task.title,
@@ -145,7 +167,6 @@ async function handleWorkButton(
   option: SnoozeOption | null,
   workId: number,
   from: string,
-  defaultTime: string,
   timezone: string,
 ) {
   const item = await getWorkItem(workId);
@@ -164,7 +185,7 @@ async function handleWorkButton(
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, defaultTime, timezone);
+  const fireAt = getSnoozeDate(option!, timezone);
   const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     workItemId: workId,
     text: item.text,

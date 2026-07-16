@@ -44,6 +44,18 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
   await client.schedules.delete(scheduleId);
 }
 
+// Lists all registered cron schedules — used by the health check to detect
+// schedules deleted out-of-band (manually, or expired by QStash).
+export async function listSchedules(): Promise<{ scheduleId: string; cron: string; destination: string }[]> {
+  const client = getClient();
+  const schedules = await client.schedules.list();
+  return schedules.map((s) => ({
+    scheduleId: s.scheduleId,
+    cron: s.cron,
+    destination: s.destination,
+  }));
+}
+
 // Cancels a pending one-time message (best-effort)
 export async function cancelMessage(messageId: string): Promise<void> {
   const client = getClient();

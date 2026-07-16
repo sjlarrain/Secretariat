@@ -8,6 +8,7 @@ export interface LocalTask {
   id: number;
   title: string;
   project?: string;
+  notes?: string;    // free-text description, synced to the Google Task's notes
   dueDate?: string;  // ISO date string (date only, no time)
   dueTime?: string;  // HH:MM
   status: 'open' | 'done';
@@ -36,7 +37,7 @@ export async function getAllTasks(): Promise<LocalTask[]> {
 }
 
 export async function addTask(
-  data: Pick<LocalTask, 'title' | 'project' | 'dueDate' | 'dueTime' | 'thirdPartyPhone'> &
+  data: Pick<LocalTask, 'title' | 'project' | 'notes' | 'dueDate' | 'dueTime' | 'thirdPartyPhone'> &
     Partial<Pick<LocalTask, 'googleTaskId'>> & { status?: LocalTask['status'] }
 ): Promise<LocalTask> {
   const all = await getAllTasksRaw();

@@ -11,6 +11,7 @@ const MENU = `🤖 *Secretariat — Commands*
   --invite (-i)  email1,email2
   --notes (-n)   description
   --using (-u)   calendar alias (e.g. GG)
+  --video (-v)   add a Google Meet link _(no value)_
 
 */myschedule* — Show calendar events
   _(no flags)_   today's schedule
@@ -21,12 +22,13 @@ const MENU = `🤖 *Secretariat — Commands*
                   add --for to check a specific day
 
 ✅ *Tasks*
-*/task* — Create a Google Task
-  --title (-t)   name
+*/task* text               — Save a task (syncs to Google Tasks)
+  --project (-p) / #  project folder
   --for (-f)     due date
+  --at (-a) / @  HH:MM
   --notes (-n)   description
-
-*/mytask* — Show pending tasks
+*/task*                    — List open tasks
+*/task done* N             — Mark task #N as done
 
 ⏰ *Reminders*
 */reminder* — One-shot WhatsApp reminder (no tracking)
@@ -34,11 +36,12 @@ const MENU = `🤖 *Secretariat — Commands*
   --for (-f)     date *(required)*
   --at (-a) / @  HH:MM *(required)*
 
-🗂 *Work List*
-*/work* text               — Add item to work list
-*/work* text --for (-f) date --at (-a) time — Add with reminder
-*/work* —                  List pending items
-*/work* --done (-d) N      — Mark item #N as done
+🎓 *UCLA List*
+*/ucla* text               — Add item to UCLA list
+*/ucla* text --due date    — Add with due date (auto-reminds 24h before)
+*/ucla* text --for (-f) date --at (-a) time — Add with extra reminder
+*/ucla* —                  List pending items
+*/ucla* --done (-d) N      — Mark item #N as done
 
 💡 *Ideas*
 */ideas* text                  — Save idea (default project)
@@ -52,6 +55,12 @@ const MENU = `🤖 *Secretariat — Commands*
 */links*                  — List active links
 */links* --read (-r) N    — Archive link #N
 */links* #N --tags (-t) tag1 tag2 — Add tags to link #N
+
+⚙️ *System*
+*/status*                 — Connections, Kapso health, usage
+*/zone*                   — Show current timezone
+*/zone* America/Santiago  — Set timezone (city name tracks DST)
+*/zone* GMT-3             — Set timezone by fixed offset
 
 _Send /start to wake up the bot._`;
 

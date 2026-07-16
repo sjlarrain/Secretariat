@@ -28,8 +28,8 @@ describe('em-dash normalization', () => {
     expect(r.flags['plan']).toBe('Lunch');
   });
 
-  it('handles em-dash for /work --done', () => {
-    const r = ok('/work —done 2');
+  it('handles em-dash for /ucla --done', () => {
+    const r = ok('/ucla —done 2');
     expect(r.flags['done']).toBe('2');
   });
 
@@ -161,40 +161,11 @@ describe('/schedule', () => {
   });
 });
 
-// ─── /gtask (Google Tasks) ────────────────────────────────────────────────────
+// ─── /gtask is retired (v1.14) ────────────────────────────────────────────────
 
-describe('/gtask', () => {
-  it('succeeds with no arguments — list pending Google Tasks', () => {
-    const r = ok('/gtask');
-    expect(r.command).toBe('gtask');
-    expect(r.extraArgs).toEqual([]);
-    expect(r.flags).toEqual({});
-  });
-
-  it('captures title text in extraArgs — create mode', () => {
-    const r = ok('/gtask Call Isabel');
-    expect(r.command).toBe('gtask');
-    expect(r.extraArgs).toEqual(['Call', 'Isabel']);
-    expect(r.flags).toEqual({});
-  });
-
-  it('accepts --for date', () => {
-    const r = ok('/gtask Send report --for next friday');
-    expect(r.flags['for']).toBe('next friday');
-  });
-
-  it('accepts -f for --for', () => {
-    const r = ok('/gtask Do thing -f 15-06-2026');
-    expect(r.flags['for']).toBe('15-06-2026');
-  });
-
-  it('accepts --notes', () => {
-    const r = ok('/gtask Report -f tomorrow -n include Q1 numbers');
-    expect(r.flags['notes']).toBe('include Q1 numbers');
-  });
-
-  it('rejects --project (not accepted by /gtask)', () => {
-    expect(fail('/gtask Buy milk --project groceries')).toMatch(/unknown flag/i);
+describe('/gtask (retired)', () => {
+  it('is no longer a known command', () => {
+    expect(fail('/gtask Call Isabel')).toMatch(/unknown command/i);
   });
 });
 
@@ -319,8 +290,16 @@ describe('/task', () => {
     expect(r.flags['for']).toBe('friday');
   });
 
-  it('rejects --notes (not accepted by /task)', () => {
-    expect(fail('/task Buy milk --notes extra info')).toMatch(/unknown flag/i);
+  // v1.14: /gtask was retired and its --notes support folded into /task.
+  it('accepts --notes', () => {
+    const r = ok('/task Buy milk --notes extra info');
+    expect(r.extraArgs).toEqual(['Buy', 'milk']);
+    expect(r.flags['notes']).toBe('extra info');
+  });
+
+  it('accepts -n shorthand for --notes', () => {
+    const r = ok('/task Send report -f tomorrow -n include Q1 numbers');
+    expect(r.flags['notes']).toBe('include Q1 numbers');
   });
 
   it('rejects --invite (not accepted by /task)', () => {
@@ -490,56 +469,102 @@ describe('/links', () => {
   });
 });
 
-// ─── /work ────────────────────────────────────────────────────────────────────
+// ─── /ucla (replaced /work in v1.14) ─────────────────────────────────────────
 
-describe('/work', () => {
+describe('/ucla', () => {
   it('succeeds with no args (list pending)', () => {
-    const r = ok('/work');
-    expect(r.command).toBe('work');
+    const r = ok('/ucla');
+    expect(r.command).toBe('ucla');
     expect(r.extraArgs).toEqual([]);
     expect(r.flags).toEqual({});
   });
 
   it('captures item text in extraArgs', () => {
-    const r = ok('/work Buy groceries for the week');
-    expect(r.extraArgs).toEqual(['Buy', 'groceries', 'for', 'the', 'week']);
+    const r = ok('/ucla Finish problem set 3');
+    expect(r.extraArgs).toEqual(['Finish', 'problem', 'set', '3']);
   });
 
   it('accepts --done N', () => {
-    const r = ok('/work --done 2');
+    const r = ok('/ucla --done 2');
     expect(r.flags['done']).toBe('2');
   });
 
   it('accepts -d shorthand for --done', () => {
-    const r = ok('/work -d 2');
+    const r = ok('/ucla -d 2');
     expect(r.flags['done']).toBe('2');
   });
 
+  it('accepts --due for a due date', () => {
+    const r = ok('/ucla Submit essay --due next friday');
+    expect(r.extraArgs).toEqual(['Submit', 'essay']);
+    expect(r.flags['due']).toBe('next friday');
+  });
+
+  it('accepts --due alongside an explicit reminder', () => {
+    const r = ok('/ucla Submit essay --due friday --for thursday --at 18:00');
+    expect(r.flags['due']).toBe('friday');
+    expect(r.flags['for']).toBe('thursday');
+    expect(r.flags['at']).toBe('18:00');
+  });
+
   it('accepts --for and --at for optional reminder', () => {
-    const r = ok('/work Buy groceries --for saturday --at 10:00');
-    expect(r.extraArgs).toEqual(['Buy', 'groceries']);
+    const r = ok('/ucla Read chapter --for saturday --at 10:00');
+    expect(r.extraArgs).toEqual(['Read', 'chapter']);
     expect(r.flags['for']).toBe('saturday');
     expect(r.flags['at']).toBe('10:00');
   });
 
   it('accepts -f and -a shorthand', () => {
-    const r = ok('/work Do report -f next monday -a 09:00');
+    const r = ok('/ucla Do report -f next monday -a 09:00');
     expect(r.flags['for']).toBe('next monday');
     expect(r.flags['at']).toBe('09:00');
   });
 
   it('accepts @ shorthand for time', () => {
-    const r = ok('/work Review PR -f tomorrow @14:00');
+    const r = ok('/ucla Review PR -f tomorrow @14:00');
     expect(r.flags['at']).toBe('14:00');
   });
 
   it('normalizes em-dash for --done', () => {
-    const r = ok('/work —done 3');
+    const r = ok('/ucla —done 3');
     expect(r.flags['done']).toBe('3');
   });
 
-  it('rejects --notes (not accepted by /work)', () => {
-    expect(fail('/work Buy stuff --notes extra context')).toMatch(/unknown flag/i);
+  it('normalizes em-dash for --due', () => {
+    const r = ok('/ucla Submit essay —due friday');
+    expect(r.flags['due']).toBe('friday');
+  });
+
+  it('rejects --notes (not accepted by /ucla)', () => {
+    expect(fail('/ucla Buy stuff --notes extra context')).toMatch(/unknown flag/i);
+  });
+});
+
+// ─── /work is retired (v1.14) ────────────────────────────────────────────────
+
+describe('/work (retired)', () => {
+  it('is no longer a known command', () => {
+    expect(fail('/work Buy groceries')).toMatch(/unknown command/i);
+  });
+});
+
+// ─── /zone ────────────────────────────────────────────────────────────────────
+
+describe('/zone', () => {
+  it('succeeds with no args (show current zone)', () => {
+    const r = ok('/zone');
+    expect(r.command).toBe('zone');
+    expect(r.extraArgs).toEqual([]);
+  });
+
+  it('captures an IANA zone as a positional arg', () => {
+    const r = ok('/zone America/Santiago');
+    expect(r.extraArgs).toEqual(['America/Santiago']);
+  });
+
+  it('captures a GMT offset as a positional arg', () => {
+    const r = ok('/zone GMT-3');
+    expect(r.extraArgs).toEqual(['GMT-3']);
   });
 });
 
@@ -552,7 +577,7 @@ describe('quoted values', () => {
   });
 
   it('groups quoted notes as single flag value', () => {
-    const r = ok('/gtask Report --notes "include the Q1 numbers please"');
+    const r = ok('/task Report --notes "include the Q1 numbers please"');
     expect(r.flags['notes']).toBe('include the Q1 numbers please');
   });
 });

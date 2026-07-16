@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { google } from 'googleapis';
 import { ConnectedAccount, saveAccount, encryptTokens, decryptTokens } from '../token-store';
 import { GoogleTokens, getAuthenticatedClient, CalendarDisconnectedError } from './oauth';
@@ -68,24 +69,45 @@ export async function createEvent(
     attendees: string[];
     notes?: string;
     timezone: string;
+    withMeetLink?: boolean;
   }
-): Promise<{ eventId: string; htmlLink: string }> {
+): Promise<{ eventId: string; htmlLink: string; meetLink?: string }> {
   const cal = await getCalendarClient(account);
 
   const event = await cal.events.insert({
     calendarId: 'primary',
+    // conferenceDataVersion must be 1 for Google to honour createRequest.
+    ...(params.withMeetLink ? { conferenceDataVersion: 1 } : {}),
     requestBody: {
       summary: params.title,
       description: params.notes,
       start: { dateTime: params.startDatetime.toISOString(), timeZone: params.timezone },
       end: { dateTime: params.endDatetime.toISOString(), timeZone: params.timezone },
       attendees: params.attendees.map((email) => ({ email })),
+      ...(params.withMeetLink
+        ? {
+            conferenceData: {
+              createRequest: {
+                // Must be unique per request; Google echoes it back to
+                // deduplicate retries of the same conference creation.
+                requestId: randomUUID(),
+                conferenceSolutionKey: { type: 'hangoutsMeet' },
+              },
+            },
+          }
+        : {}),
     },
   });
+
+  const meetLink =
+    event.data.hangoutLink ??
+    event.data.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri ??
+    undefined;
 
   return {
     eventId: event.data.id ?? '',
     htmlLink: event.data.htmlLink ?? '',
+    meetLink: meetLink ?? undefined,
   };
 }
 

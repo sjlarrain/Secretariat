@@ -91,6 +91,24 @@ export const FLAGS: Record<string, FlagDefinition> = {
     shortAlias: 'd',
     type: 'string',
     required: false,
-    description: 'Mark work item #N as done (e.g. --done 3 or -d 3)',
+    description: 'Mark item #N as done (e.g. --done 3 or -d 3)',
+  },
+  due: {
+    // -u, not -d: /ucla accepts --done (-d) too. Short aliases only need to be
+    // unique within a command's acceptedFlags, which is why this can reuse the
+    // letter --using takes on /schedule.
+    name: '--due',
+    shortAlias: 'u',
+    type: 'date',
+    required: false,
+    description: 'Due date — auto-reminds 24h before (DD-MM-YYYY or natural language)',
+  },
+  video: {
+    name: '--video',
+    shortAlias: 'v',
+    type: 'string',
+    required: false,
+    optional: true,
+    description: 'Add a Google Meet link to the event — no value needed',
   },
 };

@@ -5,10 +5,12 @@ import { fireMorningDigest } from '../cron/morning-digest';
 import { fireWeeklySummary } from '../cron/weekly-summary';
 import { promoteDeferred } from '../cron/reminder-promoter';
 import { syncGoogleTasks } from '../cron/google-tasks-sync';
-import { getWorkItems } from '../integrations/local/work';
+import { getUclaItems } from '../integrations/local/ucla';
 import { getSettings } from '../integrations/token-store';
 import { storeReplyTarget } from '../integrations/local/wa-reply-map';
 import { removeReminder } from '../integrations/local/reminders';
+import { runHealthCheck } from '../cron/health-check';
+import { formatDate, formatTime } from '../utils/date';
 import { env } from '../env';
 
 const router = Router();
@@ -64,31 +66,77 @@ router.post('/digest/weekly', qstashVerify, async (_req: Request, res: Response)
   }
 });
 
-router.post('/work/reminder/fire', qstashVerify, async (req: Request, res: Response) => {
-  const { workItemId, text, phoneNumber } = req.body as { workItemId?: number; text?: string; phoneNumber?: string };
+async function fireUclaReminder(req: Request, res: Response): Promise<void> {
+  // `workItemId` is the pre-v1.14 field name; one-shot reminders scheduled
+  // before the rename are still in flight with the old payload shape.
+  const body = req.body as { uclaItemId?: number; workItemId?: number; text?: string; phoneNumber?: string };
+  const itemId = body.uclaItemId ?? body.workItemId;
+  const { text, phoneNumber } = body;
+
   if (!text || !phoneNumber) {
     res.status(400).json({ error: 'Missing text or phoneNumber' });
     return;
   }
   try {
-    if (workItemId != null) {
+    if (itemId != null) {
       const waMessageId = await sendInteractiveButtons(
         phoneNumber,
-        `📋 *Work reminder:* ${text}`,
+        `🎓 *UCLA reminder:* ${text}`,
         [
-          { id: `done_work_${workItemId}`, title: 'Done' },
-          { id: `s1d_work_${workItemId}`, title: 'Snooze 1 day' },
-          { id: `smon_work_${workItemId}`, title: 'Next Monday' },
+          { id: `done_ucla_${itemId}`, title: 'Done' },
+          { id: `s1d_ucla_${itemId}`, title: 'Snooze 1 day' },
+          { id: `smon_ucla_${itemId}`, title: 'Next Monday' },
         ],
       );
-      await storeReplyTarget(waMessageId, { type: 'work', id: String(workItemId), title: text, phoneNumber }).catch(() => null);
+      await storeReplyTarget(waMessageId, { type: 'ucla', id: String(itemId), title: text, phoneNumber }).catch(() => null);
     } else {
-      await sendMessage(phoneNumber, `📋 *Work reminder:* ${text}`);
+      await sendMessage(phoneNumber, `🎓 *UCLA reminder:* ${text}`);
     }
     res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('Work reminder fire error:', err);
-    res.status(500).json({ error: 'Failed to send work reminder' });
+    console.error('UCLA reminder fire error:', err);
+    res.status(500).json({ error: 'Failed to send UCLA reminder' });
+  }
+}
+
+router.post('/ucla/reminder/fire', qstashVerify, fireUclaReminder);
+// Legacy alias (pre-v1.14 /work): reminders scheduled before the rename are
+// already queued in QStash against this path and would 404 if it were removed.
+router.post('/work/reminder/fire', qstashVerify, fireUclaReminder);
+
+// Automatic "due in 24h" reminder for UCLA items.
+router.post('/ucla/due/fire', qstashVerify, async (req: Request, res: Response) => {
+  const { uclaItemId, text, dueAt, phoneNumber } = req.body as {
+    uclaItemId?: number; text?: string; dueAt?: string; phoneNumber?: string;
+  };
+  if (!text || !phoneNumber) {
+    res.status(400).json({ error: 'Missing text or phoneNumber' });
+    return;
+  }
+  try {
+    const settings = await getSettings();
+    const dueLabel = dueAt
+      ? ` (due ${formatDate(new Date(dueAt), true, settings.timezone)} at ${formatTime(new Date(dueAt), settings.timezone)})`
+      : '';
+    const body = `🎓 *Due in 24 hours:* ${text}${dueLabel}`;
+
+    if (uclaItemId != null) {
+      const waMessageId = await sendInteractiveButtons(
+        phoneNumber,
+        body,
+        [
+          { id: `done_ucla_${uclaItemId}`, title: 'Done' },
+          { id: `s1d_ucla_${uclaItemId}`, title: 'Snooze 1 day' },
+        ],
+      );
+      await storeReplyTarget(waMessageId, { type: 'ucla', id: String(uclaItemId), title: text, phoneNumber }).catch(() => null);
+    } else {
+      await sendMessage(phoneNumber, body);
+    }
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('UCLA due reminder fire error:', err);
+    res.status(500).json({ error: 'Failed to send UCLA due reminder' });
   }
 });
 
@@ -120,23 +168,32 @@ router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Respo
   }
 });
 
-router.post('/digest/work', qstashVerify, async (_req: Request, res: Response) => {
+async function fireUclaDigest(_req: Request, res: Response): Promise<void> {
   try {
-    const items = await getWorkItems();
+    const items = await getUclaItems();
+    const settings = await getSettings();
     const phoneNumber = env.WHITELISTED_NUMBERS.split(',')[0].trim();
     if (items.length === 0) {
-      await sendMessage(phoneNumber, '✅ Work list is clear. Enjoy the week!');
+      await sendMessage(phoneNumber, '✅ UCLA list is clear. Enjoy the week!');
     } else {
-      const lines = ['📋 *Work list — Monday reminder:*\n'];
-      items.forEach((item, i) => lines.push(`${i + 1}. ${item.text}`));
+      const lines = ['🎓 *UCLA list — Monday reminder:*\n'];
+      items.forEach((item, i) => {
+        const due = item.dueDate ? ` _(📅 due ${formatDate(new Date(item.dueDate), true, settings.timezone)})_` : '';
+        lines.push(`${i + 1}. ${item.text}${due}`);
+      });
       await sendMessage(phoneNumber, lines.join('\n'));
     }
     res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('Work digest error:', err);
-    res.status(500).json({ error: 'Work digest failed' });
+    console.error('UCLA digest error:', err);
+    res.status(500).json({ error: 'UCLA digest failed' });
   }
-});
+}
+
+router.post('/digest/ucla', qstashVerify, fireUclaDigest);
+// Legacy alias (pre-v1.14 /work): the old Monday cron still targets this path
+// and keeps firing until reconcileSchedules replaces it on the next settings save.
+router.post('/digest/work', qstashVerify, fireUclaDigest);
 
 router.post('/reminder/promote', qstashVerify, async (_req: Request, res: Response) => {
   try {
@@ -155,6 +212,16 @@ router.post('/tasks/sync', qstashVerify, async (_req: Request, res: Response) =>
   } catch (err) {
     console.error('Google Tasks sync error:', err);
     res.status(500).json({ error: 'Sync failed' });
+  }
+});
+
+router.post('/health-check', qstashVerify, async (_req: Request, res: Response) => {
+  try {
+    const result = await runHealthCheck();
+    res.status(200).json({ ok: true, ...result });
+  } catch (err) {
+    console.error('Health check error:', err);
+    res.status(500).json({ error: 'Health check failed' });
   }
 });
 

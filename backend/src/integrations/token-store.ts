@@ -28,9 +28,19 @@ export interface Settings {
     time: string;
     scheduleId?: string;
   };
-  workReminder: {
+  uclaReminder: {
     enabled: boolean;
     time: string;    // HH:MM — fires every Monday
+    scheduleId?: string;
+  };
+  /**
+   * @deprecated v1.14 renamed `/work` to `/ucla`. Retained only so the stale
+   * QStash schedule (which still targets the removed /internal/digest/work
+   * route) can be found and deleted during migration. Never write this.
+   */
+  workReminder?: {
+    enabled: boolean;
+    time: string;
     scheduleId?: string;
   };
   defaultTaskTime: string; // HH:MM — default reminder time when --for is set but --at is omitted
@@ -44,6 +54,12 @@ export interface Settings {
     scheduleId?: string;
     lastSyncAt?: string;   // ISO cursor used as updatedMin for the next poll
   };
+  healthCheck: {
+    enabled: boolean;      // default false — opt in via admin panel
+    time: string;          // HH:MM — fires nightly
+    scheduleId?: string;
+    lastRunAt?: string;    // ISO timestamp of the last completed run
+  };
 }
 
 const ACCOUNTS_KEY = 'secretariat:accounts';
@@ -53,10 +69,11 @@ const DEFAULT_SETTINGS: Settings = {
   timezone: 'America/Santiago',
   morningDigest: { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5] },
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
-  workReminder: { enabled: true, time: '09:00' },
+  uclaReminder: { enabled: true, time: '09:00' },
   defaultTaskTime: '09:00',
   reminderPromoter: { enabled: false, time: '08:00' },
   googleTasksSync: { enabled: false },
+  healthCheck: { enabled: false, time: '23:00' },
 };
 
 let _redis: Redis | null = null;
@@ -123,7 +140,16 @@ export async function getSettings(): Promise<Settings> {
   const data = await getRedis().get<Settings>(SETTINGS_KEY);
   if (!data) return { ...DEFAULT_SETTINGS };
   // Merge top-level defaults so fields added in newer versions always have a value
-  return { ...DEFAULT_SETTINGS, ...data };
+  const merged = { ...DEFAULT_SETTINGS, ...data };
+
+  // v1.14: /work became /ucla. Carry the old config forward but deliberately
+  // drop its scheduleId — the old schedule targets a route that no longer
+  // exists, so reconcileSchedules deletes it and creates a fresh one.
+  if (data.workReminder && !data.uclaReminder) {
+    merged.uclaReminder = { enabled: data.workReminder.enabled, time: data.workReminder.time };
+  }
+
+  return merged;
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

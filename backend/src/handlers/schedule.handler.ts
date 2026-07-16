@@ -30,26 +30,36 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
     return;
   }
 
-  const startDatetime = combineDateAndTime(date, flags['at']);
+  const startDatetime = combineDateAndTime(date, flags['at'], timezone);
   const endDatetime = new Date(startDatetime.getTime() + 60 * 60 * 1000);
 
   const attendees: string[] = [];
   if (flags['invite']) attendees.push(...flags['invite'].split(',').map((e) => e.trim()));
 
+  // --video/-v is value-less: the parser sets it to '' when present, so only an
+  // undefined value means the flag was omitted.
+  const withMeetLink = flags['video'] !== undefined;
+
   try {
-    await createEvent(account, {
+    const { meetLink } = await createEvent(account, {
       title,
       startDatetime,
       endDatetime,
       attendees,
       notes: flags['notes'],
       timezone,
+      withMeetLink,
     });
 
-    await sendMessage(
-      from,
-      `✅ *Event scheduled*\n📌 ${title}\n📅 ${formatDate(startDatetime, false, timezone)} at ${formatTime(startDatetime, timezone)}`
-    );
+    const lines = [
+      '✅ *Event scheduled*',
+      `📌 ${title}`,
+      `📅 ${formatDate(startDatetime, false, timezone)} at ${formatTime(startDatetime, timezone)}`,
+    ];
+    if (withMeetLink) {
+      lines.push(meetLink ? `🎥 ${meetLink}` : '⚠️ Google did not return a Meet link for this event.');
+    }
+    await sendMessage(from, lines.join('\n'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Could not create event: ${msg}`);

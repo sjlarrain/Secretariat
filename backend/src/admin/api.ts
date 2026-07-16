@@ -37,36 +37,13 @@ import { COMMANDS } from '../registries/commands.registry';
 import { FLAGS } from '../registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../integrations/local/plans';
 import { getReminders, removeReminder, updateReminder } from '../integrations/local/reminders';
-import { getWorkItems, getDoneWorkItems, addWorkItem, markWorkItemDone, deleteWorkItem, getWorkItem, updateWorkItemReminder } from '../integrations/local/work';
+import { getUclaItems, getDoneUclaItems, addUclaItem, markUclaItemDone, deleteUclaItem, getUclaItem, updateUclaItem, updateUclaItemReminder } from '../integrations/local/ucla';
+import { getHealthAlerts } from '../integrations/local/health-alerts';
 import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask, updateTaskQStashId } from '../integrations/local/tasks';
 import { cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
-
-// Converts a local HH:MM time + IANA timezone + day array into a UTC QStash cron string.
-// QStash interprets all cron expressions as UTC, so we must offset.
-function getUtcOffsetMinutes(timezone: string): number {
-  const now = new Date();
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: 'numeric', hour12: false });
-  const parts = fmt.formatToParts(now);
-  const tzH = Number(parts.find((p) => p.type === 'hour')!.value) % 24;
-  const tzM = Number(parts.find((p) => p.type === 'minute')!.value);
-  let offset = now.getUTCHours() * 60 + now.getUTCMinutes() - (tzH * 60 + tzM);
-  if (offset > 12 * 60) offset -= 24 * 60;
-  if (offset < -12 * 60) offset += 24 * 60;
-  return offset; // positive = west of UTC (e.g. Americas), negative = east
-}
-
-function localTimeToCron(localTime: string, timezone: string, localDays: number[]): string {
-  const [lh, lm] = localTime.split(':').map(Number);
-  const offsetMin = getUtcOffsetMinutes(timezone);
-  const utcTotal = lh * 60 + lm + offsetMin;
-  const dayDelta = utcTotal < 0 ? -1 : utcTotal >= 1440 ? 1 : 0;
-  const norm = ((utcTotal % 1440) + 1440) % 1440;
-  const uh = Math.floor(norm / 60);
-  const um = norm % 60;
-  const utcDays = localDays.map((d) => ((d + dayDelta) % 7 + 7) % 7).sort((a, b) => a - b);
-  return `${String(um).padStart(2, '0')} ${String(uh).padStart(2, '0')} * * ${utcDays.join(',')}`;
-}
+import { parseZoneInput } from '../utils/timezone';
+import { reconcileSchedules } from '../qstash/schedules';
 
 const router = Router();
 
@@ -221,100 +198,19 @@ router.put('/settings', requireAuth, async (req, res) => {
   const current = await getSettings();
   const next = { ...current, ...body };
 
-  // Handle morning digest cron
-  const prevMorning = current.morningDigest;
-  const nextMorning = next.morningDigest;
-
-  if (prevMorning.scheduleId && (!nextMorning.enabled || JSON.stringify(prevMorning) !== JSON.stringify(nextMorning))) {
-    try { await deleteSchedule(prevMorning.scheduleId); } catch { /* ignore */ }
-    nextMorning.scheduleId = undefined;
+  // Normalize here rather than only in the /zone handler, so the panel accepts
+  // the same inputs WhatsApp does (IANA name or GMT±N) and both paths store the
+  // identical canonical zone.
+  const zone = parseZoneInput(next.timezone);
+  if (!zone) {
+    res.status(400).json({ error: `Unknown timezone: "${next.timezone}". Use a city name like America/Santiago, or an offset like GMT-3.` });
+    return;
   }
+  next.timezone = zone;
 
-  if (nextMorning.enabled && !nextMorning.scheduleId) {
-    const cron = localTimeToCron(nextMorning.time, next.timezone, nextMorning.days);
-    try {
-      nextMorning.scheduleId = await scheduleCron('/internal/digest/morning', cron, {});
-    } catch (err) {
-      console.error('Failed to create morning digest schedule:', err);
-    }
-  }
-
-  // Handle weekly summary cron
-  const prevWeekly = current.weeklySummary;
-  const nextWeekly = next.weeklySummary;
-
-  if (prevWeekly.scheduleId && (!nextWeekly.enabled || JSON.stringify(prevWeekly) !== JSON.stringify(nextWeekly))) {
-    try { await deleteSchedule(prevWeekly.scheduleId); } catch { /* ignore */ }
-    nextWeekly.scheduleId = undefined;
-  }
-
-  if (nextWeekly.enabled && !nextWeekly.scheduleId) {
-    const cron = localTimeToCron(nextWeekly.time, next.timezone, [nextWeekly.day]);
-    try {
-      nextWeekly.scheduleId = await scheduleCron('/internal/digest/weekly', cron, {});
-    } catch (err) {
-      console.error('Failed to create weekly summary schedule:', err);
-    }
-  }
-
-  // Handle work reminder cron (every Monday)
-  const prevWork = current.workReminder ?? { enabled: false, time: '09:00' };
-  const nextWork = next.workReminder ?? prevWork;
-
-  if (prevWork.scheduleId && (!nextWork.enabled || prevWork.time !== nextWork.time)) {
-    try { await deleteSchedule(prevWork.scheduleId); } catch { /* ignore */ }
-    nextWork.scheduleId = undefined;
-  }
-
-  if (nextWork.enabled && !nextWork.scheduleId) {
-    const cron = localTimeToCron(nextWork.time, next.timezone, [1]); // every Monday
-    try {
-      nextWork.scheduleId = await scheduleCron('/internal/digest/work', cron, {});
-    } catch (err) {
-      console.error('Failed to create work reminder schedule:', err);
-    }
-  }
-  next.workReminder = nextWork;
-
-  // Handle reminder promoter cron (weekly, runs at configured time on Sunday)
-  const prevPromoter = current.reminderPromoter ?? { enabled: false, time: '08:00' };
-  const nextPromoter = next.reminderPromoter ?? prevPromoter;
-
-  if (prevPromoter.scheduleId && (!nextPromoter.enabled || prevPromoter.time !== nextPromoter.time)) {
-    try { await deleteSchedule(prevPromoter.scheduleId); } catch { /* ignore */ }
-    nextPromoter.scheduleId = undefined;
-  }
-
-  if (nextPromoter.enabled && !nextPromoter.scheduleId) {
-    const cron = localTimeToCron(nextPromoter.time, next.timezone, [0]); // every Sunday
-    try {
-      nextPromoter.scheduleId = await scheduleCron('/internal/reminder/promote', cron, {});
-    } catch (err) {
-      console.error('Failed to create reminder promoter schedule:', err);
-    }
-  }
-  next.reminderPromoter = nextPromoter;
-
-  // Handle Google Tasks sync cron (fixed interval, every 15 minutes)
-  const prevTasksSync = current.googleTasksSync ?? { enabled: false };
-  const nextTasksSync = next.googleTasksSync ?? prevTasksSync;
-
-  if (prevTasksSync.scheduleId && !nextTasksSync.enabled) {
-    try { await deleteSchedule(prevTasksSync.scheduleId); } catch { /* ignore */ }
-    nextTasksSync.scheduleId = undefined;
-  }
-
-  if (nextTasksSync.enabled && !nextTasksSync.scheduleId) {
-    try {
-      nextTasksSync.scheduleId = await scheduleCron('/internal/tasks/sync', '*/15 * * * *', {});
-    } catch (err) {
-      console.error('Failed to create Google Tasks sync schedule:', err);
-    }
-  }
-  next.googleTasksSync = nextTasksSync;
-
-  await saveSettings(next);
-  res.json({ ok: true, settings: next });
+  const reconciled = await reconcileSchedules(current, next);
+  await saveSettings(reconciled);
+  res.json({ ok: true, settings: reconciled });
 });
 
 // --- Projects ---
@@ -572,33 +468,67 @@ router.delete('/links/:id', requireAuth, async (req, res) => {
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
-// --- Work ---
-router.get('/work', requireAuth, async (_req, res) => {
-  const items = await getWorkItems();
+// --- UCLA ---
+router.get('/ucla', requireAuth, async (_req, res) => {
+  const items = await getUclaItems();
   res.json({ items });
 });
 
-router.get('/work/done', requireAuth, async (_req, res) => {
-  const items = await getDoneWorkItems();
+router.get('/ucla/done', requireAuth, async (_req, res) => {
+  const items = await getDoneUclaItems();
   res.json({ items });
 });
 
-router.post('/work', requireAuth, async (req, res) => {
-  const { text } = req.body as { text?: string };
+router.post('/ucla', requireAuth, async (req, res) => {
+  const { text, dueDate } = req.body as { text?: string; dueDate?: string };
   if (!text?.trim()) { res.status(400).json({ error: 'text required' }); return; }
-  const item = await addWorkItem(text.trim());
+
+  let due: string | undefined;
+  if (dueDate) {
+    const parsedDue = new Date(dueDate);
+    if (isNaN(parsedDue.getTime())) { res.status(400).json({ error: 'dueDate must be a valid datetime' }); return; }
+    due = parsedDue.toISOString();
+  }
+
+  const item = await addUclaItem(text.trim(), { dueDate: due });
+
+  // Mirror the WhatsApp flow: a due date schedules the automatic 24h reminder.
+  if (due) {
+    const owner = ownerPhone();
+    const fireAt = new Date(due).getTime() - 24 * 60 * 60 * 1000;
+    const delaySeconds = Math.floor((fireAt - Date.now()) / 1000);
+    if (owner && delaySeconds > 0) {
+      const dueReminderId = await scheduleOnce('/internal/ucla/due/fire', delaySeconds, {
+        uclaItemId: item.id,
+        text: item.text,
+        dueAt: due,
+        phoneNumber: owner,
+      });
+      await updateUclaItem(item.id, { dueReminderId });
+      item.dueReminderId = dueReminderId;
+    }
+  }
+
   res.json({ item });
 });
 
-router.patch('/work/:id/done', requireAuth, async (req, res) => {
+router.patch('/ucla/:id/done', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const item = await markWorkItemDone(id);
-  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+  const item = await markUclaItemDone(id);
+  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
+  for (const messageId of [item.qstashMessageId, item.dueReminderId]) {
+    if (messageId) await cancelMessage(messageId).catch(() => {});
+  }
   res.json({ ok: true });
 });
 
-router.delete('/work/:id', requireAuth, async (req, res) => {
-  const ok = await deleteWorkItem(Number(req.params.id));
+router.delete('/ucla/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const item = await getUclaItem(id);
+  for (const messageId of [item?.qstashMessageId, item?.dueReminderId]) {
+    if (messageId) await cancelMessage(messageId).catch(() => {});
+  }
+  const ok = await deleteUclaItem(id);
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
@@ -711,25 +641,25 @@ router.post('/tasks/:id/remind', requireAuth, async (req, res) => {
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
-// Work — snooze existing reminder
-router.post('/work/:id/snooze', requireAuth, async (req, res) => {
+// UCLA — snooze existing reminder
+router.post('/ucla/:id/snooze', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const item = await getWorkItem(id);
-  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+  const item = await getUclaItem(id);
+  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
 
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
 
   const settings = await getSettings();
   const fireAt = getSnoozeDate(option, settings.timezone);
-  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
-    workItemId: id,
+  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    uclaItemId: id,
     text: item.text,
     phoneNumber: ownerPhone(),
   });
-  await updateWorkItemReminder(id, fireAt.toISOString(), newMessageId);
+  await updateUclaItemReminder(id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -755,28 +685,34 @@ router.put('/tasks/:id/reminder', requireAuth, async (req, res) => {
   res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 
-// Work — add reminder for items without one
-router.post('/work/:id/remind', requireAuth, async (req, res) => {
+// UCLA — add reminder for items without one
+router.post('/ucla/:id/remind', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const item = await getWorkItem(id);
-  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+  const item = await getUclaItem(id);
+  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
 
   const settings = await getSettings();
   const fireAt = getSnoozeDate(option, settings.timezone);
-  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
-    workItemId: id,
+  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    uclaItemId: id,
     text: item.text,
     phoneNumber: ownerPhone(),
   });
-  await updateWorkItemReminder(id, fireAt.toISOString(), newMessageId);
+  await updateUclaItemReminder(id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
-// Work — update reminder to a specific date/time
-router.put('/work/:id/reminder', requireAuth, async (req, res) => {
+// --- Health alerts (nightly health check) ---
+router.get('/health-alerts', requireAuth, async (_req, res) => {
+  const [alerts, settings] = await Promise.all([getHealthAlerts(), getSettings()]);
+  res.json({ alerts, lastRunAt: settings.healthCheck?.lastRunAt ?? null });
+});
+
+// UCLA — update reminder to a specific date/time
+router.put('/ucla/:id/reminder', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { fireAt } = req.body as { fireAt?: string };
   if (!fireAt) { res.status(400).json({ error: 'Missing fireAt' }); return; }
@@ -784,15 +720,15 @@ router.put('/work/:id/reminder', requireAuth, async (req, res) => {
   if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
     res.status(400).json({ error: 'Invalid or past date' }); return;
   }
-  const item = await getWorkItem(id);
-  if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+  const item = await getUclaItem(id);
+  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
-  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
-    workItemId: id,
+  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
+    uclaItemId: id,
     text: item.text,
     phoneNumber: ownerPhone(),
   });
-  await updateWorkItemReminder(id, newFireAt.toISOString(), newMessageId);
+  await updateUclaItemReminder(id, newFireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 

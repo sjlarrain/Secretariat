@@ -20,20 +20,14 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   schedule: {
     name: '/schedule',
-    description: 'Create a calendar event on Google Calendar',
-    acceptedFlags: ['title', 'for', 'at', 'invite', 'using', 'notes'],
+    description: 'Create a calendar event on Google Calendar. Add -v for a Google Meet link.',
+    acceptedFlags: ['title', 'for', 'at', 'invite', 'using', 'notes', 'video'],
     requiredFlags: ['for', 'at'],
-  },
-  gtask: {
-    name: '/gtask',
-    description: 'Create a task in Google Tasks',
-    acceptedFlags: ['title', 'for', 'notes'],
-    requiredFlags: [],
   },
   task: {
     name: '/task',
-    description: 'Save a personal task. `/task <title>` to add, `/task` to list, `/task done <id>` to mark done. Use -p or # for project, --for for due date.',
-    acceptedFlags: ['project', 'for', 'at'],
+    description: 'Save a personal task. `/task <title>` to add, `/task` to list, `/task done <id>` to mark done. Use -p or # for project, --for for due date, -n for notes.',
+    acceptedFlags: ['project', 'for', 'at', 'notes'],
     requiredFlags: [],
   },
   reminder: {
@@ -60,15 +54,21 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: ['tags', 'read'],
     requiredFlags: [],
   },
-  work: {
-    name: '/work',
-    description: 'Weekend to-do list. `/work <text>` to add, `/work` to list, `/work --done N` to mark done. Add --for and --at for an optional one-shot reminder.',
-    acceptedFlags: ['done', 'for', 'at'],
+  ucla: {
+    name: '/ucla',
+    description: 'UCLA to-do list. `/ucla <text>` to add, `/ucla` to list, `/ucla --done N` to mark done. Use --due for a due date (auto-reminds 24h before); --for and --at add an extra one-shot reminder.',
+    acceptedFlags: ['done', 'due', 'for', 'at'],
     requiredFlags: [],
   },
   status: {
     name: '/status',
     description: 'Show system status: Google calendar connections, Kapso health, and monthly message usage.',
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
+  zone: {
+    name: '/zone',
+    description: 'Show or set the platform timezone. `/zone` to show, `/zone America/Santiago` or `/zone GMT-3` to set. Reschedules all digests.',
     acceptedFlags: [],
     requiredFlags: [],
   },

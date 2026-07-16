@@ -4,15 +4,15 @@ import { extractWebhookData, whitelistMiddleware, WebhookRequest } from '../midd
 import { sendMessage } from '../kapso/client';
 import { startHandler } from '../handlers/start.handler';
 import { scheduleHandler } from '../handlers/schedule.handler';
-import { gtaskHandler } from '../handlers/gtask.handler';
 import { taskHandler } from '../handlers/task.handler';
 import { reminderHandler } from '../handlers/reminder.handler';
 import { myscheduleHandler } from '../handlers/myschedule.handler';
 import { ideasHandler } from '../handlers/ideas.handler';
 import { linksHandler } from '../handlers/links.handler';
 import { menuHandler } from '../handlers/menu.handler';
-import { workHandler } from '../handlers/work.handler';
+import { uclaHandler } from '../handlers/ucla.handler';
 import { statusHandler } from '../handlers/status.handler';
+import { zoneHandler } from '../handlers/zone.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import { replyRescheduleHandler } from '../handlers/reply-reschedule.handler';
 import { thirdPartyHandler } from '../handlers/third-party.handler';
@@ -107,9 +107,6 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
       case 'schedule':
         await scheduleHandler(data, from);
         break;
-      case 'gtask':
-        await gtaskHandler(data, from);
-        break;
       case 'task':
         await taskHandler(data, from);
         break;
@@ -125,11 +122,14 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
       case 'links':
         await linksHandler(data, from);
         break;
-      case 'work':
-        await workHandler(data, from);
+      case 'ucla':
+        await uclaHandler(data, from);
         break;
       case 'status':
         await statusHandler(data, from);
+        break;
+      case 'zone':
+        await zoneHandler(data, from);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

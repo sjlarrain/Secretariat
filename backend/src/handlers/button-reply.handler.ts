@@ -3,7 +3,7 @@ import { getSettings } from '../integrations/token-store';
 import { getReminders, updateReminder, removeReminder, saveReminder, PendingReminder } from '../integrations/local/reminders';
 import { getReplyTarget } from '../integrations/local/wa-reply-map';
 import { getTasks, markTaskDone, updateTaskQStashId, addTask } from '../integrations/local/tasks';
-import { getWorkItem, markWorkItemDone, updateWorkItemReminder } from '../integrations/local/work';
+import { getUclaItem, markUclaItemDone, updateUclaItemReminder } from '../integrations/local/ucla';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../utils/snooze';
 import { removePendingEvent, canNotifyThirdParty } from '../integrations/local/third-party';
@@ -13,24 +13,25 @@ import { formatDate, formatTime } from '../utils/date';
 
 // Button ID format: <action>_<type>_<itemId>
 // action: s1d | s3d | smon | done
-// type:   rem | task | work
-// itemId: string (UUID for reminders, number for tasks/work)
+// type:   rem | task | ucla  ('work' still accepted — pre-v1.14 buttons already
+//         delivered to the user's phone keep working after the rename)
+// itemId: string (UUID for reminders, number for tasks/ucla)
 //
 // Third-party format: tp_<type>_<pendingId>
 // type: rem | task | cal
 //
-// Examples: s1d_rem_abc123, smon_task_5, done_work_3, tp_rem_uuid
+// Examples: s1d_rem_abc123, smon_task_5, done_ucla_3, tp_rem_uuid
 
-function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeOption | null; type: 'rem' | 'task' | 'work'; itemId: string } | null {
+function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeOption | null; type: 'rem' | 'task' | 'ucla'; itemId: string } | null {
   const parts = id.split('_');
   if (parts.length < 3) return null;
 
   const [rawAction, itemType, ...rest] = parts;
   const itemId = rest.join('_');
 
-  if (!['rem', 'task', 'work'].includes(itemType)) return null;
+  if (!['rem', 'task', 'ucla', 'work'].includes(itemType)) return null;
 
-  const type = itemType as 'rem' | 'task' | 'work';
+  const type = (itemType === 'work' ? 'ucla' : itemType) as 'rem' | 'task' | 'ucla';
 
   if (rawAction === 'done') return { action: 'done', option: null, type, itemId };
 
@@ -60,7 +61,7 @@ export async function buttonReplyHandler(buttonId: string, from: string, context
     } else if (parsed.type === 'task') {
       await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
     } else {
-      await handleWorkButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
+      await handleUclaButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
     }
 
   } catch (err) {
@@ -162,16 +163,16 @@ async function handleTaskButton(
   await sendMessage(from, `⏰ Task snoozed: _"${task.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
 }
 
-async function handleWorkButton(
+async function handleUclaButton(
   action: 'snooze' | 'done',
   option: SnoozeOption | null,
-  workId: number,
+  uclaId: number,
   from: string,
   timezone: string,
 ) {
-  const item = await getWorkItem(workId);
+  const item = await getUclaItem(uclaId);
   if (!item) {
-    await sendMessage(from, '❌ Work item not found.');
+    await sendMessage(from, '❌ UCLA item not found.');
     return;
   }
 
@@ -180,19 +181,23 @@ async function handleWorkButton(
   }
 
   if (action === 'done') {
-    await markWorkItemDone(workId);
+    // Also drop the automatic due reminder, or it fires for a completed item.
+    if (item.dueReminderId) {
+      await cancelMessage(item.dueReminderId).catch(() => null);
+    }
+    await markUclaItemDone(uclaId);
     await sendMessage(from, `✅ Done! _"${item.text}"_ marked as completed.`);
     return;
   }
 
   const fireAt = getSnoozeDate(option!, timezone);
-  const newMessageId = await scheduleOnce('/internal/work/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
-    workItemId: workId,
+  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    uclaItemId: uclaId,
     text: item.text,
     phoneNumber: from,
   });
-  await updateWorkItemReminder(workId, fireAt.toISOString(), newMessageId);
-  await sendMessage(from, `⏰ Work item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
+  await updateUclaItemReminder(uclaId, fireAt.toISOString(), newMessageId);
+  await sendMessage(from, `⏰ UCLA item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
 }
 
 // tp_rem_<id> | tp_task_<id> | tp_cal_<id>

@@ -1,28 +1,7 @@
 import { sendMessage } from '../kapso/client';
 import { getAllAccounts, getSettings } from '../integrations/token-store';
-import { env } from '../env';
+import { kapsoFetch, fetchPhoneHealth, HealthResponse, MessagesResponse } from '../kapso/platform';
 import type { ParsedCommand } from '../parser/command.parser';
-
-const PLATFORM_BASE = 'https://api.kapso.ai/platform/v1';
-
-interface HealthResponse {
-  status: 'healthy' | 'degraded' | 'unhealthy' | 'error';
-  error?: string | null;
-  checks?: Record<string, { passed: boolean; details?: Record<string, unknown>; error?: string }> | null;
-}
-
-interface MessagesResponse {
-  data: unknown[];
-  meta?: { total_count?: number };
-}
-
-async function kapsoFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${PLATFORM_BASE}${path}`, {
-    headers: { 'X-API-Key': env.KAPSO_API_KEY },
-  });
-  if (!res.ok) throw new Error(`Kapso API ${res.status}: ${await res.text()}`);
-  return res.json() as Promise<T>;
-}
 
 export function formatStatusMessage(params: {
   accounts: { alias: string; type: string; isDefault: boolean; isDisconnected: boolean }[];
@@ -78,7 +57,7 @@ export async function statusHandler(_parsed: ParsedCommand, from: string): Promi
   let receivedThisMonth: number | null = null;
 
   const [healthResult, sentResult, receivedResult] = await Promise.allSettled([
-    kapsoFetch<HealthResponse>(`/phone-numbers/${env.KAPSO_PHONE_NUMBER_ID}/health`),
+    fetchPhoneHealth(),
     kapsoFetch<MessagesResponse>(`/messages?direction=outbound&per_page=1&created_after=${monthStart}`),
     kapsoFetch<MessagesResponse>(`/messages?direction=inbound&per_page=1&created_after=${monthStart}`),
   ]);

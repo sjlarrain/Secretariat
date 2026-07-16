@@ -1,8 +1,11 @@
 import { getAllAccounts, getSettings } from '../integrations/token-store';
 import { getTodayEvents } from '../integrations/google/calendar';
+import { getUpcomingUclaItems } from '../integrations/local/ucla';
 import { formatDate, formatTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 import { whitelistedNumbers } from '../env';
+
+const UCLA_LOOKAHEAD_HOURS = 48;
 
 export async function fireMorningDigest(): Promise<void> {
   const settings = await getSettings();
@@ -28,6 +31,24 @@ export async function fireMorningDigest(): Promise<void> {
     for (const event of allEvents) {
       const alias = calAccounts.length > 1 ? ` _(${event.calendarAlias})_` : '';
       lines.push(`${formatTime(event.start, tz)} — ${event.title}${alias}`);
+    }
+  }
+
+  const { upcoming, overdue } = await getUpcomingUclaItems(UCLA_LOOKAHEAD_HOURS, today);
+
+  if (overdue.length > 0) {
+    lines.push('\n🎓 *UCLA — overdue:*');
+    for (const item of overdue) {
+      const due = new Date(item.dueDate!);
+      lines.push(`• ${item.text} _(was due ${formatDate(due, true, tz)} at ${formatTime(due, tz)})_`);
+    }
+  }
+
+  if (upcoming.length > 0) {
+    lines.push(`\n🎓 *UCLA — due in the next ${UCLA_LOOKAHEAD_HOURS}h:*`);
+    for (const item of upcoming) {
+      const due = new Date(item.dueDate!);
+      lines.push(`• ${item.text} _(${formatDate(due, true, tz)} at ${formatTime(due, tz)})_`);
     }
   }
 

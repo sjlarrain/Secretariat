@@ -84,10 +84,29 @@ describe('COMMANDS registry', () => {
   });
 });
 
+// ─── Short aliases must be unambiguous within each command ───────────────────
+
+describe('short aliases do not collide within a command', () => {
+  // Aliases are resolved per-command, so two flags may share a letter globally
+  // (--project/--plan both use -p) as long as no single command accepts both.
+  for (const [key, def] of Object.entries(COMMANDS)) {
+    it(`/${key} has no duplicate short aliases`, () => {
+      const seen = new Map<string, string>();
+      for (const flagKey of def.acceptedFlags) {
+        const alias = FLAGS[flagKey]?.shortAlias;
+        if (!alias) continue;
+        const clash = seen.get(alias);
+        expect(clash, `/${key}: -${alias} maps to both --${clash} and --${flagKey}`).toBeUndefined();
+        seen.set(alias, flagKey);
+      }
+    });
+  }
+});
+
 // ─── Cross-registry: expected commands exist ──────────────────────────────────
 
 describe('expected commands are registered', () => {
-  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'gtask', 'reminder', 'myschedule', 'ideas', 'links', 'work'];
+  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'reminder', 'myschedule', 'ideas', 'links', 'ucla', 'status', 'zone'];
 
   for (const cmd of requiredCommands) {
     it(`/${cmd} is in COMMANDS`, () => {
@@ -96,10 +115,23 @@ describe('expected commands are registered', () => {
   }
 });
 
+// ─── Retired commands stay retired ───────────────────────────────────────────
+
+describe('retired commands are absent', () => {
+  // /gtask merged into /task and /work became /ucla in v1.14. The webhook
+  // switch has no case for either, so re-adding one here without a handler
+  // would silently fall through to "unknown command".
+  for (const cmd of ['gtask', 'work']) {
+    it(`/${cmd} is not in COMMANDS`, () => {
+      expect(COMMANDS[cmd]).toBeUndefined();
+    });
+  }
+});
+
 // ─── Cross-registry: expected flags exist ────────────────────────────────────
 
 describe('expected flags are registered', () => {
-  const requiredFlags = ['title', 'for', 'at', 'invite', 'using', 'notes', 'project', 'plan', 'read', 'tags', 'done'];
+  const requiredFlags = ['title', 'for', 'at', 'invite', 'using', 'notes', 'project', 'plan', 'read', 'tags', 'done', 'due', 'video'];
 
   for (const flag of requiredFlags) {
     it(`--${flag} is in FLAGS`, () => {
@@ -139,10 +171,22 @@ describe('short alias resolution (per-command scope)', () => {
     expect(tagsFlag).toBe('tags');
   });
 
-  it('/work: -d resolves to "done"', () => {
-    const accepted = COMMANDS['work'].acceptedFlags;
+  it('/ucla: -d resolves to "done"', () => {
+    const accepted = COMMANDS['ucla'].acceptedFlags;
     const doneFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'd');
     expect(doneFlag).toBe('done');
+  });
+
+  it('/ucla: -u resolves to "due" and -d to "done" without colliding', () => {
+    const accepted = COMMANDS['ucla'].acceptedFlags;
+    expect(accepted.find((k) => FLAGS[k]?.shortAlias === 'u')).toBe('due');
+    expect(accepted.find((k) => FLAGS[k]?.shortAlias === 'd')).toBe('done');
+  });
+
+  it('/schedule: -v resolves to "video"', () => {
+    const accepted = COMMANDS['schedule'].acceptedFlags;
+    const videoFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'v');
+    expect(videoFlag).toBe('video');
   });
 
   it('/task: -p resolves to "project"', () => {
@@ -185,8 +229,12 @@ describe('required flags contract', () => {
     expect(COMMANDS['reminder'].requiredFlags).toContain('at');
   });
 
-  it('/work has no required flags', () => {
-    expect(COMMANDS['work'].requiredFlags).toHaveLength(0);
+  it('/ucla has no required flags', () => {
+    expect(COMMANDS['ucla'].requiredFlags).toHaveLength(0);
+  });
+
+  it('/zone has no required flags', () => {
+    expect(COMMANDS['zone'].requiredFlags).toHaveLength(0);
   });
 
   it('/myschedule has no required flags', () => {
@@ -195,10 +243,6 @@ describe('required flags contract', () => {
 
   it('/task has no required flags', () => {
     expect(COMMANDS['task'].requiredFlags).toHaveLength(0);
-  });
-
-  it('/gtask has no required flags', () => {
-    expect(COMMANDS['gtask'].requiredFlags).toHaveLength(0);
   });
 
   it('/ideas has no required flags', () => {

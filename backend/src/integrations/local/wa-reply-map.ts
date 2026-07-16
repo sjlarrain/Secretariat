@@ -2,8 +2,10 @@ import { Redis } from '@upstash/redis';
 import { env } from '../../env';
 
 export interface WaReplyTarget {
-  type: 'rem' | 'task' | 'work';
-  id: string; // UUID for rem, stringified number for task/work
+  /** 'work' is the pre-v1.14 name for 'ucla'; still read for targets stored
+   *  before the rename (48h TTL means they age out on their own). */
+  type: 'rem' | 'task' | 'ucla' | 'work';
+  id: string; // UUID for rem, stringified number for task/ucla
   title: string;
   phoneNumber: string;
 }

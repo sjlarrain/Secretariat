@@ -10,11 +10,15 @@ import { scheduleOnce, cancelMessage } from '../qstash/client';
 
 async function pushTaskToGoogle(task: LocalTask): Promise<void> {
   try {
+    const settings = await getSettings();
+    // The sync toggle is the single switch for Google Tasks: when it is off,
+    // /task stays fully local rather than pushing behind the user's back.
+    if (!settings.googleTasksSync.enabled) return;
     const account = await resolveAccount('tasks');
     if (!account || account.isDisconnected) return;
-    const tz = (await getSettings()).timezone;
+    const tz = settings.timezone;
     const dueDate = task.dueDate ? combineDateAndTime(new Date(task.dueDate), task.dueTime ?? '00:00', tz) : undefined;
-    const { taskId } = await createGoogleTask(account, { title: task.title, dueDate });
+    const { taskId } = await createGoogleTask(account, { title: task.title, dueDate, notes: task.notes });
     await setTaskGoogleId(task.id, taskId);
   } catch (err) {
     console.error('Best-effort Google Tasks push (create) failed:', err);
@@ -24,6 +28,7 @@ async function pushTaskToGoogle(task: LocalTask): Promise<void> {
 async function pushTaskDoneToGoogle(task: LocalTask): Promise<void> {
   if (!task.googleTaskId) return;
   try {
+    if (!(await getSettings()).googleTasksSync.enabled) return;
     const account = await resolveAccount('tasks');
     if (!account || account.isDisconnected) return;
     await completeGoogleTask(account, task.googleTaskId);
@@ -41,6 +46,7 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
     const projectFlag = flags['project'] as string | undefined;
     const forFlag = flags['for'];
     const atFlag = flags['at'];
+    const notesFlag = flags['notes'] || undefined;
 
     // /task done <id>  →  mark task done
     if (extraArgs[0] === 'done') {
@@ -148,7 +154,7 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
       dueDate = parsed.toISOString();
       dueTime = timeStr;
 
-      const task = await addTask({ title, project: projectFlag, dueDate, dueTime });
+      const task = await addTask({ title, project: projectFlag, notes: notesFlag, dueDate, dueTime });
       const msgId = await scheduleOnce(
         '/internal/task/reminder/fire',
         Math.floor((fireAt.getTime() - Date.now()) / 1000),
@@ -159,15 +165,17 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
 
       const dateLabel = `${formatDate(fireAt, true, tz)} at ${formatTime(fireAt, tz)}`;
       const projectLabel = projectFlag ? ` in *${projectFlag}*` : '';
-      await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}\n⏰ Reminder: ${dateLabel}`);
+      const notesLabel = notesFlag ? `\n📝 ${notesFlag}` : '';
+      await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}${notesLabel}\n⏰ Reminder: ${dateLabel}`);
       return;
     }
 
     // No date — just save
-    const task = await addTask({ title, project: projectFlag, dueDate, dueTime });
+    const task = await addTask({ title, project: projectFlag, notes: notesFlag, dueDate, dueTime });
     await pushTaskToGoogle(task);
     const projectLabel = projectFlag ? ` in *${projectFlag}*` : '';
-    await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}`);
+    const notesLabel = notesFlag ? `\n📝 ${notesFlag}` : '';
+    await sendMessage(from, `✅ *Task saved!* (#${task.id})${projectLabel}\n📌 ${title}${notesLabel}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sendMessage(from, `❌ Error: ${msg}`);

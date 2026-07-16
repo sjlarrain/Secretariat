@@ -1,6 +1,12 @@
 # WhatsApp Command Bot — context.md
-> This file is the single source of truth for Claude Code to implement the project.
-> Read it fully before writing any code. Every decision is final unless explicitly marked as TBD.
+> **This is the original design spec, kept for the "why" behind the architecture.
+> It is no longer the source of truth for current behavior** — see `README.md` for
+> the shipped command reference and `BACKLOG.md` for the feature queue.
+>
+> Known drift: Redis replaced the file-based storage described here; Microsoft is
+> still unimplemented; the command set has grown (and `/gtask` and `/work` are
+> gone — see §26). Sections below are updated only where they would actively
+> mislead.
 
 ---
 
@@ -32,6 +38,9 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │   ├── start.handler.ts
 │   │   │   ├── schedule.handler.ts
 │   │   │   ├── task.handler.ts
+│   │   │   ├── ucla.handler.ts         # /ucla — to-do list with due dates
+│   │   │   ├── zone.handler.ts         # /zone — show/set timezone
+│   │   │   ├── status.handler.ts       # /status — connections, Kapso health, usage
 │   │   │   ├── reminder.handler.ts
 │   │   │   ├── mytask.handler.ts
 │   │   │   ├── myschedule.handler.ts
@@ -39,7 +48,10 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │   └── button-reply.handler.ts # Snooze/done buttons + tp_ reclassify buttons
 │   │   ├── cron/
 │   │   │   ├── morning-digest.ts     # Called by QStash cron
-│   │   │   └── weekly-summary.ts     # Called by QStash cron
+│   │   │   ├── weekly-summary.ts     # Called by QStash cron
+│   │   │   ├── reminder-promoter.ts  # Weekly — promotes deferred reminders to QStash
+│   │   │   ├── google-tasks-sync.ts  # Every 15 min — two-way /task ↔ Google Tasks sync
+│   │   │   └── health-check.ts       # Nightly — Kapso/Google/QStash/Redis health
 │   │   ├── integrations/
 │   │   │   ├── registry.ts           # Named account store + default resolution
 │   │   │   ├── token-store.ts        # Encrypted token persistence (file-based)
@@ -53,7 +65,7 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │       ├── ideas.ts          # Ideas + projects (secretariat:ideas, secretariat:projects)
 │   │   │       ├── links.ts          # Saved links (secretariat:links)
 │   │   │       ├── plans.ts          # Meeting plan types (secretariat:plans)
-│   │   │       ├── work.ts           # Weekend work list (secretariat:work)
+│   │   │       ├── ucla.ts           # UCLA to-do list with due dates (secretariat:ucla)
 │   │   │       └── third-party.ts    # Third-party contacts + pending events (secretariat:third-party-*)
 │   │   ├── kapso/
 │   │   │   └── client.ts             # Kapso SDK wrapper — send WhatsApp messages
@@ -613,10 +625,21 @@ WhatsApp formatting supported in message text:
 
 // deleteSchedule(scheduleId: string): Promise<void>
 //   → deletes a cron schedule (used when user disables digest in admin panel)
+
+// listSchedules(): Promise<{ scheduleId, cron, destination }[]>
+//   → lists live schedules; the health check uses this to detect schedules
+//     deleted or expired out-of-band
 ```
 
 Use `@upstash/qstash` npm package.
 QStash will always POST to `BASE_URL + the given path`.
+
+**Cron strings must carry their timezone.** QStash evaluates cron in UTC by
+default but honours a `CRON_TZ=<IANA zone>` prefix inside the expression, so the
+zone is embedded rather than pre-computed as a UTC offset. Build every cron with
+`buildCron()` from `utils/timezone.ts`; never do offset math by hand. Creating
+and deleting recurring schedules is centralized in `qstash/schedules.ts`
+(`reconcileSchedules`), shared by `PUT /settings` and `/zone`.
 
 ---
 
@@ -673,7 +696,7 @@ Session: use `express-session` with a memory store (acceptable for single-user p
 **Digests** (`/digests`)
 - Morning digest: toggle on/off, time picker, day-of-week multi-select
 - Weekly summary: toggle on/off, day-of-week single select, time picker
-- Timezone selector (IANA timezone list e.g. `America/Santiago`)
+- Timezone input — accepts an IANA name (`America/Santiago`, suggested via datalist) or a fixed `GMT±N` offset, matching the `/zone` command. Free text rather than a fixed dropdown, since `/zone` can set any zone. The server canonicalizes it and rebuilds every schedule
 - Save button → calls `PUT /api/admin/settings`
 
 ---
@@ -807,11 +830,14 @@ Execute phases strictly in this order. Do not skip ahead.
 
 ---
 
-## 26. Known Limitations (v1)
+## 26. Known Limitations
 
-- Token storage is file-based and ephemeral on Render free tier — re-connect accounts after redeploy
-- No retry logic for failed Google/Microsoft API calls
-- No rate limiting on webhook endpoint
-- WhatsApp message templates must be manually submitted and approved before production use of reminders/digests
-- QStash free tier: 500 messages/day, 3 active cron schedules
+Updated as of v1.14 — the original v1 list, with what has since changed.
+
+- ~~Token storage is file-based and ephemeral on Render free tier~~ — tokens now live in Upstash Redis, AES-256-GCM encrypted, and survive redeploys
+- No retry logic for failed Google API calls. **Kapso sends now retry** (3 attempts with backoff, 15s timeout) — but a timed-out send is deliberately *not* retried, since the request is not aborted and a retry could deliver the same WhatsApp message twice
+- No rate limiting on webhook endpoint (admin login is rate-limited)
+- WhatsApp message templates must be manually submitted and approved before production use of reminders/digests. **Still open** — proactive messages (digests, health alerts) can be rejected outside Meta's 24-hour session window. The admin health banner is the reliable surface for health alerts; WhatsApp delivery is best-effort and failures are logged
+- QStash free tier: 500 messages/day, **3 active cron schedules — Secretariat can now register 6** (morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync, health check), so a paid plan is required to enable them all. Each is individually toggleable; the health check reports any that are enabled but have no live schedule
 - Render free tier: ~50 seconds cold start on first request after sleep — `/start` command serves as manual wake-up
+- `/menu` output is a hand-maintained string, not generated from the registries — it must be updated by hand when commands or flags change

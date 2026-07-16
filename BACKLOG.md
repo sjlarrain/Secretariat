@@ -52,4 +52,16 @@
 | v1.12 | AI natural language — interpret messages without `/` via Claude API | ⬜ Pending | Medium |
 | **v1.13 — Google Tasks Sync** | | | |
 | v1.13 | `/task` ↔ Google Tasks two-way sync — local-wins conflict resolution, 15-min poll for Google-side changes, admin toggle | ✅ Done | Medium |
+| **v1.14 — Review & Feature Request** | | | |
+| v1.14 | Timezone — `/zone` command (IANA name or `GMT±N`), admin timezone input, QStash `CRON_TZ` replaces manual offset math | ✅ Done | Medium |
+| v1.14 | Digest fires at wrong time — fixed: timezone change now regenerates all crons; `CRON_TZ` also removes DST drift | ✅ Done | Medium |
+| v1.14 | Retire `/gtask` — merged into `/task` (gains `--notes`); sync toggle now gates all push-to-Google | ✅ Done | Medium |
+| v1.14 | `/work` → `/ucla` — due dates with automatic 24h-before reminder, morning digest surfacing, data + schedule migration | ✅ Done | Medium |
+| v1.14 | Kapso reliability — retry with backoff + request timeout, retries logged distinctly from hard failures | ✅ Done | Medium |
+| v1.14 | Admin nav — Reminders split into its own page; Cron Manager moved under Settings | ✅ Done | Medium |
+| v1.14 | Nightly health check — Kapso, Google tokens, QStash schedules, Redis; admin banner + best-effort WhatsApp alert | ✅ Done | Medium |
+| v1.14 | `/schedule -v` — attach a Google Meet link via `conferenceData.createRequest` | ✅ Done | Easy |
+| v1.14 | Extend 15-min sync to UCLA tasks with Google-side differentiation | ❌ Cut | — |
+| v1.14 | _Cut: `/ucla` is a local-only list, so there are no UCLA tasks in Google Tasks to differentiate. Google Tasks has no per-task color at the API level (`colorId` is Calendar-only); a dedicated tasklist would be the mechanism if this is ever revisited._ | | |
+| v1.14 | Meta-approved message template for proactive digests + health alerts — removes the 24h-window delivery risk | ⬜ Pending | Ops |
 | ops | Better server — upgrade Render plan or migrate host | ⬜ Pending | Ops |

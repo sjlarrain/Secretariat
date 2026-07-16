@@ -12,14 +12,15 @@ Send a command from WhatsApp and Secretariat handles the rest:
 
 | Command | What it does |
 |---------|-------------|
-| `/schedule` | Creates an event on Google Calendar |
+| `/schedule` | Creates an event on Google Calendar; `-v` adds a Google Meet link |
 | `/myschedule` | Shows calendar events for a day or week, or free slots for a plan type |
-| `/task` | Personal task manager (add, list by project, mark done) — stored in Secretariat |
-| `/gtask` | Google Tasks — no args lists pending, with title creates a new task |
+| `/task` | Personal task manager (add, list by project, mark done), two-way synced to Google Tasks |
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
 | `/ideas` | Saves ideas, lists them, filters by project |
 | `/links` | Saves a link for later, lists unread links, or archives one |
-| `/work` | Adds items to a weekend work list; optional per-item reminder; Monday digest |
+| `/ucla` | Adds items to a UCLA to-do list; due dates auto-remind 24h before; Monday digest |
+| `/status` | Shows connections, Kapso health, and monthly message usage |
+| `/zone` | Shows or sets the platform timezone; reschedules all digests |
 | `/menu` | Shows all commands and syntax |
 | `/start` | Wakes up the bot (useful after Render cold start) |
 
@@ -41,10 +42,12 @@ Third-party contacts (registered in the admin panel) have access to a limited co
 | Service | Purpose | Free tier |
 |---------|---------|-----------|
 | [Kapso](https://kapso.io) | WhatsApp Cloud API — receives and sends messages | Yes |
-| [Upstash QStash](https://upstash.com/qstash) | Schedules reminders and digest crons | 500 msg/day, 3 crons |
+| [Upstash QStash](https://upstash.com/qstash) | Schedules reminders and digest crons | 500 msg/day, 3 crons on the free tier — see note below |
 | [Upstash Redis](https://upstash.com/redis) | Persists ideas, plans, links, and pending reminders | Free |
 | [Google Cloud Console](https://console.cloud.google.com) | OAuth app for Calendar + Tasks | Free |
 | [Render](https://render.com) | Hosting | Free tier (cold starts ~50s) |
+
+> **QStash cron budget.** Secretariat can register up to **six** recurring schedules: morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync (every 15 min), and the nightly health check. That exceeds the documented free-tier limit of 3, so a paid QStash plan is required to enable them all. Each is individually toggleable in admin panel → Settings → Cron Manager; if schedule creation fails, the error is logged and the toggle stays on with no schedule ID — the nightly health check reports exactly this case as "enabled but its QStash schedule no longer exists".
 
 ### Environment variables
 
@@ -110,8 +113,10 @@ NODE_ENV=production
 │       │   ├── start.handler.ts
 │       │   ├── menu.handler.ts
 │       │   ├── schedule.handler.ts
-│       │   ├── task.handler.ts        # /task — local task manager (add, list, mark done)
-│       │   ├── gtask.handler.ts       # /gtask — creates task in Google Tasks
+│       │   ├── task.handler.ts        # /task — local task manager, two-way synced to Google Tasks
+│       │   ├── ucla.handler.ts        # /ucla — UCLA to-do list with due dates (was work.handler.ts)
+│       │   ├── zone.handler.ts        # /zone — show/set timezone, regenerates all schedules
+│       │   ├── status.handler.ts      # /status — connections, Kapso health, usage
 │       │   ├── reminder.handler.ts    # Saves pending reminder to Redis; fires via QStash
 │       │   ├── mytask.handler.ts
 │       │   ├── myschedule.handler.ts  # Regular/week mode + --plan availability mode
@@ -197,18 +202,20 @@ All commands must be sent from a whitelisted WhatsApp number.
 ### `/schedule` — Create a calendar event
 
 ```
-/schedule <title> --for <date> --at <HH:MM> [--invite <emails>] [--notes <text>] [--using <alias>]
+/schedule <title> --for <date> --at <HH:MM> [--invite <emails>] [--notes <text>] [--using <alias>] [--video]
 /schedule --title <name> -f <date> -a <HH:MM>
 ```
 
 ```
 /schedule Breakfast with Hernan -f tomorrow -a 09:00
 /schedule Board review -f 22-05-2026 @18:00 -i ana@company.com,luis@company.com
+/schedule Standup -f monday @09:00 -v
 ```
 
 - `--for` accepts `DD-MM-YYYY`, `tomorrow`, `next monday`, `next week`, etc.
 - `@HH:MM` is a shorthand for `--at HH:MM`
 - `--using` selects a named account alias; omit to use the default calendar
+- `--video` (`-v`) attaches a Google Meet link and returns the join URL in the reply. It takes no value — just add the flag. Only `/schedule` supports it; events created by third-party contacts via `/set` do not.
 
 ### `/myschedule` — Calendar events or free slots
 
@@ -257,19 +264,7 @@ Each plan defines its own **buffer** (minutes kept free before and after the slo
 
 Tasks are stored in Secretariat's Redis. When a due date is set, a WhatsApp reminder fires at the due time (defaults to the "Default task reminder time" in admin Settings → Time Configuration). Marking a task done cancels any pending reminder.
 
-### `/gtask` — Google Tasks
-
-```
-/gtask                                   → list all pending Google Tasks
-/gtask <name> [--for <date>] [--notes]   → create a new Google Task
-/gtask -f <date> -n <notes>
-```
-
-```
-/gtask
-/gtask Call Isabel
-/gtask Send quarterly report -f next friday -n include Q1 numbers
-```
+> **Retired in v1.14:** `/gtask` no longer exists. `/task` is the single entry point for tasks — it keeps a local list and two-way syncs it to Google Tasks, and now accepts `--notes` (`-n`), which was `/gtask`'s only unique capability. Turn syncing off in admin panel → Settings → Cron Manager → Google Tasks Sync; with it off, `/task` stays fully local and never pushes to Google.
 
 ### `/reminder` — Set a WhatsApp reminder
 
@@ -285,26 +280,38 @@ Tasks are stored in Secretariat's Redis. When a due date is set, a WhatsApp remi
 
 The reminder fires as a WhatsApp message at the scheduled time, delivered by QStash. Times are interpreted in the configured timezone. Pending reminders are visible (and cancellable) in the admin panel → Cron Manager.
 
-### `/work` — Weekend work list
+### `/ucla` — UCLA to-do list
 
 ```
-/work <text>                              → add item to work list
-/work <text> --for <date> --at <HH:MM>   → add item with a one-shot reminder
-/work <text> -f <date> -a <HH:MM>        → same with short flags
-/work <text> -f <date> @<HH:MM>          → same with @ shorthand
-/work                                     → list pending items (numbered)
-/work —                                   → same (bare dash also lists)
-/work --done <N>                          → mark item #N as done
-/work -d <N>                              → same with short flag
+/ucla <text>                              → add item to UCLA list
+/ucla <text> --due <date>                → add item with a due date
+/ucla <text> -u <date>                   → same with short flag
+/ucla <text> --for <date> --at <HH:MM>   → add item with an extra one-shot reminder
+/ucla <text> -f <date> -a <HH:MM>        → same with short flags
+/ucla <text> -f <date> @<HH:MM>          → same with @ shorthand
+/ucla                                     → list pending items (numbered)
+/ucla —                                   → same (bare dash also lists)
+/ucla --done <N>                          → mark item #N as done
+/ucla -d <N>                              → same with short flag
 ```
 
 ```
-/work Buy groceries
-/work Read the Q1 report -f saturday @10:00
-/work --done 2
+/ucla Finish problem set 3
+/ucla Submit essay --due friday
+/ucla Read the Q1 report -f saturday @10:00
+/ucla --done 2
 ```
 
-Items stay in the list until explicitly marked done — they are **not** fire-and-forget. A Monday morning digest is sent automatically with all pending items (configurable in admin panel → Cron Manager). The per-item reminder is optional: if `--for` / `--at` are provided, a one-shot QStash reminder fires at that time; marking the item done before it fires cancels the reminder.
+Items stay in the list until explicitly marked done — they are **not** fire-and-forget. A Monday morning digest is sent automatically with all pending items (configurable in admin panel → Settings → Cron Manager).
+
+Two independent reminders are available:
+
+- **`--due <date>`** sets a due date and automatically schedules a reminder for **24 hours before** it. Items due within 48 hours also appear in the morning digest. If the item is already due in under 24h, no automatic reminder is scheduled (it would fire in the past) and the reply says so.
+- **`--for` / `--at`** adds an extra one-shot reminder at any time you choose, independent of the due date.
+
+Marking an item done cancels both.
+
+> **Renamed in v1.14:** this was `/work`. Existing items, the Monday reminder, and any in-flight reminders migrate automatically — `/work` itself is no longer a valid command. `-u` (not `-d`) is the short flag for `--due`, because `-d` is already `--done`.
 
 ### `/ideas` — Save or list ideas
 
@@ -335,6 +342,36 @@ Tags are kebab-case and space-separated (e.g. `-t fintech-elements tech-news`). 
 
 Read links are archived rather than deleted — accessible in the admin panel → Links.
 
+### `/status` — System status
+
+```
+/status
+```
+
+Shows connected Google accounts (flagging any that are disconnected), Kapso health, and this month's message usage.
+
+### `/zone` — Show or set the timezone
+
+```
+/zone                        → show the current timezone and local time
+/zone America/Santiago       → set by IANA city name (tracks DST)
+/zone Europe/Madrid
+/zone GMT-3                  → set by fixed offset (does NOT track DST)
+```
+
+The timezone drives every date/time in WhatsApp replies and every recurring schedule. Changing it **immediately deletes and recreates** the morning digest, weekly summary, UCLA reminder, reminder promoter, and health check so they keep firing at the same local wall-clock time. Existing one-off reminders keep their original absolute time.
+
+Two input formats are accepted:
+
+- **A city name** (`America/Santiago`) is stored as-is and follows daylight saving automatically. Prefer this.
+- **A fixed offset** (`GMT-3`) is stored as an `Etc/GMT` pseudo-zone and is permanently DST-naive — it will drift by an hour across a DST boundary. The reply warns you when this happens.
+
+> Note the `Etc/GMT` sign convention is inverted: `/zone GMT-3` (UTC−3, Santiago) is stored as `Etc/GMT+3`. This is handled for you — type the offset the normal way.
+
+Schedules are registered with QStash using a `CRON_TZ=<zone>` prefix, so QStash resolves the local time itself rather than Secretariat pre-computing a UTC offset. This is what keeps digests correct across DST.
+
+The same timezone can also be set in admin panel → Settings → Time Configuration, which accepts both formats and shows the resulting offset.
+
 ### `/menu` — Show command list
 
 ```
@@ -361,12 +398,18 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Tasks** | Local task manager: create, filter by project, mark done, view completed |
 | **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set default; select which sub-calendars to include; disconnect |
 | **Whitelist** | View owner numbers (edit via `WHITELISTED_NUMBERS` env var); manage third-party contacts with name + number |
-| **Cron Manager** | Configure morning digest and weekly summary; view and cancel pending reminders |
+| **Reminders** | View, edit, snooze, and cancel pending one-off reminders (split out of Cron Manager in v1.14) |
+| **UCLA** | Add items with optional due dates, snooze, mark done (was the Work page) |
+| **Tasks** | Local task manager, two-way synced to Google Tasks |
 | **Plans** | Create and manage meeting plan types (name, days, time slots, duration, buffer) for `/myschedule --plan` |
 | **Ideas** | Folder-style view by project; create, edit, delete, reassign; trash with 30-day auto-purge |
 | **Links** | Tag-folder view; add links, mark as read, delete; read archive sidebar section |
 | **Commands** | Reference for all commands and flags |
-| **Settings** | Timezone selector, live server clock, and default task reminder time |
+| **Settings** | Hub for Accounts, Whitelist, Plans, Commands, Time Configuration, and Cron Manager |
+| **Settings → Time Configuration** | Timezone (city name or `GMT±N`), live server clock, default task reminder time |
+| **Settings → Cron Manager** | Morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync, and nightly health check schedules |
+
+A **health banner** appears at the top of every page when the nightly health check finds a problem (disconnected Google account, Kapso degraded, a missing QStash schedule, Redis unreachable), with a link to resolve it. This banner is the reliable surface for health alerts — the WhatsApp notification is best-effort and can be dropped outside Meta's 24-hour session window.
 
 ---
 
@@ -434,3 +477,5 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 | v1.10 | Todoist | Task integration via Todoist API |
 | v1.11 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
 | v1.12 | NLP | Natural language messages via Claude API |
+| v1.13 | Google Tasks Sync | ✅ Done — two-way `/task` ↔ Google Tasks sync, 15-min poll, admin toggle |
+| v1.14 | Review & Feature Request | ✅ Done — `/zone` + `CRON_TZ` digest-time fix, `/gtask` retired into `/task`, `/work` → `/ucla` with due dates, Kapso retry, nightly health check, `/schedule -v` Meet links, admin nav split |

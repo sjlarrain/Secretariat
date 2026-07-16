@@ -42,12 +42,18 @@ Third-party contacts (registered in the admin panel) have access to a limited co
 | Service | Purpose | Free tier |
 |---------|---------|-----------|
 | [Kapso](https://kapso.io) | WhatsApp Cloud API — receives and sends messages | Yes |
-| [Upstash QStash](https://upstash.com/qstash) | Schedules reminders and digest crons | 500 msg/day, 3 crons on the free tier — see note below |
+| [Upstash QStash](https://upstash.com/qstash) | Schedules reminders and digest crons | Free tier: 1,000 msg/day, 10 active schedules, 7-day max delay |
 | [Upstash Redis](https://upstash.com/redis) | Persists ideas, plans, links, and pending reminders | Free |
 | [Google Cloud Console](https://console.cloud.google.com) | OAuth app for Calendar + Tasks | Free |
 | [Render](https://render.com) | Hosting | Free tier (cold starts ~50s) |
 
-> **QStash cron budget.** Secretariat can register up to **six** recurring schedules: morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync (every 15 min), and the nightly health check. That exceeds the documented free-tier limit of 3, so a paid QStash plan is required to enable them all. Each is individually toggleable in admin panel → Settings → Cron Manager; if schedule creation fails, the error is logged and the toggle stays on with no schedule ID — the nightly health check reports exactly this case as "enabled but its QStash schedule no longer exists".
+> **QStash schedule budget.** Secretariat registers up to **six** recurring schedules: morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync (every 15 min), and the nightly health check. The free tier allows **10 active schedules**, so all six fit with room to spare. Each is individually toggleable in admin panel → Settings → Cron Manager.
+>
+> Message volume also fits: the 15-minute sync is the heaviest job at ~96 messages/day against a 1,000/day free-tier limit.
+>
+> If a schedule ever fails to be created, the error is logged and the toggle stays on with no schedule ID — the job then silently never fires. The nightly health check reports exactly this case ("enabled but has no QStash schedule").
+
+> **The 7-day delay limit is the free tier's real constraint**, not the schedule count. QStash will not accept a one-off message delayed more than 7 days, which is why `/reminder` defers anything further out and why the **reminder promoter** exists. The promoter is always on and has no toggle — deferred reminders depend entirely on it. See [`/reminder`](#reminder--set-a-whatsapp-reminder).
 
 ### Environment variables
 
@@ -278,7 +284,11 @@ Tasks are stored in Secretariat's Redis. When a due date is set, a WhatsApp remi
 /reminder Submit invoice -f next monday @17:00
 ```
 
-The reminder fires as a WhatsApp message at the scheduled time, delivered by QStash. Times are interpreted in the configured timezone. Pending reminders are visible (and cancellable) in the admin panel → Cron Manager.
+The reminder fires as a WhatsApp message at the scheduled time, delivered by QStash. Times are interpreted in the configured timezone. Pending reminders are visible (and cancellable) in the admin panel → **Reminders**.
+
+**Reminders more than 7 days out are deferred.** QStash will not accept a message delayed beyond 7 days (free tier), so a reminder further out is stored as *deferred* with no queued message — the reply says "Reminder set (deferred)". The **reminder promoter** cron converts it into a real queued reminder once it comes within the 7-day window. Reminders inside 7 days are queued immediately.
+
+> The promoter is **always on and cannot be disabled** — deferred reminders have no queued message and depend entirely on it, so turning it off would silently strand them. It has no on/off toggle in the admin panel; only its run time (default Sunday 08:00) is configurable. The invariant is enforced in `token-store.ts` (on read and write) and in `reconcileSchedules()`, and the `enabled` field is typed as the literal `true` so the compiler rejects any code that tries to unset it.
 
 ### `/ucla` — UCLA to-do list
 
@@ -407,7 +417,7 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Commands** | Reference for all commands and flags |
 | **Settings** | Hub for Accounts, Whitelist, Plans, Commands, Time Configuration, and Cron Manager |
 | **Settings → Time Configuration** | Timezone (city name or `GMT±N`), live server clock, default task reminder time |
-| **Settings → Cron Manager** | Morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync, and nightly health check schedules |
+| **Settings → Cron Manager** | Morning digest, weekly summary, UCLA Monday reminder, Google Tasks sync, and nightly health check — each individually toggleable. The reminder promoter also appears here but has no toggle: it is always on, and only its run time can be changed |
 
 A **health banner** appears at the top of every page when the nightly health check finds a problem (disconnected Google account, Kapso degraded, a missing QStash schedule, Redis unreachable), with a link to resolve it. This banner is the reliable surface for health alerts — the WhatsApp notification is best-effort and can be dropped outside Meta's 24-hour session window.
 

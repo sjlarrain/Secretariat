@@ -151,30 +151,31 @@ export default function CronManager() {
             ) : null}
           </div>
 
-          {/* Reminder Promoter */}
+          {/* Reminder Promoter — intentionally has no on/off toggle. Deferred
+              reminders depend entirely on this cron, so it is always enabled;
+              only its run time is configurable. */}
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ fontSize: 16 }}>📅</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>Reminder Promoter</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
-                  Weekly cron — promotes deferred reminders to QStash
+                  Weekly cron — queues reminders set more than 7 days ahead
                 </div>
               </div>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={settings.reminderPromoter?.enabled ?? false}
-                  onChange={(e) => {
-                    updatePromoter('enabled', e.target.checked);
-                    if (!e.target.checked) setEditingPromoter(false);
-                  }}
-                />
-                <span className="toggle-track" />
-              </label>
+              <StatusPill label="Always on" />
             </div>
 
-            {(settings.reminderPromoter?.enabled ?? false) && !editingPromoter ? (
+            <div style={{
+              fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
+              marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)',
+            }}>
+              Reminders further out than 7 days cannot be queued directly, so they are saved
+              as <em>deferred</em> and this job queues them once they come within range.
+              It cannot be turned off — without it, deferred reminders would never fire.
+            </div>
+
+            {!editingPromoter ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <StatusPill label={`at ${settings.reminderPromoter?.time ?? '08:00'}`} />
@@ -184,7 +185,7 @@ export default function CronManager() {
                   Edit
                 </button>
               </div>
-            ) : (settings.reminderPromoter?.enabled ?? false) ? (
+            ) : (
               <div style={{ maxWidth: 180 }}>
                 <label className="field-label">Run at</label>
                 <input
@@ -193,7 +194,7 @@ export default function CronManager() {
                   onChange={(e) => updatePromoter('time', e.target.value)}
                 />
               </div>
-            ) : null}
+            )}
           </div>
 
           {/* Google Tasks Sync */}

@@ -38,6 +38,14 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
   const zoneChanged = current.timezone !== next.timezone;
   const tz = next.timezone;
 
+  // The reminder promoter can never be disabled: deferred reminders (those
+  // beyond QStash's 7-day max delay) have no queued message and depend entirely
+  // on this cron to ever fire. Forced here as well as in token-store because
+  // callers reconcile *before* saving — without this, a request carrying
+  // enabled:false would delete the schedule and only then be normalized on
+  // write, leaving enabled:true in Redis with no live schedule.
+  next.reminderPromoter = { ...next.reminderPromoter, enabled: true };
+
   // v1.14 migration: the work reminder became the UCLA reminder and moved to a
   // new route. Its old schedule must be deleted rather than adopted —
   // reconcileCron diffs config, not destination URL, so it would otherwise keep
@@ -74,8 +82,8 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
   });
   next.uclaReminder = nextUcla;
 
-  // Reminder promoter — weekly, Sunday
-  const prevPromoter = current.reminderPromoter ?? { enabled: false, time: '08:00' };
+  // Reminder promoter — weekly, Sunday. Always enabled (see above).
+  const prevPromoter = current.reminderPromoter ?? { enabled: true as const, time: '08:00' };
   const nextPromoter = next.reminderPromoter ?? prevPromoter;
   await reconcileCron(prevPromoter, nextPromoter, {
     path: '/internal/reminder/promote',

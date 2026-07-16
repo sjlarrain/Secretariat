@@ -45,7 +45,15 @@ export interface Settings {
   };
   defaultTaskTime: string; // HH:MM — default reminder time when --for is set but --at is omitted
   reminderPromoter: {
-    enabled: boolean;
+    /**
+     * Always true — the promoter cannot be turned off. Reminders further out
+     * than QStash's 7-day max delay are stored as `deferred` with no queued
+     * message, and this cron is the only thing that ever converts them into
+     * real reminders. Disabling it would silently strand every deferred
+     * reminder, so the value is forced on read, on write, and in
+     * reconcileSchedules. The field is kept only for schedule-config symmetry.
+     */
+    enabled: true;
     time: string;    // HH:MM — weekly run time to promote deferred reminders to QStash
     scheduleId?: string;
   };
@@ -71,7 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
   uclaReminder: { enabled: true, time: '09:00' },
   defaultTaskTime: '09:00',
-  reminderPromoter: { enabled: false, time: '08:00' },
+  reminderPromoter: { enabled: true, time: '08:00' },
   googleTasksSync: { enabled: false },
   healthCheck: { enabled: false, time: '23:00' },
 };
@@ -136,11 +144,23 @@ export async function deleteAccount(id: string): Promise<void> {
   await getRedis().set(ACCOUNTS_KEY, accounts.filter((a) => a.id !== id));
 }
 
+/**
+ * Enforces invariants that must hold no matter what is in Redis or what a
+ * client sends. Applied on both read and write, so a stored `false` heals
+ * itself and a bad write can never persist.
+ */
+function normalizeSettings(settings: Settings): Settings {
+  // The reminder promoter is not optional — see the Settings type. Deferred
+  // reminders have no queued message and depend entirely on it.
+  settings.reminderPromoter = { ...settings.reminderPromoter, enabled: true };
+  return settings;
+}
+
 export async function getSettings(): Promise<Settings> {
   const data = await getRedis().get<Settings>(SETTINGS_KEY);
-  if (!data) return { ...DEFAULT_SETTINGS };
+  if (!data) return normalizeSettings({ ...DEFAULT_SETTINGS });
   // Merge top-level defaults so fields added in newer versions always have a value
-  const merged = { ...DEFAULT_SETTINGS, ...data };
+  const merged = normalizeSettings({ ...DEFAULT_SETTINGS, ...data });
 
   // v1.14: /work became /ucla. Carry the old config forward but deliberately
   // drop its scheduleId — the old schedule targets a route that no longer
@@ -153,7 +173,7 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
-  await getRedis().set(SETTINGS_KEY, settings);
+  await getRedis().set(SETTINGS_KEY, normalizeSettings(settings));
 }
 
 export function encryptTokens(tokens: object, accountId: string): string {

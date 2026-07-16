@@ -156,6 +156,49 @@ describe('reconcileSchedules — config changes', () => {
   });
 });
 
+// ─── The reminder promoter can never be disabled ─────────────────────────────
+
+describe('reconcileSchedules — reminder promoter is always on', () => {
+  it('recreates the promoter even when a caller passes enabled: false', async () => {
+    // PUT /settings builds `next` from the request body and reconciles BEFORE
+    // saving, so a body carrying enabled:false must not reach reconcileCron —
+    // otherwise the schedule is deleted and only then normalized on write,
+    // stranding every deferred reminder with no queued message.
+    const current = makeSettings();
+    const next = makeSettings({
+      reminderPromoter: { enabled: false as unknown as true, time: '08:00', scheduleId: 'sched_promoter' },
+    });
+
+    await reconcileSchedules(current, next);
+
+    expect(next.reminderPromoter.enabled).toBe(true);
+    expect(deleteSchedule).not.toHaveBeenCalledWith('sched_promoter');
+    expect(next.reminderPromoter.scheduleId).toBe('sched_promoter');
+  });
+
+  it('creates the promoter schedule when it is missing entirely', async () => {
+    const current = makeSettings({ reminderPromoter: { enabled: true, time: '08:00' } });
+    const next = makeSettings({ reminderPromoter: { enabled: true, time: '08:00' } });
+
+    await reconcileSchedules(current, next);
+
+    expect(cronFor('/internal/reminder/promote')).toBe('CRON_TZ=America/Santiago 0 8 * * 0');
+    expect(next.reminderPromoter.scheduleId).toBe('sched_/internal/reminder/promote');
+  });
+
+  it('still allows the run time to be changed', async () => {
+    const current = makeSettings();
+    const next = makeSettings({
+      reminderPromoter: { enabled: true, time: '06:30', scheduleId: 'sched_promoter' },
+    });
+
+    await reconcileSchedules(current, next);
+
+    expect(deleteSchedule).toHaveBeenCalledWith('sched_promoter');
+    expect(cronFor('/internal/reminder/promote')).toBe('CRON_TZ=America/Santiago 30 6 * * 0');
+  });
+});
+
 // ─── v1.14 /work → /ucla migration ───────────────────────────────────────────
 
 describe('reconcileSchedules — legacy work reminder migration', () => {

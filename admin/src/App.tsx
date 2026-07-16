@@ -10,8 +10,10 @@ import Commands from './pages/Commands';
 import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
 import TimeConfig from './pages/TimeConfig';
-import WorkPage from './pages/Work';
+import UclaPage from './pages/Ucla';
+import RemindersPage from './pages/Reminders';
 import TasksPage from './pages/Tasks';
+import HealthBanner from './components/HealthBanner';
 import { api } from './api/client';
 import { useIsMobile } from './hooks/useIsMobile';
 
@@ -19,18 +21,18 @@ const NAV_LINKS = [
   { to: '/', label: 'Dashboard', icon: '🏠', end: true },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
-  { to: '/cron', label: 'Cron Manager', icon: '⏰' },
+  { to: '/reminders', label: 'Reminders', icon: '⏰' },
   { to: '/tasks', label: 'Tasks', icon: '📋' },
-  { to: '/work', label: 'Work', icon: '🗂️' },
+  { to: '/ucla', label: 'UCLA', icon: '🎓' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 const MOBILE_NAV = [
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
-  { to: '/cron', label: 'Reminders', icon: '⏰' },
+  { to: '/reminders', label: 'Reminders', icon: '⏰' },
   { to: '/tasks', label: 'Tasks', icon: '📋' },
-  { to: '/work', label: 'Work', icon: '🗂️' },
+  { to: '/ucla', label: 'UCLA', icon: '🎓' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -243,15 +245,19 @@ function AppInner() {
         <Route path="/" element={<MobileHome onLogout={handleLogout} />} />
         <Route path="/ideas" element={<MobileLayout title="Ideas"><Ideas /></MobileLayout>} />
         <Route path="/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
-        <Route path="/cron" element={<MobileLayout title="Reminders"><CronManager /></MobileLayout>} />
+        <Route path="/reminders" element={<MobileLayout title="Reminders"><RemindersPage /></MobileLayout>} />
         <Route path="/tasks" element={<MobileLayout title="Tasks"><TasksPage /></MobileLayout>} />
-        <Route path="/work" element={<MobileLayout title="Work"><WorkPage /></MobileLayout>} />
+        <Route path="/ucla" element={<MobileLayout title="UCLA"><UclaPage /></MobileLayout>} />
         <Route path="/settings" element={<MobileLayout title="Settings"><SettingsPage /></MobileLayout>} />
         <Route path="/settings/accounts" element={<MobileLayout title="Accounts"><Accounts /></MobileLayout>} />
         <Route path="/settings/plans" element={<MobileLayout title="Plans"><Plans /></MobileLayout>} />
         <Route path="/settings/time" element={<MobileLayout title="Time Config"><TimeConfig /></MobileLayout>} />
+        <Route path="/settings/cron" element={<MobileLayout title="Cron Manager"><CronManager /></MobileLayout>} />
         <Route path="/settings/whitelist" element={<Navigate to="/settings" replace />} />
         <Route path="/settings/commands" element={<Navigate to="/settings" replace />} />
+        {/* Pre-v1.14 paths */}
+        <Route path="/cron" element={<Navigate to="/reminders" replace />} />
+        <Route path="/work" element={<Navigate to="/ucla" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -263,9 +269,9 @@ function AppInner() {
       <Route path="/" element={<Layout><Dashboard /></Layout>} />
       <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
       <Route path="/links" element={<Layout><Links /></Layout>} />
-      <Route path="/cron" element={<Layout><CronManager /></Layout>} />
+      <Route path="/reminders" element={<Layout><RemindersPage /></Layout>} />
       <Route path="/tasks" element={<Layout><TasksPage /></Layout>} />
-      <Route path="/work" element={<Layout><WorkPage /></Layout>} />
+      <Route path="/ucla" element={<Layout><UclaPage /></Layout>} />
 
       <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
       <Route path="/settings/accounts" element={<Layout><Accounts /></Layout>} />
@@ -273,11 +279,16 @@ function AppInner() {
       <Route path="/settings/plans" element={<Layout><Plans /></Layout>} />
       <Route path="/settings/commands" element={<Layout><Commands /></Layout>} />
       <Route path="/settings/time" element={<Layout><TimeConfig /></Layout>} />
+      <Route path="/settings/cron" element={<Layout><CronManager /></Layout>} />
 
       <Route path="/accounts" element={<Navigate to="/settings/accounts" replace />} />
       <Route path="/whitelist" element={<Navigate to="/settings/whitelist" replace />} />
       <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
       <Route path="/commands" element={<Navigate to="/settings/commands" replace />} />
+
+      {/* Pre-v1.14 paths: /cron split into /reminders + /settings/cron; /work became /ucla */}
+      <Route path="/cron" element={<Navigate to="/reminders" replace />} />
+      <Route path="/work" element={<Navigate to="/ucla" replace />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -287,6 +298,7 @@ function AppInner() {
 export default function App() {
   return (
     <BrowserRouter>
+      <HealthBanner />
       <AppInner />
     </BrowserRouter>
   );

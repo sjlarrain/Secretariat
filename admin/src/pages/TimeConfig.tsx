@@ -8,6 +8,25 @@ const TIMEZONES = [
   'America/Sao_Paulo', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney',
 ];
 
+/** True for zones with no DST rules — Etc/GMT±N pseudo-zones and plain UTC. */
+function isFixedOffset(zone: string): boolean {
+  return zone.startsWith('Etc/') || zone === 'UTC';
+}
+
+/** Current offset for a zone, e.g. "GMT-3" — display only. */
+function describeOffset(zone: string): string {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' })
+      .formatToParts(new Date())
+      .find((p) => p.type === 'timeZoneName')?.value ?? '';
+    const m = name.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+    if (!m) return name === 'GMT' ? 'GMT+0' : name;
+    return m[3] === '00' ? `GMT${m[1]}${Number(m[2])}` : `GMT${m[1]}${Number(m[2])}:${m[3]}`;
+  } catch {
+    return '';
+  }
+}
+
 function useClock(timezone: string) {
   const [time, setTime] = useState('');
   const ref = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,8 +64,15 @@ export default function TimeConfig() {
     setSaving(true);
     setMsg(''); setErr('');
     try {
-      await api.saveSettings(settings!);
-      setMsg('Settings saved.');
+      const res = await api.saveSettings(settings!);
+      // Adopt the canonical zone the server stored, so a typed "GMT-3" shows as
+      // the Etc/GMT+3 it actually became.
+      setSettings(res.settings);
+      setMsg(
+        res.settings.timezone !== settings!.timezone
+          ? `Saved as ${res.settings.timezone}. Schedules rebuilt.`
+          : 'Settings saved.'
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Save failed.');
     } finally {
@@ -79,12 +105,29 @@ export default function TimeConfig() {
             </code>
           </div>
         </div>
-        <select
+        {/* Free text, not a fixed dropdown: /zone accepts any IANA name or a
+            GMT±N offset, and a select would silently mismatch a zone set that
+            way. The datalist keeps common zones one click away. */}
+        <input
+          list="tz-options"
           value={settings.timezone}
+          spellCheck={false}
           onChange={(e) => setSettings((prev) => prev ? { ...prev, timezone: e.target.value } : prev)}
-        >
-          {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-        </select>
+          placeholder="America/Santiago or GMT-3"
+        />
+        <datalist id="tz-options">
+          {TIMEZONES.map((tz) => <option key={tz} value={tz} />)}
+        </datalist>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.5 }}>
+          Currently {describeOffset(settings.timezone) || 'unknown offset'}. A city name tracks daylight
+          saving automatically; a fixed <code>GMT±N</code> offset does not.
+        </div>
+        {isFixedOffset(settings.timezone) && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+            ⚠️ <strong>{settings.timezone}</strong> is a fixed offset and will not adjust for daylight
+            saving. Use a city name if you want that.
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>

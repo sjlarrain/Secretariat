@@ -1,17 +1,30 @@
 import { useEffect, useState } from 'react';
-import { api, WorkItem, SnoozeOption } from '../api/client';
+import { api, UclaItem, SnoozeOption } from '../api/client';
 import SnoozeModal from '../components/SnoozeModal';
 
-export default function WorkPage() {
-  const [items, setItems] = useState<WorkItem[]>([]);
-  const [done, setDone] = useState<WorkItem[]>([]);
+function formatDue(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/** Due dates inside this window are past the automatic 24h-before reminder. */
+function isDueSoon(iso: string): boolean {
+  return new Date(iso).getTime() - Date.now() < 24 * 60 * 60 * 1000;
+}
+
+export default function UclaPage() {
+  const [items, setItems] = useState<UclaItem[]>([]);
+  const [done, setDone] = useState<UclaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newText, setNewText] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [newDueTime, setNewDueTime] = useState('');
   const [saving, setSaving] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-  const [snoozeTarget, setSnoozeTarget] = useState<{ item: WorkItem; mode: 'snooze' | 'remind' } | null>(null);
+  const [snoozeTarget, setSnoozeTarget] = useState<{ item: UclaItem; mode: 'snooze' | 'remind' } | null>(null);
   const [snoozing, setSnoozing] = useState(false);
   const [editingReminderId, setEditingReminderId] = useState<number | null>(null);
   const [editDate, setEditDate] = useState('');
@@ -20,7 +33,7 @@ export default function WorkPage() {
 
   async function load() {
     setLoading(true);
-    const [activeRes, doneRes] = await Promise.all([api.getWorkItems(), api.getDoneWorkItems()]);
+    const [activeRes, doneRes] = await Promise.all([api.getUclaItems(), api.getDoneUclaItems()]);
     setItems(activeRes.items);
     setDone(doneRes.items);
     setLoading(false);
@@ -39,10 +52,16 @@ export default function WorkPage() {
     if (!newText.trim()) return;
     setSaving(true);
     try {
-      const res = await api.createWorkItem(newText.trim());
+      // Default to end of day when a date is given without a time.
+      const dueDate = newDueDate
+        ? new Date(`${newDueDate}T${newDueTime || '23:59'}:00`).toISOString()
+        : undefined;
+      const res = await api.createUclaItem(newText.trim(), dueDate);
       setItems((prev) => [...prev, res.item]);
       setNewText('');
-      flash('Added to work list.');
+      setNewDueDate('');
+      setNewDueTime('');
+      flash(dueDate ? 'Added — reminder set for 24h before it is due.' : 'Added to UCLA list.');
     } catch {
       flash('Failed to add item.', true);
     } finally {
@@ -53,7 +72,7 @@ export default function WorkPage() {
   async function handleDone(id: number) {
     try {
       const item = items.find((w) => w.id === id);
-      await api.markWorkItemDone(id);
+      await api.markUclaItemDone(id);
       setItems((prev) => prev.filter((w) => w.id !== id));
       if (item) setDone((prev) => [...prev, { ...item, doneAt: new Date().toISOString() }]);
       flash('Marked as done!');
@@ -68,8 +87,8 @@ export default function WorkPage() {
     try {
       const { item, mode } = snoozeTarget;
       const res = mode === 'snooze'
-        ? await api.snoozeWork(item.id, option) as { ok: boolean; fireAt: string }
-        : await api.remindWork(item.id, option) as { ok: boolean; fireAt: string };
+        ? await api.snoozeUcla(item.id, option) as { ok: boolean; fireAt: string }
+        : await api.remindUcla(item.id, option) as { ok: boolean; fireAt: string };
       setItems((prev) => prev.map((w) => w.id === item.id
         ? { ...w, reminderFor: res.fireAt, qstashMessageId: 'scheduled' }
         : w));
@@ -82,7 +101,7 @@ export default function WorkPage() {
     }
   }
 
-  function openEditReminder(item: WorkItem) {
+  function openEditReminder(item: UclaItem) {
     const d = item.reminderFor ? new Date(item.reminderFor) : new Date();
     setEditDate(d.toLocaleDateString('en-CA'));
     setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
@@ -96,7 +115,7 @@ export default function WorkPage() {
     setErr('');
     try {
       const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
-      await api.updateWorkReminder(id, fireAt);
+      await api.updateUclaReminder(id, fireAt);
       setItems((prev) => prev.map((w) => w.id === id
         ? { ...w, reminderFor: fireAt, qstashMessageId: w.qstashMessageId ?? 'scheduled' }
         : w));
@@ -110,9 +129,9 @@ export default function WorkPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this work item?')) return;
+    if (!confirm('Delete this UCLA item?')) return;
     try {
-      await api.deleteWorkItem(id);
+      await api.deleteUclaItem(id);
       setItems((prev) => prev.filter((w) => w.id !== id));
     } catch {
       flash('Failed to delete item.', true);
@@ -133,9 +152,9 @@ export default function WorkPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>Work List</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>UCLA List</h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
-            {items.length} pending · Monday reminder auto-sends to WhatsApp
+            {items.length} pending · due items remind 24h ahead · Monday reminder auto-sends to WhatsApp
           </p>
         </div>
       </div>
@@ -149,15 +168,33 @@ export default function WorkPage() {
         style={{
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16,
-          display: 'flex', gap: 10, alignItems: 'flex-end',
+          display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap',
         }}
       >
-        <div style={{ flex: 1 }}>
-          <label className="field-label">New work item</label>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <label className="field-label">New UCLA item</label>
           <input
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
             placeholder="What needs to be done?"
+          />
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          <label className="field-label">Due date <span style={{ color: 'var(--text-dim)' }}>(optional)</span></label>
+          <input
+            type="date"
+            value={newDueDate}
+            onChange={(e) => setNewDueDate(e.target.value)}
+          />
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          <label className="field-label">Time</label>
+          <input
+            type="time"
+            value={newDueTime}
+            onChange={(e) => setNewDueTime(e.target.value)}
+            disabled={!newDueDate}
+            placeholder="23:59"
           />
         </div>
         <button type="submit" className="btn-primary" disabled={saving || !newText.trim()} style={{ flexShrink: 0 }}>
@@ -169,9 +206,9 @@ export default function WorkPage() {
       {items.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
           <div style={{ fontSize: 32, marginBottom: 14 }}>✅</div>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Work list is clear!</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>UCLA list is clear!</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Add items above or send <code>/work your task</code> from WhatsApp.
+            Add items above or send <code>/ucla your task</code> from WhatsApp.
           </div>
         </div>
       ) : (
@@ -184,11 +221,19 @@ export default function WorkPage() {
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600, marginRight: 8 }}>{i + 1}.</span>
                     {item.text}
                   </div>
+                  {item.dueDate && (
+                    <div style={{
+                      fontSize: 11,
+                      color: isDueSoon(item.dueDate) ? 'var(--red, #e5534b)' : 'var(--text-muted)',
+                      marginTop: 4,
+                    }}>
+                      📅 Due: {formatDue(item.dueDate)}
+                      {isDueSoon(item.dueDate) && ' · due within 24h'}
+                    </div>
+                  )}
                   {item.reminderFor && (
                     <div style={{ fontSize: 11, color: 'var(--blue-bright)', marginTop: 4 }}>
-                      ⏰ Reminder: {new Date(item.reminderFor).toLocaleString('en-GB', {
-                        weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                      })}
+                      ⏰ Reminder: {formatDue(item.reminderFor)}
                     </div>
                   )}
                 </div>

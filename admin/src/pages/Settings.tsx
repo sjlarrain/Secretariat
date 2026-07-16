@@ -31,6 +31,12 @@ const SECTIONS = [
     title: 'Time Configuration',
     description: 'Timezone selector and live server clock',
   },
+  {
+    to: '/settings/cron',
+    icon: '⏰',
+    title: 'Cron Manager',
+    description: 'Digests, UCLA reminder, task sync, and nightly health check schedules',
+  },
 ];
 
 export default function SettingsPage() {

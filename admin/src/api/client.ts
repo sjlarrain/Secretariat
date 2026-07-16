@@ -37,8 +37,10 @@ export const api = {
     request(`/third-party-contacts/${encodeURIComponent(number)}`, { method: 'DELETE' }),
 
   getSettings: () => request<Settings>('/settings'),
+  // Returns the stored settings, which may differ from what was sent — the
+  // server canonicalizes the timezone (e.g. "GMT-3" becomes "Etc/GMT+3").
   saveSettings: (settings: Settings) =>
-    request('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+    request<{ ok: boolean; settings: Settings }>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
 
   getProjects: () => request<{ projects: Project[] }>('/projects'),
   createProject: (name: string) =>
@@ -81,11 +83,12 @@ export const api = {
   markIdeaDone: (id: number) => request(`/ideas/${id}/done`, { method: 'PATCH' }),
   getDoneIdeas: () => request<{ ideas: Idea[] }>('/ideas/done'),
 
-  getWorkItems: () => request<{ items: WorkItem[] }>('/work'),
-  getDoneWorkItems: () => request<{ items: WorkItem[] }>('/work/done'),
-  createWorkItem: (text: string) => request<{ item: WorkItem }>('/work', { method: 'POST', body: JSON.stringify({ text }) }),
-  markWorkItemDone: (id: number) => request(`/work/${id}/done`, { method: 'PATCH' }),
-  deleteWorkItem: (id: number) => request(`/work/${id}`, { method: 'DELETE' }),
+  getUclaItems: () => request<{ items: UclaItem[] }>('/ucla'),
+  getDoneUclaItems: () => request<{ items: UclaItem[] }>('/ucla/done'),
+  createUclaItem: (text: string, dueDate?: string) =>
+    request<{ item: UclaItem }>('/ucla', { method: 'POST', body: JSON.stringify({ text, dueDate }) }),
+  markUclaItemDone: (id: number) => request(`/ucla/${id}/done`, { method: 'PATCH' }),
+  deleteUclaItem: (id: number) => request(`/ucla/${id}`, { method: 'DELETE' }),
 
   getTasks: () => request<{ items: LocalTask[] }>('/tasks'),
   getDoneTasks: () => request<{ items: LocalTask[] }>('/tasks/done'),
@@ -103,13 +106,16 @@ export const api = {
 
   updateTaskReminder: (id: number, fireAt: string) =>
     request(`/tasks/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
-  updateWorkReminder: (id: number, fireAt: string) =>
-    request(`/work/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
+  updateUclaReminder: (id: number, fireAt: string) =>
+    request(`/ucla/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
 
-  snoozeWork: (id: number, option: SnoozeOption) =>
-    request(`/work/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
-  remindWork: (id: number, option: SnoozeOption) =>
-    request(`/work/${id}/remind`, { method: 'POST', body: JSON.stringify({ option }) }),
+  snoozeUcla: (id: number, option: SnoozeOption) =>
+    request(`/ucla/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
+  remindUcla: (id: number, option: SnoozeOption) =>
+    request(`/ucla/${id}/remind`, { method: 'POST', body: JSON.stringify({ option }) }),
+
+  getHealthAlerts: () =>
+    request<{ alerts: HealthAlert[]; lastRunAt: string | null }>('/health-alerts'),
 
   getLinks: (filter?: 'read') =>
     request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
@@ -219,13 +225,25 @@ export interface Link {
   readAt?: string;
 }
 
-export interface WorkItem {
+export interface UclaItem {
   id: number;
   text: string;
   createdAt: string;
   doneAt?: string;
+  dueDate?: string;
+  dueReminderId?: string;
   reminderFor?: string;
   qstashMessageId?: string;
+}
+
+export interface HealthAlert {
+  id: string;
+  kind: 'kapso' | 'google' | 'qstash' | 'redis';
+  severity: 'warn' | 'error';
+  message: string;
+  resolveLink?: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
 }
 
 export type SnoozeOption = '1h' | '1d' | 'monday';
@@ -240,7 +258,7 @@ export interface DigestConfig {
 
 export interface Settings {
   timezone: string;
-  workReminder: DigestConfig;  // every Monday, enabled by default
+  uclaReminder: DigestConfig;  // every Monday, enabled by default
   morningDigest: DigestConfig & { days: number[] };
   weeklySummary: DigestConfig & { day: number };
   defaultTaskTime: string; // HH:MM — default reminder time for tasks with --for but no --at
@@ -250,4 +268,5 @@ export interface Settings {
     scheduleId?: string;
     lastSyncAt?: string;
   };
+  healthCheck: DigestConfig & { lastRunAt?: string }; // nightly system health check
 }

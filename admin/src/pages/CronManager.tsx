@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Settings, Reminder, SnoozeOption } from '../api/client';
-import SnoozeModal from '../components/SnoozeModal';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { api, Settings } from '../api/client';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -15,34 +13,18 @@ function StatusPill({ label }: { label: string }) {
   );
 }
 
-function formatFireAt(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('en-GB', {
-    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-  });
-}
-
 export default function CronManager() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [editingMorning, setEditingMorning] = useState(false);
   const [editingWeekly, setEditingWeekly] = useState(false);
   const [editingPromoter, setEditingPromoter] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingReminder, setEditingReminder] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState('');
-  const [editTime, setEditTime] = useState('');
-  const [savingReminder, setSavingReminder] = useState(false);
-  const [snoozeTarget, setSnoozeTarget] = useState<Reminder | null>(null);
-  const [snoozing, setSnoozing] = useState(false);
-  const isMobile = useIsMobile();
+  const [editingHealth, setEditingHealth] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
-    api.getReminders().then((r) => setReminders(r.reminders));
   }, []);
 
   if (!settings) {
@@ -66,6 +48,10 @@ export default function CronManager() {
     setSettings((prev) => prev ? { ...prev, reminderPromoter: { ...(prev.reminderPromoter ?? { enabled: false, time: '08:00' }), [key]: val } } : prev);
   }
 
+  function updateHealth<K extends keyof Settings['healthCheck']>(key: K, val: Settings['healthCheck'][K]) {
+    setSettings((prev) => prev ? { ...prev, healthCheck: { ...(prev.healthCheck ?? { enabled: false, time: '23:00' }), [key]: val } } : prev);
+  }
+
   function toggleMorningDay(day: number) {
     const days = settings!.morningDigest.days;
     updateMorning('days', days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort());
@@ -80,67 +66,11 @@ export default function CronManager() {
       setEditingMorning(false);
       setEditingWeekly(false);
       setEditingPromoter(false);
+      setEditingHealth(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Save failed.');
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleDeleteReminder(id: string) {
-    setDeletingId(id);
-    try {
-      await api.deleteReminder(id);
-      setReminders((prev) => prev.filter((r) => r.id !== id));
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  function openEditReminder(r: Reminder) {
-    const d = new Date(r.fireAt);
-    setEditDate(d.toLocaleDateString('en-CA')); // YYYY-MM-DD for input[type=date]
-    setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
-    setEditingReminder(r.id);
-  }
-
-  async function handleSnoozeReminder(option: SnoozeOption) {
-    if (!snoozeTarget) return;
-    setSnoozing(true);
-    try {
-      const res = await api.snoozeReminder(snoozeTarget.id, option) as { ok: boolean; fireAt: string };
-      setReminders((prev) => prev.map((r) => r.id === snoozeTarget!.id ? { ...r, fireAt: res.fireAt } : r));
-      // Sync edit form if it's open for the same reminder
-      if (editingReminder === snoozeTarget.id) {
-        const d = new Date(res.fireAt);
-        setEditDate(d.toLocaleDateString('en-CA'));
-        setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
-      }
-      setSnoozeTarget(null);
-      setMsg('Snoozed!');
-      setTimeout(() => setMsg(''), 3000);
-    } catch (e) {
-      setSnoozeTarget(null);
-      setErr(e instanceof Error ? e.message : 'Snooze failed.');
-      setTimeout(() => setErr(''), 4000);
-    } finally {
-      setSnoozing(false);
-    }
-  }
-
-  async function handleSaveReminder(id: string) {
-    if (!editDate || !editTime) return;
-    setSavingReminder(true);
-    setErr('');
-    try {
-      const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
-      await api.updateReminder(id, fireAt);
-      setReminders((prev) => prev.map((r) => r.id === id ? { ...r, fireAt } : r));
-      setEditingReminder(null);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not update reminder. Check the date and time.');
-    } finally {
-      setSavingReminder(false);
     }
   }
 
@@ -152,101 +82,14 @@ export default function CronManager() {
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>Cron Manager</h2>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
-          Scheduled digests and pending reminders
+          Recurring schedules. All times are in {settings.timezone}.
         </p>
       </div>
 
       {msg && <p className="success-msg" style={{ marginBottom: 14 }}>✓ {msg}</p>}
       {err && <p className="error-msg" style={{ marginBottom: 14 }}>⚠ {err}</p>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24, alignItems: 'start' }}>
-        {/* Left: pending reminders */}
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
-            Pending Reminders
-            <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-dim)', marginLeft: 8 }}>
-              {reminders.length > 0 ? `${reminders.length} queued` : ''}
-            </span>
-          </div>
-
-          {reminders.length === 0 ? (
-            <div className="card" style={{ padding: '28px 16px', textAlign: 'center' }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>⏰</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No pending reminders</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {reminders
-                .slice()
-                .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime())
-                .map((r) => (
-                  <div key={r.id} className="card" style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, wordBreak: 'break-word' }}>
-                          {r.title}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                          {formatFireAt(r.fireAt)}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button
-                          className="btn-secondary"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => { setSnoozeTarget(r); setEditingReminder(null); }}
-                        >
-                          Snooze
-                        </button>
-                        <button
-                          className="btn-secondary"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => { setSnoozeTarget(null); editingReminder === r.id ? setEditingReminder(null) : openEditReminder(r); }}
-                        >
-                          {editingReminder === r.id ? 'Close' : 'Edit'}
-                        </button>
-                        <button
-                          className="btn-danger"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          disabled={deletingId === r.id}
-                          onClick={() => handleDeleteReminder(r.id)}
-                        >
-                          {deletingId === r.id ? '…' : 'Cancel'}
-                        </button>
-                      </div>
-                    </div>
-                    {editingReminder === r.id && (
-                      <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          type="date"
-                          value={editDate}
-                          onChange={(e) => setEditDate(e.target.value)}
-                          style={{ fontSize: 12, padding: '3px 6px' }}
-                        />
-                        <input
-                          type="time"
-                          value={editTime}
-                          onChange={(e) => setEditTime(e.target.value)}
-                          style={{ fontSize: 12, padding: '3px 6px' }}
-                        />
-                        <button
-                          className="btn-primary"
-                          style={{ fontSize: 11, padding: '3px 10px' }}
-                          disabled={savingReminder}
-                          onClick={() => handleSaveReminder(r.id)}
-                        >
-                          {savingReminder ? '…' : 'Save'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right: digest configs — desktop only */}
-        {!isMobile && <div>
+      <div>
           {/* Morning Digest */}
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
@@ -439,36 +282,87 @@ export default function CronManager() {
             ) : null}
           </div>
 
-          {/* Work Reminder */}
-          <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>Work List — Monday Reminder</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  Sends pending work items every Monday morning
+          {/* Health Check */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <span style={{ fontSize: 16 }}>🩺</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Health Check</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                  Nightly check of Kapso, Google tokens, schedules, and Redis
                 </div>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <label className="toggle">
                 <input
                   type="checkbox"
-                  checked={settings.workReminder?.enabled ?? true}
-                  onChange={(e) => setSettings((prev) => prev ? {
-                    ...prev,
-                    workReminder: { ...(prev.workReminder ?? { enabled: true, time: '09:00' }), enabled: e.target.checked },
-                  } : prev)}
+                  checked={settings.healthCheck?.enabled ?? false}
+                  onChange={(e) => {
+                    updateHealth('enabled', e.target.checked);
+                    if (!e.target.checked) setEditingHealth(false);
+                  }}
                 />
-                <span style={{ fontSize: 13 }}>{(settings.workReminder?.enabled ?? true) ? 'On' : 'Off'}</span>
+                <span className="toggle-track" />
               </label>
             </div>
-            {(settings.workReminder?.enabled ?? true) && (
+
+            {(settings.healthCheck?.enabled ?? false) && !editingHealth ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <StatusPill label={`at ${settings.healthCheck?.time ?? '23:00'}`} />
+                  <StatusPill label="every day" />
+                  {settings.healthCheck?.lastRunAt && (
+                    <StatusPill label={`last run ${new Date(settings.healthCheck.lastRunAt).toLocaleString()}`} />
+                  )}
+                </div>
+                <button className="btn-ghost" style={{ fontSize: 12, flexShrink: 0 }} onClick={() => setEditingHealth(true)}>
+                  Edit
+                </button>
+              </div>
+            ) : (settings.healthCheck?.enabled ?? false) ? (
+              <div style={{ maxWidth: 180 }}>
+                <label className="field-label">Run at</label>
+                <input
+                  type="time"
+                  value={settings.healthCheck?.time ?? '23:00'}
+                  onChange={(e) => updateHealth('time', e.target.value)}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          {/* UCLA Reminder */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 16 }}>🎓</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>UCLA List — Monday Reminder</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Sends pending UCLA items every Monday morning
+                  </div>
+                </div>
+              </div>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.uclaReminder?.enabled ?? true}
+                  onChange={(e) => setSettings((prev) => prev ? {
+                    ...prev,
+                    uclaReminder: { ...(prev.uclaReminder ?? { enabled: true, time: '09:00' }), enabled: e.target.checked },
+                  } : prev)}
+                />
+                <span className="toggle-track" />
+              </label>
+            </div>
+            {(settings.uclaReminder?.enabled ?? true) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                 <label className="field-label" style={{ margin: 0 }}>Time</label>
                 <input
                   type="time"
-                  value={settings.workReminder?.time ?? '09:00'}
+                  value={settings.uclaReminder?.time ?? '09:00'}
                   onChange={(e) => setSettings((prev) => prev ? {
                     ...prev,
-                    workReminder: { ...(prev.workReminder ?? { enabled: true, time: '09:00' }), time: e.target.value },
+                    uclaReminder: { ...(prev.uclaReminder ?? { enabled: true, time: '09:00' }), time: e.target.value },
                   } : prev)}
                   style={{ width: 110 }}
                 />
@@ -480,19 +374,7 @@ export default function CronManager() {
           <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: 120 }}>
             {saving ? 'Saving…' : 'Save settings'}
           </button>
-        </div>}
-
       </div>
-
-      {snoozeTarget && (
-        <SnoozeModal
-          title={snoozeTarget.title}
-          mode="snooze"
-          loading={snoozing}
-          onSelect={handleSnoozeReminder}
-          onClose={() => setSnoozeTarget(null)}
-        />
-      )}
     </div>
   );
 }

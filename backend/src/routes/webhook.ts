@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { Redis } from '@upstash/redis';
+import { env } from '../env';
 import { parseCommand } from '../parser/command.parser';
 import { extractWebhookData, whitelistMiddleware, WebhookRequest } from '../middleware/whitelist';
 import { sendMessage } from '../kapso/client';
@@ -20,21 +22,35 @@ import type { ParsedCommand } from '../parser/command.parser';
 
 const router = Router();
 
-// Dedup: track recently processed message IDs for 5 minutes
-// Prevents duplicate processing when Kapso retries while the server is waking up
-const seenMessageIds = new Map<string, number>();
-const DEDUP_TTL_MS = 5 * 60 * 1000;
+// Dedup: track recently processed message IDs for 5 minutes.
+// Prevents duplicate processing when Kapso retries while the server is waking up.
+// Backed by Redis (not an in-memory Map) because retries land precisely when the
+// process has restarted/hibernated — exactly when an in-memory map would be empty.
+const DEDUP_TTL_SEC = 5 * 60;
 
-function isDuplicate(messageId: string | null): boolean {
+let _redis: Redis | null = null;
+function getRedis(): Redis {
+  if (!_redis)
+    _redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
+  return _redis;
+}
+
+// Atomic claim: SET key NX EX returns 'OK' the first time and null if the key
+// already exists, so concurrent retries can't both slip through a get-then-set gap.
+// Fails open (returns false) if Redis is unreachable — better to risk a rare
+// duplicate than to drop the message entirely.
+async function isDuplicate(messageId: string | null): Promise<boolean> {
   if (!messageId) return false;
-  const now = Date.now();
-  // Clean up expired entries
-  for (const [id, ts] of seenMessageIds) {
-    if (now - ts > DEDUP_TTL_MS) seenMessageIds.delete(id);
+  try {
+    const claimed = await getRedis().set(`secretariat:dedup:${messageId}`, Date.now(), {
+      nx: true,
+      ex: DEDUP_TTL_SEC,
+    });
+    return claimed === null;
+  } catch (err) {
+    console.error('Dedup check failed, processing anyway:', err);
+    return false;
   }
-  if (seenMessageIds.has(messageId)) return true;
-  seenMessageIds.set(messageId, now);
-  return false;
 }
 
 router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, res: Response) => {
@@ -47,7 +63,7 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   const buttonReplyId = (req as WebhookRequest).buttonReplyId;
   const contextMessageId = (req as WebhookRequest).contextMessageId;
 
-  if (isDuplicate(messageId)) return;
+  if (await isDuplicate(messageId)) return;
 
   if ((req as WebhookRequest).isThirdParty) {
     try {

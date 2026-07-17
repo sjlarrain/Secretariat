@@ -7,7 +7,13 @@ import { findThirdPartyContact } from '../integrations/local/third-party';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { normalizeWebhook } = require('@kapso/whatsapp-cloud-api/server') as {
   normalizeWebhook: (payload: unknown) => {
-    messages: Array<{ from: string; type: string; text?: { body: string } }>;
+    messages: Array<{
+      id?: string;
+      from: string;
+      type: string;
+      text?: { body: string };
+      context?: { id?: string } | null;
+    }>;
     statuses: unknown[];
   };
 };
@@ -41,10 +47,12 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
       rawMsg?.type === 'interactive' && rawMsg?.interactive?.type === 'button_reply'
         ? (rawMsg.interactive.buttonReply?.id ?? null)
         : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawEntry = (req.body as any)?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    (req as WebhookRequest).messageId = rawEntry?.id ?? null;
-    (req as WebhookRequest).contextMessageId = rawEntry?.context?.id ?? null;
+    // Read id + reply context off the normalized message. The SDK's
+    // UnifiedMessage carries both regardless of Kapso's envelope shape; a
+    // separate raw `entry[0].changes...` parse breaks whenever the delivered
+    // payload isn't Meta-native, silently nulling messageId and disabling dedup.
+    (req as WebhookRequest).messageId = message?.id ?? null;
+    (req as WebhookRequest).contextMessageId = message?.context?.id ?? null;
   } catch {
     (req as WebhookRequest).senderPhone = '';
     (req as WebhookRequest).webhookText = null;

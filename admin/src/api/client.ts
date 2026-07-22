@@ -215,6 +215,7 @@ export interface Reminder {
   phoneNumber: string;
   fireAt: string;
   messageId: string;
+  deferred?: boolean;
 }
 
 export interface Link {

@@ -122,8 +122,20 @@ export default function RemindersPage() {
               <div key={r.id} className="card" style={{ padding: '12px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4, wordBreak: 'break-word' }}>
-                      {r.title}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, wordBreak: 'break-word' }}>
+                        {r.title}
+                      </div>
+                      {r.deferred && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, flexShrink: 0,
+                          color: 'var(--orange)', background: 'var(--orange-dim)',
+                          border: '1px solid var(--orange-border)',
+                          padding: '1px 7px', borderRadius: 99,
+                        }} title="More than 7 days out — not yet queued in QStash; the weekly promoter will queue it closer to fire time.">
+                          Deferred
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
                       {formatFireAt(r.fireAt)}

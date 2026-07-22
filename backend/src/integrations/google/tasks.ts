@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { ConnectedAccount, saveAccount, encryptTokens, decryptTokens } from '../token-store';
-import { GoogleTokens, getAuthenticatedClient } from './oauth';
+import { GoogleTokens, getAuthenticatedClient, CalendarDisconnectedError } from './oauth';
 
 export interface Task {
   id: string;
@@ -12,19 +12,33 @@ export interface Task {
 }
 
 async function getTasksClient(account: ConnectedAccount) {
-  const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
-  const { client, refreshedTokens } = await getAuthenticatedClient(tokens);
-
-  if (refreshedTokens?.access_token) {
-    account.encryptedTokens = encryptTokens({
-      access_token: refreshedTokens.access_token,
-      refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
-      expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
-    }, account.id);
-    await saveAccount(account);
+  let tokens: GoogleTokens;
+  try {
+    tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
+  } catch {
+    await saveAccount({ ...account, isDisconnected: true });
+    throw new CalendarDisconnectedError(account.alias);
   }
 
-  return google.tasks({ version: 'v1', auth: client });
+  try {
+    const { client, refreshedTokens } = await getAuthenticatedClient(tokens, account.alias);
+
+    if (refreshedTokens?.access_token) {
+      account.encryptedTokens = encryptTokens({
+        access_token: refreshedTokens.access_token,
+        refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
+        expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
+      }, account.id);
+      await saveAccount(account);
+    }
+
+    return google.tasks({ version: 'v1', auth: client });
+  } catch (err) {
+    if (err instanceof CalendarDisconnectedError) {
+      await saveAccount({ ...account, isDisconnected: true });
+    }
+    throw err;
+  }
 }
 
 export async function createTask(

@@ -1,9 +1,10 @@
-import { getAllAccounts, getSettings, saveSettings } from '../integrations/token-store';
+import { getAllAccounts, getSettings, saveSettings, saveAccount, decryptTokens, encryptTokens } from '../integrations/token-store';
 import { fetchPhoneHealth } from '../kapso/platform';
 import { sendMessage, kapsoStats } from '../kapso/client';
 import { listSchedules } from '../qstash/client';
 import { reconcileHealthAlerts, pingRedis, HealthAlert } from '../integrations/local/health-alerts';
 import { whitelistedNumbers } from '../env';
+import { GoogleTokens, getAuthenticatedClient, CalendarDisconnectedError } from '../integrations/google/oauth';
 
 type Found = Omit<HealthAlert, 'firstSeenAt' | 'lastSeenAt'>;
 
@@ -61,17 +62,45 @@ export async function runHealthCheck(): Promise<{ alerts: number; notified: bool
     });
   }
 
-  // --- Google account token validity (reuses the v1.4 reconnect detection) ---
+  // --- Google account token validity ---
+  // Actively probes each account rather than trusting the stored `isDisconnected`
+  // flag: that flag is only ever set as a side effect of some other command
+  // actually calling the Google API, so an account nobody has used since it was
+  // revoked would stay marked "connected" forever and this check would miss it.
   const accounts = await getAllAccounts();
   for (const account of accounts) {
-    if (account.isDisconnected) {
-      found.push({
-        id: `google:disconnected:${account.id}`,
-        kind: 'google',
-        severity: 'error',
-        message: `${account.alias} (${account.type}) is disconnected — reconnect it to restore access.`,
-        resolveLink: '/accounts',
-      });
+    try {
+      const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
+      const { refreshedTokens } = await getAuthenticatedClient(tokens, account.alias);
+      if (refreshedTokens?.access_token) {
+        await saveAccount({
+          ...account,
+          encryptedTokens: encryptTokens({
+            access_token: refreshedTokens.access_token,
+            refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
+            expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
+          }, account.id),
+        });
+      }
+    } catch (err) {
+      if (err instanceof CalendarDisconnectedError) {
+        await saveAccount({ ...account, isDisconnected: true });
+        found.push({
+          id: `google:disconnected:${account.id}`,
+          kind: 'google',
+          severity: 'error',
+          message: `${account.alias} (${account.type}) is disconnected — reconnect it to restore access.`,
+          resolveLink: '/accounts',
+        });
+      } else {
+        found.push({
+          id: `google:unverifiable:${account.id}`,
+          kind: 'google',
+          severity: 'warn',
+          message: `Could not verify ${account.alias} (${account.type}): ${err instanceof Error ? err.message : String(err)}`,
+          resolveLink: '/accounts',
+        });
+      }
     }
   }
   if (accounts.length === 0) {

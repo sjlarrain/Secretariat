@@ -56,6 +56,9 @@ const MENU = `🤖 *Secretariat — Commands*
 */links* --read (-r) N    — Archive link #N
 */links* #N --tags (-t) tag1 tag2 — Add tags to link #N
 
+📇 *Networking*
+*/mantis* text             — Quick-capture a note to the Mantis inbox
+
 ⚙️ *System*
 */status*                 — Connections, Kapso health, usage
 */zone*                   — Show current timezone

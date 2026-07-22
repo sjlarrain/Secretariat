@@ -15,6 +15,7 @@ import { menuHandler } from '../handlers/menu.handler';
 import { uclaHandler } from '../handlers/ucla.handler';
 import { statusHandler } from '../handlers/status.handler';
 import { zoneHandler } from '../handlers/zone.handler';
+import { mantisHandler } from '../handlers/mantis.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import { replyRescheduleHandler } from '../handlers/reply-reschedule.handler';
 import { thirdPartyHandler } from '../handlers/third-party.handler';
@@ -146,6 +147,9 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
         break;
       case 'zone':
         await zoneHandler(data, from);
+        break;
+      case 'mantis':
+        await mantisHandler(data, from, messageId);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

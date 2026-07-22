@@ -72,4 +72,10 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: [],
     requiredFlags: [],
   },
+  mantis: {
+    name: '/mantis',
+    description: 'Quick-capture a networking note to the Mantis inbox for later classification.',
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
 };

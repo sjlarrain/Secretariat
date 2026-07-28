@@ -33,16 +33,6 @@ export interface Settings {
     time: string;    // HH:MM — fires every Monday
     scheduleId?: string;
   };
-  /**
-   * @deprecated v1.14 renamed `/work` to `/ucla`. Retained only so the stale
-   * QStash schedule (which still targets the removed /internal/digest/work
-   * route) can be found and deleted during migration. Never write this.
-   */
-  workReminder?: {
-    enabled: boolean;
-    time: string;
-    scheduleId?: string;
-  };
   defaultTaskTime: string; // HH:MM — default reminder time when --for is set but --at is omitted
   reminderPromoter: {
     /**
@@ -160,16 +150,7 @@ export async function getSettings(): Promise<Settings> {
   const data = await getRedis().get<Settings>(SETTINGS_KEY);
   if (!data) return normalizeSettings({ ...DEFAULT_SETTINGS });
   // Merge top-level defaults so fields added in newer versions always have a value
-  const merged = normalizeSettings({ ...DEFAULT_SETTINGS, ...data });
-
-  // v1.14: /work became /ucla. Carry the old config forward but deliberately
-  // drop its scheduleId — the old schedule targets a route that no longer
-  // exists, so reconcileSchedules deletes it and creates a fresh one.
-  if (data.workReminder && !data.uclaReminder) {
-    merged.uclaReminder = { enabled: data.workReminder.enabled, time: data.workReminder.time };
-  }
-
-  return merged;
+  return normalizeSettings({ ...DEFAULT_SETTINGS, ...data });
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

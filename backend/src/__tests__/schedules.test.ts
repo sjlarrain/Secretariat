@@ -7,12 +7,10 @@ import { reconcileSchedules } from '../qstash/schedules';
 // validation) never loads.
 const scheduleCron = vi.fn(async (path: string, _cron: string, _body: object) => `sched_${path}`);
 const deleteSchedule = vi.fn(async (_id: string) => {});
-const listSchedules = vi.fn(async () => [] as { scheduleId: string; cron: string; destination: string }[]);
 
 vi.mock('../qstash/client', () => ({
   scheduleCron: (p: string, c: string, b: object) => scheduleCron(p, c, b),
   deleteSchedule: (id: string) => deleteSchedule(id),
-  listSchedules: () => listSchedules(),
 }));
 
 function makeSettings(overrides: Partial<Settings> = {}): Settings {
@@ -37,8 +35,6 @@ function cronFor(path: string): string | undefined {
 beforeEach(() => {
   scheduleCron.mockClear();
   deleteSchedule.mockClear();
-  listSchedules.mockReset();
-  listSchedules.mockResolvedValue([]);
 });
 
 // ─── The v1.1 bug: a timezone change left every schedule at its old UTC time ──
@@ -200,60 +196,5 @@ describe('reconcileSchedules — reminder promoter is always on', () => {
 
     expect(deleteSchedule).toHaveBeenCalledWith('sched_promoter');
     expect(cronFor('/internal/reminder/promote')).toBe('CRON_TZ=America/Santiago 30 6 * * 0');
-  });
-});
-
-// ─── v1.14 /work → /ucla migration ───────────────────────────────────────────
-
-describe('reconcileSchedules — legacy work reminder migration', () => {
-  it('deletes the stale /work schedule and creates the /ucla one', async () => {
-    // Shape produced by getSettings() for pre-v1.14 stored data: the legacy
-    // workReminder is still present, and uclaReminder has no scheduleId yet.
-    const current = makeSettings({
-      uclaReminder: { enabled: true, time: '09:00' },
-      workReminder: { enabled: true, time: '09:00', scheduleId: 'sched_legacy_work' },
-    });
-    const next = makeSettings({
-      uclaReminder: { enabled: true, time: '09:00' },
-      workReminder: { enabled: true, time: '09:00', scheduleId: 'sched_legacy_work' },
-    });
-    listSchedules.mockResolvedValueOnce([
-      { scheduleId: 'sched_legacy_work', cron: '0 9 * * 1', destination: 'https://example.com/internal/digest/work' },
-    ]);
-
-    await reconcileSchedules(current, next);
-
-    // The old schedule points at the removed /internal/digest/work route.
-    expect(deleteSchedule).toHaveBeenCalledWith('sched_legacy_work');
-    expect(cronFor('/internal/digest/ucla')).toBe('CRON_TZ=America/Santiago 0 9 * * 1');
-    // And the legacy key is dropped so the migration runs exactly once.
-    expect(next.workReminder).toBeUndefined();
-  });
-
-  it('is a no-op for settings that never had a work reminder', async () => {
-    const current = makeSettings();
-    const next = makeSettings();
-
-    await reconcileSchedules(current, next);
-
-    expect(deleteSchedule).not.toHaveBeenCalled();
-    expect(next.workReminder).toBeUndefined();
-  });
-
-  // Regression test for the bug where the UCLA reminder fired twice on the
-  // same Monday: an earlier one-shot delete of workReminder.scheduleId had
-  // failed silently, and Settings had already forgotten the field, so nothing
-  // ever retried deleting the orphaned schedule while it kept firing at
-  // /internal/digest/work.
-  it('cleans up an orphaned /work schedule even when Settings has no record of it', async () => {
-    const current = makeSettings();
-    const next = makeSettings();
-    listSchedules.mockResolvedValueOnce([
-      { scheduleId: 'sched_orphan_work', cron: '0 9 * * 1', destination: 'https://example.com/internal/digest/work' },
-    ]);
-
-    await reconcileSchedules(current, next);
-
-    expect(deleteSchedule).toHaveBeenCalledWith('sched_orphan_work');
   });
 });

@@ -191,9 +191,6 @@ async function fireUclaDigest(_req: Request, res: Response): Promise<void> {
 }
 
 router.post('/digest/ucla', qstashVerify, fireUclaDigest);
-// Legacy alias (pre-v1.14 /work): the old Monday cron still targets this path
-// and keeps firing until reconcileSchedules replaces it on the next settings save.
-router.post('/digest/work', qstashVerify, fireUclaDigest);
 
 router.post('/reminder/promote', qstashVerify, async (_req: Request, res: Response) => {
   try {

@@ -1,5 +1,5 @@
 import type { Settings } from '../integrations/token-store';
-import { scheduleCron, deleteSchedule } from './client';
+import { scheduleCron, deleteSchedule, listSchedules } from './client';
 import { buildCron } from '../utils/timezone';
 
 // Deletes and recreates a QStash schedule when its own config changes, or when
@@ -47,12 +47,22 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
   next.reminderPromoter = { ...next.reminderPromoter, enabled: true };
 
   // v1.14 migration: the work reminder became the UCLA reminder and moved to a
-  // new route. Its old schedule must be deleted rather than adopted —
-  // reconcileCron diffs config, not destination URL, so it would otherwise keep
-  // a schedule pointing at the removed /internal/digest/work endpoint forever.
-  if (current.workReminder?.scheduleId) {
-    try { await deleteSchedule(current.workReminder.scheduleId); } catch { /* ignore */ }
-  }
+  // new route. The old schedule must be deleted rather than adopted. This used
+  // to delete only `current.workReminder.scheduleId` and then unconditionally
+  // forget that field — if the one delete call failed (or this never ran
+  // because no settings save happened after the upgrade), the orphaned
+  // schedule kept firing at /internal/digest/work forever with no record left
+  // to find it again, causing the UCLA reminder to send twice every Monday.
+  // Looking it up by destination instead of trusting a single stored ID makes
+  // cleanup idempotent and self-healing regardless of what Settings remembers.
+  try {
+    const live = await listSchedules();
+    for (const s of live) {
+      if (s.destination.endsWith('/internal/digest/work')) {
+        try { await deleteSchedule(s.scheduleId); } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore — QStash unreachable, nothing to clean up this run */ }
   delete next.workReminder;
 
   const nextMorning = next.morningDigest;

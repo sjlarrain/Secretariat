@@ -119,9 +119,9 @@ export const api = {
 
   getLinks: (filter?: 'read') =>
     request<{ links: Link[] }>(`/links${filter === 'read' ? '?filter=read' : ''}`),
-  createLink: (url: string, tags: string[]) =>
-    request<{ link: Link }>('/links', { method: 'POST', body: JSON.stringify({ url, tags }) }),
-  updateLink: (id: number, data: { url?: string; tags?: string[] }) =>
+  createLink: (url: string, tags: string[], name?: string) =>
+    request<{ link: Link }>('/links', { method: 'POST', body: JSON.stringify({ url, tags, name }) }),
+  updateLink: (id: number, data: { url?: string; tags?: string[]; name?: string }) =>
     request(`/links/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   markLinkRead: (id: number) => request(`/links/${id}/read`, { method: 'POST' }),
   deleteLink: (id: number) => request(`/links/${id}`, { method: 'DELETE' }),
@@ -224,6 +224,7 @@ export interface Link {
   tags: string[];
   createdAt: string;
   readAt?: string;
+  name?: string;
 }
 
 export interface UclaItem {

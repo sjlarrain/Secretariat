@@ -11,6 +11,7 @@ export default function LinksPage() {
   const [loading, setLoading] = useState(true);
 
   const [newUrl, setNewUrl] = useState('');
+  const [newName, setNewName] = useState('');
   const [newTags, setNewTags] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -21,6 +22,10 @@ export default function LinksPage() {
   const [editTagInput, setEditTagInput] = useState('');
   const [editTagList, setEditTagList] = useState<string[]>([]);
   const [savingTags, setSavingTags] = useState(false);
+
+  const [editingNameId, setEditingNameId] = useState<number | null>(null);
+  const [editNameInput, setEditNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const isMobile = useIsMobile();
 
@@ -53,9 +58,10 @@ export default function LinksPage() {
     setSaving(true);
     try {
       const tags = newTags.trim().split(/\s+/).filter(Boolean).map((t) => t.toLowerCase());
-      const res = await api.createLink(newUrl.trim(), tags);
+      const res = await api.createLink(newUrl.trim(), tags, newName.trim() || undefined);
       setLinks((prev) => [...prev, res.link]);
       setNewUrl('');
+      setNewName('');
       setNewTags('');
       flash('Link saved.');
     } catch {
@@ -125,6 +131,27 @@ export default function LinksPage() {
       flash('Failed to save tags.', true);
     } finally {
       setSavingTags(false);
+    }
+  }
+
+  function openNameEditor(link: Link) {
+    setEditNameInput(link.name ?? '');
+    setEditingNameId(link.id);
+  }
+
+  async function handleSaveName(id: number) {
+    setSavingName(true);
+    try {
+      const name = editNameInput.trim();
+      await api.updateLink(id, { name });
+      setLinks((prev) => prev.map((l) => l.id === id ? { ...l, name: name || undefined } : l));
+      setRead((prev) => prev.map((l) => l.id === id ? { ...l, name: name || undefined } : l));
+      setEditingNameId(null);
+      flash('Name saved.');
+    } catch {
+      flash('Failed to save name.', true);
+    } finally {
+      setSavingName(false);
     }
   }
 
@@ -205,6 +232,14 @@ export default function LinksPage() {
             <input
               type="text"
               className="input"
+              placeholder="Name (optional)"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              style={{ fontSize: 13 }}
+            />
+            <input
+              type="text"
+              className="input"
               placeholder="Tags: fintech-elements tech-news"
               value={newTags}
               onChange={(e) => setNewTags(e.target.value)}
@@ -225,20 +260,40 @@ export default function LinksPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {visibleLinks.map((link) => (
               <div key={link.id} className="card" style={{ padding: '14px 16px' }}>
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    fontSize: 13, fontWeight: 600, color: 'var(--blue-bright)',
-                    textDecoration: 'none', display: 'block',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    marginBottom: 4,
-                  }}
-                  title={link.url}
-                >
-                  {link.url}
-                </a>
+                {editingNameId === link.id ? (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                    <input
+                      autoFocus
+                      type="text"
+                      className="input"
+                      placeholder="Name this link…"
+                      value={editNameInput}
+                      onChange={(e) => setEditNameInput(e.target.value)}
+                      style={{ fontSize: 13, flex: 1 }}
+                    />
+                    <button className="btn-primary" style={{ fontSize: 11, padding: '2px 8px' }} disabled={savingName} onClick={() => handleSaveName(link.id)}>
+                      {savingName ? '…' : 'Save'}
+                    </button>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setEditingNameId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: 13, fontWeight: 600, color: 'var(--blue-bright)',
+                        textDecoration: 'none', flex: 1, minWidth: 0,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                      title={link.url}
+                    >
+                      {link.name || link.url}
+                    </a>
+                    <span onClick={() => openNameEditor(link)} style={{ fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', flexShrink: 0 }} title="Edit name">✏️</span>
+                  </div>
+                )}
                 <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 8 }}>
                   {shortUrl(link.url)} · {formatDate(isReadView && link.readAt ? link.readAt : link.createdAt)}
                 </div>
@@ -425,6 +480,14 @@ export default function LinksPage() {
               <input
                 type="text"
                 className="input"
+                placeholder="Name (optional)"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                style={{ fontSize: 13, flex: 1 }}
+              />
+              <input
+                type="text"
+                className="input"
                 placeholder="Tags: fintech-elements tech-news"
                 value={newTags}
                 onChange={(e) => setNewTags(e.target.value)}
@@ -446,19 +509,40 @@ export default function LinksPage() {
             {visibleLinks.map((link) => (
               <div key={link.id} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      fontSize: 13, fontWeight: 600, color: 'var(--blue-bright)',
-                      textDecoration: 'none', display: 'block',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}
-                    title={link.url}
-                  >
-                    {link.url}
-                  </a>
+                  {editingNameId === link.id ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        autoFocus
+                        type="text"
+                        className="input"
+                        placeholder="Name this link…"
+                        value={editNameInput}
+                        onChange={(e) => setEditNameInput(e.target.value)}
+                        style={{ fontSize: 13, flex: 1 }}
+                      />
+                      <button className="btn-primary" style={{ fontSize: 11, padding: '2px 8px' }} disabled={savingName} onClick={() => handleSaveName(link.id)}>
+                        {savingName ? '…' : 'Save'}
+                      </button>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setEditingNameId(null)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: 13, fontWeight: 600, color: 'var(--blue-bright)',
+                          textDecoration: 'none', flex: 1, minWidth: 0,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}
+                        title={link.url}
+                      >
+                        {link.name || link.url}
+                      </a>
+                      <span onClick={() => openNameEditor(link)} style={{ fontSize: 10, color: 'var(--text-dim)', cursor: 'pointer', flexShrink: 0 }} title="Edit name">✏️</span>
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 3 }}>
                     {shortUrl(link.url)} · {formatDate(isReadView && link.readAt ? link.readAt : link.createdAt)}
                   </div>

@@ -50,8 +50,8 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   links: {
     name: '/links',
-    description: 'Save a link, list, archive, or tag. `/links <url>` to save, `/links` to list, `/links -r N` to archive, `/links #N -t tag` to add tags.',
-    acceptedFlags: ['tags', 'read'],
+    description: 'Save a link, list, archive, tag, or name. `/links <url>` to save, `/links` to list, `/links -r N` to archive, `/links #N -t tag` to add tags, `/links #N --name text` to name it, `/links #N` to get its URL.',
+    acceptedFlags: ['tags', 'read', 'name'],
     requiredFlags: [],
   },
   ucla: {

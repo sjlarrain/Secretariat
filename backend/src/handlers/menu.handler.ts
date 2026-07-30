@@ -55,6 +55,9 @@ const MENU = `🤖 *Secretariat — Commands*
 */links*                  — List active links
 */links* --read (-r) N    — Archive link #N
 */links* #N --tags (-t) tag1 tag2 — Add tags to link #N
+*/links* #N --name (-n) text — Name link #N
+*/links* #N               — Get the URL behind link #N
+Reply _--name text_ after saving to name it right away
 
 📇 *Networking*
 */mantis* text             — Quick-capture a note to the Mantis inbox

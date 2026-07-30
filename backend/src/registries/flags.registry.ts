@@ -111,4 +111,13 @@ export const FLAGS: Record<string, FlagDefinition> = {
     optional: true,
     description: 'Add a Google Meet link to the event — no value needed',
   },
+  name: {
+    // -n: /links doesn't accept --notes, so no per-command clash despite
+    // sharing the letter globally.
+    name: '--name',
+    shortAlias: 'n',
+    type: 'string',
+    required: false,
+    description: 'Name for a saved link (shown instead of the raw URL)',
+  },
 };

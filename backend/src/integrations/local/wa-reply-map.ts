@@ -4,8 +4,8 @@ import { env } from '../../env';
 export interface WaReplyTarget {
   /** 'work' is the pre-v1.14 name for 'ucla'; still read for targets stored
    *  before the rename (48h TTL means they age out on their own). */
-  type: 'rem' | 'task' | 'ucla' | 'work';
-  id: string; // UUID for rem, stringified number for task/ucla
+  type: 'rem' | 'task' | 'ucla' | 'work' | 'link';
+  id: string; // UUID for rem, stringified number for task/ucla/link
   title: string;
   phoneNumber: string;
 }

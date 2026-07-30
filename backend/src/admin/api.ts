@@ -448,13 +448,13 @@ router.get('/links', requireAuth, async (req, res) => {
 });
 
 router.post('/links', requireAuth, async (req, res) => {
-  const { url, tags } = req.body as { url?: string; tags?: string[] };
+  const { url, tags, name } = req.body as { url?: string; tags?: string[]; name?: string };
   if (!url?.trim()) { res.status(400).json({ error: 'url is required' }); return; }
-  res.json({ link: await addLink(url, tags ?? []) });
+  res.json({ link: await addLink(url, tags ?? [], name) });
 });
 
 router.patch('/links/:id', requireAuth, async (req, res) => {
-  const ok = await updateLink(Number(req.params['id']), req.body as { url?: string; tags?: string[] });
+  const ok = await updateLink(Number(req.params['id']), req.body as { url?: string; tags?: string[]; name?: string });
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 

@@ -163,12 +163,14 @@ describe('short alias resolution (per-command scope)', () => {
     expect(projectFlag).toBe('project');
   });
 
-  it('/links: -r resolves to "read", -t resolves to "tags"', () => {
+  it('/links: -r resolves to "read", -t resolves to "tags", -n resolves to "name"', () => {
     const accepted = COMMANDS['links'].acceptedFlags;
     const readFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'r');
     const tagsFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 't');
+    const nameFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'n');
     expect(readFlag).toBe('read');
     expect(tagsFlag).toBe('tags');
+    expect(nameFlag).toBe('name');
   });
 
   it('/ucla: -d resolves to "done"', () => {

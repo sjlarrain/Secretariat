@@ -18,6 +18,7 @@ import { zoneHandler } from '../handlers/zone.handler';
 import { mantisHandler } from '../handlers/mantis.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import { replyRescheduleHandler } from '../handlers/reply-reschedule.handler';
+import { replyLinkNameHandler, pendingLinkNameHandler } from '../handlers/link-name.handler';
 import { thirdPartyHandler } from '../handlers/third-party.handler';
 import type { ParsedCommand } from '../parser/command.parser';
 
@@ -94,6 +95,22 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
     } catch (err) {
       console.error('Reply reschedule error:', err);
     }
+
+    try {
+      const handled = await replyLinkNameHandler(contextMessageId, text.trim(), from);
+      if (handled) return;
+    } catch (err) {
+      console.error('Reply link name error:', err);
+    }
+  }
+
+  // Plain "--name <text>" / "-n <text>" right after a link was saved, with no
+  // swipe-reply needed — targets whichever link was most recently saved.
+  try {
+    const handled = await pendingLinkNameHandler(text.trim(), from);
+    if (handled) return;
+  } catch (err) {
+    console.error('Pending link name error:', err);
   }
 
   try {

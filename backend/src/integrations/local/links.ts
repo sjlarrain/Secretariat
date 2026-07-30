@@ -14,6 +14,7 @@ export interface Link {
   tags: string[];
   createdAt: string;
   readAt?: string;
+  name?: string;
 }
 
 async function getAllLinksRaw(): Promise<Link[]> {
@@ -30,10 +31,11 @@ export async function getReadLinks(): Promise<Link[]> {
   return all.filter((l) => !!l.readAt);
 }
 
-export async function addLink(url: string, tags: string[]): Promise<Link> {
+export async function addLink(url: string, tags: string[], name?: string): Promise<Link> {
   const all = await getAllLinksRaw();
   const id = all.length ? Math.max(...all.map((l) => l.id)) + 1 : 1;
   const link: Link = { id, url: url.trim(), tags, createdAt: new Date().toISOString() };
+  if (name?.trim()) link.name = name.trim();
   await redis.set(LINKS_KEY, [...all, link]);
   return link;
 }
@@ -55,12 +57,13 @@ export async function deleteLink(id: number): Promise<boolean> {
   return true;
 }
 
-export async function updateLink(id: number, data: { url?: string; tags?: string[] }): Promise<boolean> {
+export async function updateLink(id: number, data: { url?: string; tags?: string[]; name?: string }): Promise<boolean> {
   const all = await getAllLinksRaw();
   const idx = all.findIndex((l) => l.id === id);
   if (idx === -1) return false;
   if (data.url !== undefined) all[idx].url = data.url.trim();
   if (data.tags !== undefined) all[idx].tags = data.tags;
+  if (data.name !== undefined) all[idx].name = data.name.trim() || undefined;
   await redis.set(LINKS_KEY, all);
   return true;
 }

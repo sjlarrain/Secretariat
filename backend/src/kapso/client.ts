@@ -117,13 +117,20 @@ async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
 }
 
 export async function sendMessage(to: string, text: string): Promise<void> {
-  await withRetry('sendText', () =>
+  await sendMessageWithId(to, text);
+}
+
+/** Same as sendMessage, but returns the WhatsApp message id so a reply to it
+ *  can later be matched back to what triggered it (see wa-reply-map.ts). */
+export async function sendMessageWithId(to: string, text: string): Promise<string> {
+  const res = await withRetry('sendText', () =>
     getClient().messages.sendText({
       phoneNumberId: env.KAPSO_PHONE_NUMBER_ID,
       to,
       body: text,
     })
   );
+  return res.messages[0]?.id ?? '';
 }
 
 export interface InteractiveButton {

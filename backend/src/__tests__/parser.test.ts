@@ -467,6 +467,23 @@ describe('/links', () => {
     expect(r.extraArgs[0]).toBe('#2');
     expect(r.flags['tags']).toBe('fintech');
   });
+
+  it('accepts --name with a multi-word value', () => {
+    const r = ok('/links #2 --name Great article on fintech');
+    expect(r.extraArgs[0]).toBe('#2');
+    expect(r.flags['name']).toBe('Great article on fintech');
+  });
+
+  it('accepts -n shorthand for --name', () => {
+    const r = ok('/links #2 -n Great article');
+    expect(r.flags['name']).toBe('Great article');
+  });
+
+  it('captures link # index alone as a bare lookup', () => {
+    const r = ok('/links #2');
+    expect(r.extraArgs[0]).toBe('#2');
+    expect(r.flags).toEqual({});
+  });
 });
 
 // ─── /ucla (replaced /work in v1.14) ─────────────────────────────────────────

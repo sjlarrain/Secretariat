@@ -16,6 +16,11 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
     return;
   }
 
+  if (flags['at']?.toLowerCase() === 'day') {
+    await sendMessage(from, '❌ @day is only supported by /schedule.');
+    return;
+  }
+
   const date = parseDate(flags['for'], settings.timezone);
   if (!date) {
     await sendMessage(from, `❌ Could not parse date: "${flags['for']}".`);

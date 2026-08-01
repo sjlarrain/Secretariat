@@ -32,7 +32,7 @@ describe('FLAGS registry', () => {
   });
 
   it('every flag has a valid type', () => {
-    const validTypes = ['string', 'date', 'time', 'email-list', 'account-alias'];
+    const validTypes = ['string', 'date', 'time', 'email-list', 'account-alias', 'duration'];
     for (const [key, def] of Object.entries(FLAGS)) {
       expect(validTypes, `FLAGS.${key}.type "${def.type}" is invalid`).toContain(def.type);
     }
@@ -189,6 +189,12 @@ describe('short alias resolution (per-command scope)', () => {
     const accepted = COMMANDS['schedule'].acceptedFlags;
     const videoFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'v');
     expect(videoFlag).toBe('video');
+  });
+
+  it('/schedule: -d resolves to "duration"', () => {
+    const accepted = COMMANDS['schedule'].acceptedFlags;
+    const durationFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'd');
+    expect(durationFlag).toBe('duration');
   });
 
   it('/task: -p resolves to "project"', () => {

@@ -20,8 +20,8 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   },
   schedule: {
     name: '/schedule',
-    description: 'Create a calendar event on Google Calendar. Add -v for a Google Meet link.',
-    acceptedFlags: ['title', 'for', 'at', 'invite', 'using', 'notes', 'video'],
+    description: 'Create a calendar event on Google Calendar. Add -v for a Google Meet link, @day for an all-day event, -d for duration.',
+    acceptedFlags: ['title', 'for', 'at', 'invite', 'using', 'notes', 'video', 'duration'],
     requiredFlags: ['for', 'at'],
   },
   task: {

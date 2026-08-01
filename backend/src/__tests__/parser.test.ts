@@ -159,6 +159,32 @@ describe('/schedule', () => {
   it('rejects --plan (not accepted by /schedule)', () => {
     expect(fail('/schedule Meeting --for tomorrow --at 09:00 --plan Lunch')).toMatch(/unknown flag/i);
   });
+
+  it('accepts @day shorthand for --at (all-day marker)', () => {
+    const r = ok('/schedule Offsite --for tomorrow @day');
+    expect(r.flags['at']).toBe('day');
+  });
+
+  it('accepts @day case-insensitively', () => {
+    const r = ok('/schedule Offsite --for tomorrow @DAY');
+    expect(r.flags['at']).toBe('day');
+  });
+
+  it('accepts --duration with a value', () => {
+    const r = ok('/schedule Meeting --for tomorrow --at 09:00 --duration 2');
+    expect(r.flags['duration']).toBe('2');
+  });
+
+  it('accepts -d shorthand for --duration', () => {
+    const r = ok('/schedule Meeting --for tomorrow --at 09:00 -d 2.5');
+    expect(r.flags['duration']).toBe('2.5');
+  });
+
+  it('accepts --duration combined with @day', () => {
+    const r = ok('/schedule Offsite --for tomorrow @day --duration 3');
+    expect(r.flags['at']).toBe('day');
+    expect(r.flags['duration']).toBe('3');
+  });
 });
 
 // ─── /gtask is retired (v1.14) ────────────────────────────────────────────────

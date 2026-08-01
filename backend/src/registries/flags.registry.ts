@@ -1,4 +1,4 @@
-export type FlagType = 'string' | 'date' | 'time' | 'email-list' | 'account-alias';
+export type FlagType = 'string' | 'date' | 'time' | 'email-list' | 'account-alias' | 'duration';
 
 export interface FlagDefinition {
   name: string;
@@ -33,7 +33,14 @@ export const FLAGS: Record<string, FlagDefinition> = {
     shortAlias: 'a',
     type: 'time',
     required: false,
-    description: 'Time in HH:MM format (24h)',
+    description: 'Time in HH:MM format (24h). @day marks an all-day event (/schedule only).',
+  },
+  duration: {
+    name: '--duration',
+    shortAlias: 'd',
+    type: 'duration',
+    required: false,
+    description: 'Event length — hours for timed events (e.g. 2 or 1.5), or days for @day events (e.g. 3). Default 1.',
   },
   invite: {
     name: '--invite',

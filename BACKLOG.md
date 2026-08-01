@@ -61,6 +61,7 @@
 | v1.14 | Admin nav — Reminders split into its own page; Cron Manager moved under Settings | ✅ Done | Medium |
 | v1.14 | Nightly health check — Kapso, Google tokens, QStash schedules, Redis; admin banner + best-effort WhatsApp alert | ✅ Done | Medium |
 | v1.14 | `/schedule -v` — attach a Google Meet link via `conferenceData.createRequest` | ✅ Done | Easy |
+| v1.14 | `/schedule @day` — all-day events; `--duration` flag for hours (timed) or days (`@day`) | ✅ Done | Medium |
 | v1.14 | Extend 15-min sync to UCLA tasks with Google-side differentiation | ❌ Cut | — |
 | v1.14 | _Cut: `/ucla` is a local-only list, so there are no UCLA tasks in Google Tasks to differentiate. Google Tasks has no per-task color at the API level (`colorId` is Calendar-only); a dedicated tasklist would be the mechanism if this is ever revisited._ | | |
 | v1.14 | Meta-approved message template for proactive digests + health alerts — removes the 24h-window delivery risk | ⬜ Pending | Ops |

@@ -7,7 +7,8 @@ const MENU = `🤖 *Secretariat — Commands*
 */schedule* — Create a calendar event
   --title (-t)   name *(required)*
   --for (-f)     date *(required)* — DD-MM-YYYY or "next friday"
-  --at (-a) / @  HH:MM *(required)*
+  --at (-a) / @  HH:MM *(required)* — or @day for an all-day event
+  --duration (-d) hours (e.g. 2, 1.5) — or days with @day (e.g. 3). Default 1
   --invite (-i)  email1,email2
   --notes (-n)   description
   --using (-u)   calendar alias (e.g. GG)

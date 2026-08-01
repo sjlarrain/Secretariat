@@ -68,3 +68,39 @@ export function getWeekDates(monday: Date, days: number[]): Date[] {
     return date;
   });
 }
+
+// Parses a --duration value for a timed event, in hours. Accepts a plain
+// number ("2", "1.5") or an explicit "Xh"/"Xm" suffix ("90m", "2h").
+export function parseDurationHours(input: string): number | null {
+  const trimmed = input.trim().toLowerCase();
+  const hMatch = trimmed.match(/^(\d+(?:\.\d+)?)h$/);
+  if (hMatch) return Number(hMatch[1]);
+  const mMatch = trimmed.match(/^(\d+(?:\.\d+)?)m$/);
+  if (mMatch) return Number(mMatch[1]) / 60;
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  return null;
+}
+
+// Parses a --duration value for an @day all-day event, in whole days.
+// Accepts "3" or "3d". Returns null if unparseable or not a positive integer.
+export function parseDurationDays(input: string): number | null {
+  const trimmed = input.trim().toLowerCase().replace(/d$/, '');
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return n > 0 ? n : null;
+}
+
+// Formats a Date as YYYY-MM-DD in the given timezone, for Google Calendar's
+// all-day event date fields (which carry no timezone of their own).
+export function formatDateOnly(date: Date, timezone: string): string {
+  return date.toLocaleDateString('en-CA', { timeZone: timezone });
+}
+
+// Adds N days to a YYYY-MM-DD string via calendar arithmetic (no timezone
+// conversion — the string already represents a wall-clock calendar date).
+export function addDaysToDateOnly(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}

@@ -48,6 +48,11 @@ export async function taskHandler(parsed: ParsedCommand, from: string): Promise<
     const atFlag = flags['at'];
     const notesFlag = flags['notes'] || undefined;
 
+    if (atFlag?.toLowerCase() === 'day') {
+      await sendMessage(from, '❌ @day is only supported by /schedule.');
+      return;
+    }
+
     // /task done <id>  →  mark task done
     if (extraArgs[0] === 'done') {
       const id = parseInt(extraArgs[1] ?? '', 10);

@@ -58,6 +58,14 @@ export function parseCommand(input: string): ParseResult {
       continue;
     }
 
+    // @day alias for --at — marks an all-day event. Only /schedule acts on
+    // this; other commands accepting --at reject the "day" value explicitly.
+    if (/^@day$/i.test(token)) {
+      flags['at'] = 'day';
+      i++;
+      continue;
+    }
+
     // #Tag alias for --project
     if (token.startsWith('#') && token.length > 1 && commandDef.acceptedFlags.includes('project')) {
       flags['project'] = token.slice(1);

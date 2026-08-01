@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { parseDate, combineDateAndTime, formatDate, formatTime, getMondayOfWeek, getWeekDates } from '../utils/date';
+import {
+  parseDate,
+  combineDateAndTime,
+  formatDate,
+  formatTime,
+  getMondayOfWeek,
+  getWeekDates,
+  parseDurationHours,
+  parseDurationDays,
+  formatDateOnly,
+  addDaysToDateOnly,
+} from '../utils/date';
 
 const TZ = 'America/Santiago';
 
@@ -208,6 +219,77 @@ describe('getMondayOfWeek', () => {
 });
 
 // ─── getWeekDates ─────────────────────────────────────────────────────────────
+
+// ─── parseDurationHours ───────────────────────────────────────────────────────
+
+describe('parseDurationHours', () => {
+  it('parses a plain integer as hours', () => {
+    expect(parseDurationHours('2')).toBe(2);
+  });
+
+  it('parses a decimal as hours', () => {
+    expect(parseDurationHours('1.5')).toBe(1.5);
+  });
+
+  it('parses an "Xh" suffix', () => {
+    expect(parseDurationHours('2h')).toBe(2);
+  });
+
+  it('parses an "Xm" suffix as fractional hours', () => {
+    expect(parseDurationHours('90m')).toBe(1.5);
+  });
+
+  it('returns null for garbage input', () => {
+    expect(parseDurationHours('abc')).toBeNull();
+  });
+});
+
+// ─── parseDurationDays ────────────────────────────────────────────────────────
+
+describe('parseDurationDays', () => {
+  it('parses a plain integer as days', () => {
+    expect(parseDurationDays('3')).toBe(3);
+  });
+
+  it('parses an "Xd" suffix', () => {
+    expect(parseDurationDays('3d')).toBe(3);
+  });
+
+  it('returns null for zero', () => {
+    expect(parseDurationDays('0')).toBeNull();
+  });
+
+  it('returns null for a decimal', () => {
+    expect(parseDurationDays('1.5')).toBeNull();
+  });
+
+  it('returns null for garbage input', () => {
+    expect(parseDurationDays('abc')).toBeNull();
+  });
+});
+
+// ─── formatDateOnly / addDaysToDateOnly ───────────────────────────────────────
+
+describe('formatDateOnly', () => {
+  it('formats a Date as YYYY-MM-DD in the given timezone', () => {
+    const d = new Date('2026-06-15T12:00:00Z');
+    expect(formatDateOnly(d, TZ)).toBe('2026-06-15');
+  });
+});
+
+describe('addDaysToDateOnly', () => {
+  it('adds days within the same month', () => {
+    expect(addDaysToDateOnly('2026-06-15', 3)).toBe('2026-06-18');
+  });
+
+  it('rolls over into the next month', () => {
+    expect(addDaysToDateOnly('2026-06-29', 3)).toBe('2026-07-02');
+  });
+
+  it('adding 0 days returns the same date', () => {
+    expect(addDaysToDateOnly('2026-06-15', 0)).toBe('2026-06-15');
+  });
+});
 
 describe('getWeekDates', () => {
   const monday = new Date('2026-05-11T00:00:00'); // known Monday

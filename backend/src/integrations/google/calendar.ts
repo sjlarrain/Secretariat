@@ -64,13 +64,14 @@ export async function createEvent(
   account: ConnectedAccount,
   params: {
     title: string;
-    startDatetime: Date;
-    endDatetime: Date;
     attendees: string[];
     notes?: string;
     timezone: string;
     withMeetLink?: boolean;
-  }
+  } & (
+    | { allDay: true; startDate: string; endDate: string }
+    | { allDay?: false; startDatetime: Date; endDatetime: Date }
+  )
 ): Promise<{ eventId: string; htmlLink: string; meetLink?: string }> {
   const cal = await getCalendarClient(account);
 
@@ -81,8 +82,12 @@ export async function createEvent(
     requestBody: {
       summary: params.title,
       description: params.notes,
-      start: { dateTime: params.startDatetime.toISOString(), timeZone: params.timezone },
-      end: { dateTime: params.endDatetime.toISOString(), timeZone: params.timezone },
+      start: params.allDay
+        ? { date: params.startDate }
+        : { dateTime: params.startDatetime.toISOString(), timeZone: params.timezone },
+      end: params.allDay
+        ? { date: params.endDate }
+        : { dateTime: params.endDatetime.toISOString(), timeZone: params.timezone },
       attendees: params.attendees.map((email) => ({ email })),
       ...(params.withMeetLink
         ? {

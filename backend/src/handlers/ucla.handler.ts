@@ -48,6 +48,11 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
   const forFlag = parsed.flags['for'];
   const atFlag = parsed.flags['at'];
 
+  if (atFlag?.toLowerCase() === 'day') {
+    await sendMessage(from, '❌ @day is only supported by /schedule.');
+    return;
+  }
+
   try {
     const settings = await getSettings();
     const tz = settings.timezone;

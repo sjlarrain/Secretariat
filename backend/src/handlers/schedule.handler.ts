@@ -2,7 +2,16 @@ import { ParsedCommand } from '../parser/command.parser';
 import { resolveAccount } from '../integrations/registry';
 import { createEvent } from '../integrations/google/calendar';
 import { getSettings } from '../integrations/token-store';
-import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
+import {
+  parseDate,
+  combineDateAndTime,
+  formatDate,
+  formatTime,
+  parseDurationHours,
+  parseDurationDays,
+  formatDateOnly,
+  addDaysToDateOnly,
+} from '../utils/date';
 import { sendMessage } from '../kapso/client';
 
 export async function scheduleHandler(parsed: ParsedCommand, from: string): Promise<void> {
@@ -30,9 +39,6 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
     return;
   }
 
-  const startDatetime = combineDateAndTime(date, flags['at'], timezone);
-  const endDatetime = new Date(startDatetime.getTime() + 60 * 60 * 1000);
-
   const attendees: string[] = [];
   if (flags['invite']) attendees.push(...flags['invite'].split(',').map((e) => e.trim()));
 
@@ -40,7 +46,53 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
   // undefined value means the flag was omitted.
   const withMeetLink = flags['video'] !== undefined;
 
+  const isAllDay = flags['at'].toLowerCase() === 'day';
+
   try {
+    if (isAllDay) {
+      const durationDays = flags['duration'] !== undefined ? parseDurationDays(flags['duration']) : 1;
+      if (durationDays === null) {
+        await sendMessage(from, `❌ Could not parse duration: "${flags['duration']}". Use a whole number of days (e.g. 3).`);
+        return;
+      }
+
+      const startDate = formatDateOnly(date, timezone);
+      const endDate = addDaysToDateOnly(startDate, durationDays); // Google's end.date is exclusive
+
+      const { meetLink } = await createEvent(account, {
+        title,
+        allDay: true,
+        startDate,
+        endDate,
+        attendees,
+        notes: flags['notes'],
+        timezone,
+        withMeetLink,
+      });
+
+      const lastDay = new Date(`${addDaysToDateOnly(startDate, durationDays - 1)}T12:00:00Z`);
+      const dateLabel =
+        durationDays === 1
+          ? formatDate(date, false, timezone)
+          : `${formatDate(date, false, timezone)} – ${formatDate(lastDay, false, timezone)}`;
+
+      const lines = ['✅ *Event scheduled*', `📌 ${title}`, `📅 ${dateLabel} (all day)`];
+      if (withMeetLink) {
+        lines.push(meetLink ? `🎥 ${meetLink}` : '⚠️ Google did not return a Meet link for this event.');
+      }
+      await sendMessage(from, lines.join('\n'));
+      return;
+    }
+
+    const durationHours = flags['duration'] !== undefined ? parseDurationHours(flags['duration']) : 1;
+    if (durationHours === null) {
+      await sendMessage(from, `❌ Could not parse duration: "${flags['duration']}". Use hours (e.g. 2 or 1.5).`);
+      return;
+    }
+
+    const startDatetime = combineDateAndTime(date, flags['at'], timezone);
+    const endDatetime = new Date(startDatetime.getTime() + durationHours * 60 * 60 * 1000);
+
     const { meetLink } = await createEvent(account, {
       title,
       startDatetime,

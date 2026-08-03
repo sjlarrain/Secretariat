@@ -24,5 +24,5 @@ export async function kapsoFetch<T>(path: string): Promise<T> {
 }
 
 export function fetchPhoneHealth(): Promise<HealthResponse> {
-  return kapsoFetch<HealthResponse>(`/phone-numbers/${env.KAPSO_PHONE_NUMBER_ID}/health`);
+  return kapsoFetch<HealthResponse>(`/whatsapp/phone_numbers/${env.KAPSO_PHONE_NUMBER_ID}/health`);
 }

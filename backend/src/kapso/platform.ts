@@ -15,11 +15,27 @@ export interface MessagesResponse {
   meta?: { total_count?: number };
 }
 
+// Kapso's own 404/5xx pages are full HTML documents (title/h1/p + inline CSS),
+// not JSON — dumping them raw makes health alerts and /status unreadable.
+function summarizeErrorBody(text: string, contentType: string | null): string {
+  if (contentType?.includes('text/html')) {
+    const h1 = text.match(/<h1[^>]*>([^<]*)<\/h1>/i)?.[1];
+    const title = text.match(/<title>([^<]*)<\/title>/i)?.[1];
+    const p = text.match(/<p[^>]*>([^<]*)<\/p>/i)?.[1];
+    const summary = [h1 ?? title, p].filter(Boolean).join(' — ');
+    if (summary) return summary;
+  }
+  return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+}
+
 export async function kapsoFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${PLATFORM_BASE}${path}`, {
     headers: { 'X-API-Key': env.KAPSO_API_KEY },
   });
-  if (!res.ok) throw new Error(`Kapso API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Kapso API ${res.status}: ${summarizeErrorBody(text, res.headers.get('content-type'))}`);
+  }
   return res.json() as Promise<T>;
 }
 

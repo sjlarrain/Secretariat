@@ -1,7 +1,7 @@
 import * as chrono from 'chrono-node';
 
 // Parses DD-MM-YYYY or natural language dates into a Date object
-export function parseDate(input: string, timezone: string = 'America/Santiago'): Date | null {
+export function parseDate(input: string, timezone: string): Date | null {
   const trimmed = input.trim();
 
   // Strict DD-MM-YYYY
@@ -20,44 +20,71 @@ export function parseDate(input: string, timezone: string = 'America/Santiago'):
   return parsed ?? null;
 }
 
+/**
+ * Milliseconds to add to a UTC instant to get the wall-clock time in
+ * `timezone` expressed as if it were UTC (i.e. `instant.getTime() + offsetMs`
+ * gives a Date whose UTC fields equal that instant's local fields in `timezone`).
+ * Negative for zones behind UTC. Shared by every function below that needs to
+ * reason about a specific timezone's wall-clock date/time — never approximate
+ * this with the server's own local time (`new Date()` + `setHours()`), which
+ * is wrong for any user not in the server's timezone.
+ */
+function zonedOffsetMs(instantUtc: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(instantUtc);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  const tzMs = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+  return tzMs - instantUtc.getTime();
+}
+
 // Combines a date and HH:MM time string into a Date, interpreting the time in the given timezone
-export function combineDateAndTime(date: Date, timeStr: string, timezone = 'America/Santiago'): Date {
+export function combineDateAndTime(date: Date, timeStr: string, timezone: string): Date {
   const [hours, minutes] = timeStr.split(':').map(Number);
   // Get the calendar date in the target timezone (YYYY-MM-DD)
   const dateInTz = date.toLocaleDateString('en-CA', { timeZone: timezone });
   // Build a UTC probe as if the desired wall-clock time were UTC
   const probe = new Date(`${dateInTz}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00Z`);
-  // Find how many ms the timezone is offset from UTC at that instant
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).formatToParts(probe);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
-  const tzMs = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
-  const offsetMs = tzMs - probe.getTime(); // negative for zones behind UTC
-  return new Date(probe.getTime() - offsetMs);
+  return new Date(probe.getTime() - zonedOffsetMs(probe, timezone));
+}
+
+/** The first instant (00:00:00.000) of `date`'s calendar day in `timezone`. */
+export function startOfDayInZone(date: Date, timezone: string): Date {
+  const dateStr = date.toLocaleDateString('en-CA', { timeZone: timezone });
+  const probe = new Date(`${dateStr}T00:00:00.000Z`);
+  return new Date(probe.getTime() - zonedOffsetMs(probe, timezone));
+}
+
+/** The last instant (23:59:59.999) of `date`'s calendar day in `timezone`. */
+export function endOfDayInZone(date: Date, timezone: string): Date {
+  const dateStr = date.toLocaleDateString('en-CA', { timeZone: timezone });
+  const probe = new Date(`${dateStr}T23:59:59.999Z`);
+  return new Date(probe.getTime() - zonedOffsetMs(probe, timezone));
 }
 
 // Formats a Date for WhatsApp display (e.g. "22 Apr" or "Tue 22 Apr")
-export function formatDate(date: Date, includeDay = false, timezone = 'America/Santiago'): string {
+export function formatDate(date: Date, includeDay = false, timezone: string): string {
   const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', timeZone: timezone };
   if (includeDay) opts.weekday = 'short';
   return date.toLocaleDateString('en-GB', opts);
 }
 
-export function formatTime(date: Date, timezone = 'America/Santiago'): string {
+export function formatTime(date: Date, timezone: string): string {
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone });
 }
 
-// Returns the Monday of the ISO week containing `date`
-export function getMondayOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay(); // 0=Sun
+// Returns the Monday of the ISO week containing `date`, as the first instant
+// of that calendar day *in `timezone`* — not the server's local time.
+export function getMondayOfWeek(date: Date, timezone: string): Date {
+  const dateStr = date.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD in that zone
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const noonUtc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)); // noon avoids DST-boundary day-shift
+  const day = noonUtc.getUTCDay(); // 0=Sun
   const diff = day === 0 ? -6 : 1 - day; // shift to Monday
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const mondayNoon = new Date(Date.UTC(y, m - 1, d + diff, 12, 0, 0));
+  return startOfDayInZone(mondayNoon, timezone);
 }
 
 // Returns Date objects for the given weekday indices (1=Mon..6=Sat) in the week starting at `monday`

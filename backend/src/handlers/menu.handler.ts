@@ -1,5 +1,6 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
+import { Ctx } from '../ctx';
 
 const MENU = `🤖 *Secretariat — Commands*
 
@@ -71,6 +72,6 @@ Reply _--name text_ after saving to name it right away
 
 _Send /start to wake up the bot._`;
 
-export async function menuHandler(_parsed: ParsedCommand, from: string): Promise<void> {
-  await sendMessage(from, MENU);
+export async function menuHandler(_parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  await sendMessage(ctx.userId, MENU);
 }

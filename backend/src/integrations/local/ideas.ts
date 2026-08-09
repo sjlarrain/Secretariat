@@ -1,13 +1,13 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
+import { userKey } from '../../redis/keys';
+import { HashCollection, byId } from '../../redis/hash-collection';
 
 const redis = new Redis({
   url: env.UPSTASH_REDIS_REST_URL,
   token: env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PROJECTS_KEY = 'secretariat:projects';
-const IDEAS_KEY = 'secretariat:ideas';
 const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface Project {
@@ -27,159 +27,157 @@ export interface Idea {
   usedAt?: string; // marked as "done/used" — distinct from trash
 }
 
+function projects(userId: string): HashCollection<Project> {
+  return new HashCollection<Project>(redis, userKey(userId, 'projects'), userKey(userId, 'projects') + ':seq');
+}
+
+function ideas(userId: string): HashCollection<Idea> {
+  return new HashCollection<Idea>(redis, userKey(userId, 'ideas'), userKey(userId, 'ideas') + ':seq');
+}
+
 // ── Internal ──────────────────────────────────────────────────────────────────
 
-async function getAllIdeasRaw(): Promise<Idea[]> {
-  const raw = (await redis.get<Idea[]>(IDEAS_KEY)) ?? [];
+async function getAllIdeasRaw(userId: string): Promise<Idea[]> {
+  const raw = await ideas(userId).getAll(byId);
   return raw.map((i) => ({ ...i, projectId: i.projectId ?? 1 }));
 }
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
-async function ensureDefaultProject(projects: Project[]): Promise<Project[]> {
-  if (projects.length > 0) return projects;
+async function ensureDefaultProject(userId: string, existing: Project[]): Promise<Project[]> {
+  if (existing.length > 0) return existing;
   const defaultProject: Project = {
     id: 1,
     name: 'Ideas',
     createdAt: new Date().toISOString(),
     isDefault: true,
   };
-  await redis.set(PROJECTS_KEY, [defaultProject]);
+  await projects(userId).set(defaultProject);
   return [defaultProject];
 }
 
-export async function getProjects(): Promise<Project[]> {
-  const raw = (await redis.get<Project[]>(PROJECTS_KEY)) ?? [];
-  return ensureDefaultProject(raw);
+export async function getProjects(userId: string): Promise<Project[]> {
+  const raw = await projects(userId).getAll(byId);
+  return ensureDefaultProject(userId, raw);
 }
 
-export async function getDefaultProject(): Promise<Project> {
-  const projects = await getProjects();
-  return projects.find((p) => p.isDefault)!;
+export async function getDefaultProject(userId: string): Promise<Project> {
+  const all = await getProjects(userId);
+  return all.find((p) => p.isDefault)!;
 }
 
-export async function findOrCreateProject(name: string): Promise<Project> {
-  const projects = await getProjects();
+export async function findOrCreateProject(userId: string, name: string): Promise<Project> {
+  const all = await getProjects(userId);
   const normalized = name.trim().toLowerCase();
-  const existing = projects.find((p) => p.name.toLowerCase() === normalized);
+  const existing = all.find((p) => p.name.toLowerCase() === normalized);
   if (existing) return existing;
-  const id = Math.max(...projects.map((p) => p.id)) + 1;
+  const id = await projects(userId).nextId();
   const project: Project = { id, name: name.trim(), createdAt: new Date().toISOString(), isDefault: false };
-  await redis.set(PROJECTS_KEY, [...projects, project]);
+  await projects(userId).set(project);
   return project;
 }
 
-export async function updateProject(id: number, name: string): Promise<boolean> {
-  const projects = await getProjects();
-  const idx = projects.findIndex((p) => p.id === id);
-  if (idx === -1) return false;
-  projects[idx].name = name.trim();
-  await redis.set(PROJECTS_KEY, projects);
+export async function updateProject(userId: string, id: number, name: string): Promise<boolean> {
+  const project = await projects(userId).get(id);
+  if (!project) return false;
+  project.name = name.trim();
+  await projects(userId).set(project);
   return true;
 }
 
-export async function deleteProject(id: number): Promise<{ ok: boolean; error?: string }> {
-  const projects = await getProjects();
-  const project = projects.find((p) => p.id === id);
+export async function deleteProject(userId: string, id: number): Promise<{ ok: boolean; error?: string }> {
+  const all = await getProjects(userId);
+  const project = all.find((p) => p.id === id);
   if (!project) return { ok: false, error: 'Project not found' };
   if (project.isDefault) return { ok: false, error: 'Cannot delete the default project' };
 
-  const defaultProject = projects.find((p) => p.isDefault)!;
-  // Reassign all ideas (including trashed) from this project to the default project
-  const all = await getAllIdeasRaw();
-  const reassigned = all.map((i) => (i.projectId === id ? { ...i, projectId: defaultProject.id } : i));
-  await redis.set(IDEAS_KEY, reassigned);
-  await redis.set(PROJECTS_KEY, projects.filter((p) => p.id !== id));
+  const defaultProject = all.find((p) => p.isDefault)!;
+  // Reassign all ideas (including trashed) from this project to the default project.
+  const allIdeas = await getAllIdeasRaw(userId);
+  const toReassign = allIdeas.filter((i) => i.projectId === id);
+  await Promise.all(toReassign.map((i) => ideas(userId).set({ ...i, projectId: defaultProject.id })));
+  await projects(userId).remove(id);
   return { ok: true };
 }
 
 // ── Ideas — active ────────────────────────────────────────────────────────────
 
-export async function getIdeas(): Promise<Idea[]> {
-  const all = await getAllIdeasRaw();
+export async function getIdeas(userId: string): Promise<Idea[]> {
+  const all = await getAllIdeasRaw(userId);
   return all.filter((i) => !i.deletedAt && !i.usedAt);
 }
 
-export async function getDoneIdeas(): Promise<Idea[]> {
-  const all = await getAllIdeasRaw();
+export async function getDoneIdeas(userId: string): Promise<Idea[]> {
+  const all = await getAllIdeasRaw(userId);
   return all.filter((i) => !!i.usedAt && !i.deletedAt);
 }
 
-export async function markIdeaAsDone(id: number): Promise<boolean> {
-  const all = await getAllIdeasRaw();
-  const idx = all.findIndex((i) => i.id === id && !i.deletedAt && !i.usedAt);
-  if (idx === -1) return false;
-  all[idx].usedAt = new Date().toISOString();
-  await redis.set(IDEAS_KEY, all);
+export async function markIdeaAsDone(userId: string, id: number): Promise<boolean> {
+  const idea = await ideas(userId).get(id);
+  if (!idea || idea.deletedAt || idea.usedAt) return false;
+  idea.usedAt = new Date().toISOString();
+  await ideas(userId).set(idea);
   return true;
 }
 
-export async function addIdea(text: string, projectId: number): Promise<Idea> {
-  const all = await getAllIdeasRaw();
-  const id = all.length ? Math.max(...all.map((i) => i.id)) + 1 : 1;
+export async function addIdea(userId: string, text: string, projectId: number): Promise<Idea> {
+  const id = await ideas(userId).nextId();
   const idea: Idea = { id, text: text.trim(), createdAt: new Date().toISOString(), projectId };
-  await redis.set(IDEAS_KEY, [...all, idea]);
+  await ideas(userId).set(idea);
   return idea;
 }
 
-export async function updateIdea(id: number, data: { text?: string; projectId?: number }): Promise<boolean> {
-  const all = await getAllIdeasRaw();
-  const idx = all.findIndex((i) => i.id === id && !i.deletedAt);
-  if (idx === -1) return false;
-  if (data.text !== undefined) all[idx].text = data.text.trim();
-  if (data.projectId !== undefined) all[idx].projectId = data.projectId;
-  all[idx].updatedAt = new Date().toISOString();
-  await redis.set(IDEAS_KEY, all);
+export async function updateIdea(userId: string, id: number, data: { text?: string; projectId?: number }): Promise<boolean> {
+  const idea = await ideas(userId).get(id);
+  if (!idea || idea.deletedAt) return false;
+  if (data.text !== undefined) idea.text = data.text.trim();
+  if (data.projectId !== undefined) idea.projectId = data.projectId;
+  idea.updatedAt = new Date().toISOString();
+  await ideas(userId).set(idea);
   return true;
 }
 
 /** Soft delete — moves idea to trash */
-export async function deleteIdea(id: number): Promise<boolean> {
-  const all = await getAllIdeasRaw();
-  const idx = all.findIndex((i) => i.id === id && !i.deletedAt);
-  if (idx === -1) return false;
-  all[idx].deletedAt = new Date().toISOString();
-  await redis.set(IDEAS_KEY, all);
+export async function deleteIdea(userId: string, id: number): Promise<boolean> {
+  const idea = await ideas(userId).get(id);
+  if (!idea || idea.deletedAt) return false;
+  idea.deletedAt = new Date().toISOString();
+  await ideas(userId).set(idea);
   return true;
 }
 
 // ── Ideas — trash ─────────────────────────────────────────────────────────────
 
 /** Returns trashed ideas, auto-purging any older than 30 days */
-export async function getTrashedIdeas(): Promise<Idea[]> {
-  const all = await getAllIdeasRaw();
+export async function getTrashedIdeas(userId: string): Promise<Idea[]> {
+  const all = await getAllIdeasRaw(userId);
   const now = Date.now();
   const trashed = all.filter((i) => !!i.deletedAt);
-  const expired = new Set(
-    trashed.filter((i) => now - new Date(i.deletedAt!).getTime() > TRASH_TTL_MS).map((i) => i.id)
-  );
+  const expired = trashed.filter((i) => now - new Date(i.deletedAt!).getTime() > TRASH_TTL_MS);
 
-  if (expired.size > 0) {
-    await redis.set(IDEAS_KEY, all.filter((i) => !expired.has(i.id)));
-    return trashed.filter((i) => !expired.has(i.id));
+  if (expired.length > 0) {
+    await Promise.all(expired.map((i) => ideas(userId).remove(i.id)));
+    const expiredIds = new Set(expired.map((i) => i.id));
+    return trashed.filter((i) => !expiredIds.has(i.id));
   }
 
   return trashed;
 }
 
-export async function restoreIdea(id: number): Promise<boolean> {
-  const all = await getAllIdeasRaw();
-  const idx = all.findIndex((i) => i.id === id && !!i.deletedAt);
-  if (idx === -1) return false;
-  delete all[idx].deletedAt;
-  await redis.set(IDEAS_KEY, all);
+export async function restoreIdea(userId: string, id: number): Promise<boolean> {
+  const idea = await ideas(userId).get(id);
+  if (!idea || !idea.deletedAt) return false;
+  delete idea.deletedAt;
+  await ideas(userId).set(idea);
   return true;
 }
 
-export async function permanentlyDeleteIdea(id: number): Promise<boolean> {
-  const all = await getAllIdeasRaw();
-  const filtered = all.filter((i) => i.id !== id);
-  if (filtered.length === all.length) return false;
-  await redis.set(IDEAS_KEY, filtered);
-  return true;
+export async function permanentlyDeleteIdea(userId: string, id: number): Promise<boolean> {
+  return ideas(userId).remove(id);
 }
 
-export async function emptyTrash(): Promise<void> {
-  const all = await getAllIdeasRaw();
-  await redis.set(IDEAS_KEY, all.filter((i) => !i.deletedAt));
+export async function emptyTrash(userId: string): Promise<void> {
+  const all = await getAllIdeasRaw(userId);
+  const trashed = all.filter((i) => !!i.deletedAt);
+  await Promise.all(trashed.map((i) => ideas(userId).remove(i.id)));
 }

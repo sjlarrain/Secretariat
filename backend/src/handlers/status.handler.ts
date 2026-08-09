@@ -1,7 +1,8 @@
 import { sendMessage } from '../kapso/client';
-import { getAllAccounts, getSettings } from '../integrations/token-store';
+import { getAllAccounts } from '../integrations/token-store';
 import { kapsoFetch, fetchPhoneHealth, HealthResponse, MessagesResponse } from '../kapso/platform';
 import type { ParsedCommand } from '../parser/command.parser';
+import { Ctx } from '../ctx';
 
 export function formatStatusMessage(params: {
   accounts: { alias: string; type: string; isDefault: boolean; isDisconnected: boolean }[];
@@ -42,10 +43,10 @@ export function formatStatusMessage(params: {
   return lines.join('\n');
 }
 
-export async function statusHandler(_parsed: ParsedCommand, from: string): Promise<void> {
-  const settings = await getSettings();
-  const timezone = settings.timezone ?? 'America/Santiago';
-  const accounts = await getAllAccounts();
+export async function statusHandler(_parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
+  const timezone = ctx.timezone;
+  const accounts = await getAllAccounts(ctx.userId);
 
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();

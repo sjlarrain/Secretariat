@@ -1,6 +1,8 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../env';
 import { encryptWithKey, decryptWithKey, deriveAccountKey } from '../utils/encrypt';
+import { userKey } from '../redis/keys';
+import { HashCollection } from '../redis/hash-collection';
 
 export interface ConnectedAccount {
   id: string;
@@ -60,9 +62,6 @@ export interface Settings {
   };
 }
 
-const ACCOUNTS_KEY = 'secretariat:accounts';
-const SETTINGS_KEY = 'secretariat:settings';
-
 const DEFAULT_SETTINGS: Settings = {
   timezone: 'America/Santiago',
   morningDigest: { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5] },
@@ -86,52 +85,52 @@ function getRedis(): Redis {
   return _redis;
 }
 
-export async function getAllAccounts(): Promise<ConnectedAccount[]> {
-  const data = await getRedis().get<ConnectedAccount[]>(ACCOUNTS_KEY);
-  const accounts = data ?? [];
+// Accounts are keyed by their own (UUID) id, not minted here, so the
+// collection needs no seqKey.
+function accountsCollection(userId: string): HashCollection<ConnectedAccount> {
+  return new HashCollection<ConnectedAccount>(getRedis(), userKey(userId, 'accounts'));
+}
 
-  // Self-heal: ensure at most one default per type
-  let dirty = false;
+export async function getAllAccounts(userId: string): Promise<ConnectedAccount[]> {
+  const accounts = await accountsCollection(userId).getAll();
+
+  // Self-heal: ensure at most one default per type. Only the offending
+  // records are rewritten (one HSET each) — no whole-collection read-then-write.
+  const fixes: Promise<void>[] = [];
   for (const type of ['calendar', 'tasks'] as const) {
     const defaults = accounts.filter((a) => a.type === type && a.isDefault);
-    if (defaults.length > 1) {
-      defaults.slice(1).forEach((a) => { a.isDefault = false; dirty = true; });
+    for (const a of defaults.slice(1)) {
+      a.isDefault = false;
+      fixes.push(accountsCollection(userId).set(a));
     }
   }
-  if (dirty) await getRedis().set(ACCOUNTS_KEY, accounts);
+  if (fixes.length) await Promise.all(fixes);
 
   return accounts;
 }
 
-export async function getAccount(id: string): Promise<ConnectedAccount | undefined> {
-  const accounts = await getAllAccounts();
-  return accounts.find((a) => a.id === id);
+export async function getAccount(userId: string, id: string): Promise<ConnectedAccount | undefined> {
+  return (await accountsCollection(userId).get(id)) ?? undefined;
 }
 
-export async function saveAccount(account: ConnectedAccount): Promise<void> {
-  const accounts = await getAllAccounts();
-  const idx = accounts.findIndex((a) => a.id === account.id);
-  if (idx >= 0) {
-    accounts[idx] = account;
-  } else {
-    accounts.push(account);
-  }
-  await getRedis().set(ACCOUNTS_KEY, accounts);
+export async function saveAccount(userId: string, account: ConnectedAccount): Promise<void> {
+  await accountsCollection(userId).set(account);
 }
 
-export async function setDefaultAccount(id: string): Promise<void> {
-  const accounts = await getAllAccounts();
+export async function setDefaultAccount(userId: string, id: string): Promise<void> {
+  const accounts = await getAllAccounts(userId);
   const target = accounts.find((a) => a.id === id);
   if (!target) return;
-  const updated = accounts.map((a) =>
-    a.type === target.type ? { ...a, isDefault: a.id === id } : a
+  const collection = accountsCollection(userId);
+  await Promise.all(
+    accounts
+      .filter((a) => a.type === target.type)
+      .map((a) => collection.set({ ...a, isDefault: a.id === id }))
   );
-  await getRedis().set(ACCOUNTS_KEY, updated);
 }
 
-export async function deleteAccount(id: string): Promise<void> {
-  const accounts = await getAllAccounts();
-  await getRedis().set(ACCOUNTS_KEY, accounts.filter((a) => a.id !== id));
+export async function deleteAccount(userId: string, id: string): Promise<void> {
+  await accountsCollection(userId).remove(id);
 }
 
 /**
@@ -146,15 +145,15 @@ function normalizeSettings(settings: Settings): Settings {
   return settings;
 }
 
-export async function getSettings(): Promise<Settings> {
-  const data = await getRedis().get<Settings>(SETTINGS_KEY);
+export async function getSettings(userId: string): Promise<Settings> {
+  const data = await getRedis().get<Settings>(userKey(userId, 'settings'));
   if (!data) return normalizeSettings({ ...DEFAULT_SETTINGS });
   // Merge top-level defaults so fields added in newer versions always have a value
   return normalizeSettings({ ...DEFAULT_SETTINGS, ...data });
 }
 
-export async function saveSettings(settings: Settings): Promise<void> {
-  await getRedis().set(SETTINGS_KEY, normalizeSettings(settings));
+export async function saveSettings(userId: string, settings: Settings): Promise<void> {
+  await getRedis().set(userKey(userId, 'settings'), normalizeSettings(settings));
 }
 
 export function encryptTokens(tokens: object, accountId: string): string {

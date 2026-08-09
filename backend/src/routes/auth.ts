@@ -3,7 +3,8 @@ import { randomUUID as uuidv4 } from 'crypto';
 import { getAuthUrl, exchangeCode } from '../integrations/google/oauth';
 import { saveAccount, encryptTokens, getAllAccounts } from '../integrations/token-store';
 import { Redis } from '@upstash/redis';
-import { env } from '../env';
+import { env, whitelistedNumbers } from '../env';
+import { pointKey } from '../redis/keys';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ function getRedis(): Redis {
   return _redis;
 }
 
-function stateKey(id: string) { return `secretariat:oauth:state:${id}`; }
+function stateKey(id: string) { return pointKey('oauth-state', id); }
 
 function escapeHtml(str: string): string {
   return str
@@ -105,8 +106,12 @@ router.get('/google/start', requireAuth, async (req: Request, res: Response) => 
     ? (rawType as typeof ALLOWED_TYPES[number])
     : 'calendar';
 
+  // The admin session is a single global operator login until the per-user
+  // panel (v2 Goal 2) exists — every account connected through it belongs to
+  // the one whitelisted owner.
+  const userId = whitelistedNumbers[0];
   const state = uuidv4();
-  await getRedis().set(stateKey(state), { alias, type }, { ex: STATE_TTL_SECONDS });
+  await getRedis().set(stateKey(state), { alias, type, userId }, { ex: STATE_TTL_SECONDS });
 
   res.redirect(getAuthUrl(state));
 });
@@ -126,7 +131,7 @@ router.get('/google/callback', requireAuth, async (req: Request, res: Response) 
     return;
   }
 
-  const pending = await getRedis().get<{ alias: string; type: typeof ALLOWED_TYPES[number] }>(stateKey(state));
+  const pending = await getRedis().get<{ alias: string; type: typeof ALLOWED_TYPES[number]; userId: string }>(stateKey(state));
   if (!pending) {
     res.status(400).send(callbackPage('error', 'Session Expired', 'This OAuth link has expired or already been used. Please start the connection flow again from the admin panel.'));
     return;
@@ -136,12 +141,12 @@ router.get('/google/callback', requireAuth, async (req: Request, res: Response) 
 
   try {
     const tokens = await exchangeCode(code);
-    const existingAccounts = await getAllAccounts();
+    const existingAccounts = await getAllAccounts(pending.userId);
     const existing = existingAccounts.find((a) => a.alias === pending.alias && a.type === pending.type);
     const isFirstOfType = !existingAccounts.some((a) => a.type === pending.type);
     const accountId = existing?.id ?? uuidv4();
 
-    await saveAccount({
+    await saveAccount(pending.userId, {
       id: accountId,
       alias: pending.alias,
       provider: 'google',

@@ -1,14 +1,14 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { scheduleOnce } from '../qstash/client';
-import { getSettings } from '../integrations/token-store';
+import { Ctx } from '../ctx';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { saveReminder } from '../integrations/local/reminders';
 import { sendMessage } from '../kapso/client';
 import { randomUUID } from 'crypto';
 
-export async function reminderHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function reminderHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const { flags, extraArgs } = parsed;
-  const settings = await getSettings();
 
   const title = flags['title'] || extraArgs.join(' ').trim();
   if (!title) {
@@ -21,13 +21,13 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
     return;
   }
 
-  const date = parseDate(flags['for'], settings.timezone);
+  const date = parseDate(flags['for'], ctx.timezone);
   if (!date) {
     await sendMessage(from, `❌ Could not parse date: "${flags['for']}".`);
     return;
   }
 
-  const target = combineDateAndTime(date, flags['at'], settings.timezone);
+  const target = combineDateAndTime(date, flags['at'], ctx.timezone);
   const now = Date.now();
 
   if (target.getTime() <= now) {
@@ -41,21 +41,22 @@ export async function reminderHandler(parsed: ParsedCommand, from: string): Prom
 
   try {
     if (delaySeconds > MAX_QSTASH_DELAY) {
-      await saveReminder({ id, title, phoneNumber: from, fireAt: target.toISOString(), messageId: '', deferred: true });
+      await saveReminder(ctx.userId, { id, title, phoneNumber: from, fireAt: target.toISOString(), messageId: '', deferred: true });
       await sendMessage(
         from,
-        `⏰ *Reminder set (deferred)*\n📌 ${title}\n📅 ${formatDate(target, false, settings.timezone)} at ${formatTime(target, settings.timezone)}\n_Will be promoted to queue within 7 days of fire time._`
+        `⏰ *Reminder set (deferred)*\n📌 ${title}\n📅 ${formatDate(target, false, ctx.timezone)} at ${formatTime(target, ctx.timezone)}\n_Will be promoted to queue within 7 days of fire time._`
       );
     } else {
       const messageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
         reminderId: id,
         title,
         phoneNumber: from,
+        userId: ctx.userId,
       });
-      await saveReminder({ id, title, phoneNumber: from, fireAt: target.toISOString(), messageId });
+      await saveReminder(ctx.userId, { id, title, phoneNumber: from, fireAt: target.toISOString(), messageId });
       await sendMessage(
         from,
-        `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target, false, settings.timezone)} at ${formatTime(target, settings.timezone)}`
+        `⏰ *Reminder set*\n📌 ${title}\n📅 ${formatDate(target, false, ctx.timezone)} at ${formatTime(target, ctx.timezone)}`
       );
     }
   } catch (err) {

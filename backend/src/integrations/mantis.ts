@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../env';
+import { userKey } from '../redis/keys';
 
 // Mantis's POST /api/v1/inbox is idempotent on (source, source_ref), so unlike
 // kapso/client.ts sends, retrying here can never double-save a note — every
@@ -7,8 +8,6 @@ import { env } from '../env';
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [500, 1500];
 const REQUEST_TIMEOUT_MS = 10_000;
-
-const PENDING_KEY = 'secretariat:mantis:pending';
 
 export interface PendingMantisNote {
   text: string;
@@ -22,10 +21,11 @@ function getRedis(): Redis {
   return _redis;
 }
 
-async function savePendingNote(text: string, sourceRef: string): Promise<void> {
-  const list = (await getRedis().get<PendingMantisNote[]>(PENDING_KEY)) ?? [];
-  list.push({ text, sourceRef, savedAt: new Date().toISOString() });
-  await getRedis().set(PENDING_KEY, list);
+// Keyed by sourceRef (the WhatsApp message id, or a synthetic fallback) —
+// already a natural unique key, so no separate id/sequence is needed.
+async function savePendingNote(userId: string, text: string, sourceRef: string): Promise<void> {
+  const note: PendingMantisNote = { text, sourceRef, savedAt: new Date().toISOString() };
+  await getRedis().hset(userKey(userId, 'mantis-pending'), { [sourceRef]: note });
 }
 
 export class MantisUnavailableError extends Error {}
@@ -67,11 +67,11 @@ async function postInbox(params: CaptureNoteParams): Promise<CaptureNoteResult> 
 
 /**
  * Sends a quick-capture note to Mantis's inbox, retrying transient failures.
- * If every attempt fails, the text is parked in Redis under `secretariat:mantis:pending`
- * so it is never lost, and a `MantisUnavailableError` is thrown so the caller can
- * tell the user it was saved locally instead.
+ * If every attempt fails, the text is parked in this user's `mantis-pending`
+ * hash so it is never lost, and a `MantisUnavailableError` is thrown so the
+ * caller can tell the user it was saved locally instead.
  */
-export async function captureNote(params: CaptureNoteParams): Promise<CaptureNoteResult> {
+export async function captureNote(userId: string, params: CaptureNoteParams): Promise<CaptureNoteResult> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -82,7 +82,7 @@ export async function captureNote(params: CaptureNoteParams): Promise<CaptureNot
     }
   }
 
-  await savePendingNote(params.text, params.sourceRef);
+  await savePendingNote(userId, params.text, params.sourceRef);
   const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
   throw new MantisUnavailableError(`Mantis unreachable after ${MAX_ATTEMPTS} attempts: ${msg}`);
 }

@@ -2,20 +2,20 @@ import { ParsedCommand } from '../parser/command.parser';
 import { getAllAccounts } from '../integrations/registry';
 import { getEventsForDate, CalendarEvent } from '../integrations/google/calendar';
 import { CalendarDisconnectedError } from '../integrations/google/oauth';
-import { getSettings } from '../integrations/token-store';
 import { getPlans, findPlanByName, PlanType } from '../integrations/local/plans';
 import { parseDate, formatDate, formatTime, getMondayOfWeek, getWeekDates, combineDateAndTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
+import { Ctx } from '../ctx';
 
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export async function myscheduleHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function myscheduleHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const { flags, extraArgs } = parsed;
-  const settings = await getSettings();
 
   // ── Plan list mode: /myschedule --plan (no value) ─────
   if (flags['plan'] === '') {
-    const plans = await getPlans();
+    const plans = await getPlans(ctx.userId);
     if (plans.length === 0) {
       await sendMessage(from, '❌ No plans configured. Visit the admin panel to create one.');
       return;
@@ -32,7 +32,7 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     return;
   }
 
-  const calendarAccounts = (await getAllAccounts()).filter((a) => a.type === 'calendar');
+  const calendarAccounts = (await getAllAccounts(ctx.userId)).filter((a) => a.type === 'calendar');
 
   if (calendarAccounts.length === 0) {
     await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
@@ -41,12 +41,12 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
 
   // ── Week view mode: /myschedule week ──────────────
   if (extraArgs[0]?.toLowerCase() === 'week') {
-    await showWeekSchedule(from, new Date(), calendarAccounts, settings.timezone);
+    await showWeekSchedule(ctx, new Date(), calendarAccounts);
     return;
   }
 
   const dateInput = flags['for'] || extraArgs.join(' ').trim();
-  const targetDate = dateInput ? parseDate(dateInput, settings.timezone) : new Date();
+  const targetDate = dateInput ? parseDate(dateInput, ctx.timezone) : new Date();
 
   if (!targetDate) {
     await sendMessage(from, `❌ Could not parse date: "${dateInput}". Try "tomorrow", "next monday", or DD-MM-YYYY.`);
@@ -55,7 +55,7 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
 
   // ── Availability mode ──────────────────────────────
   if (flags['plan'] !== undefined) {
-    const plans = await getPlans();
+    const plans = await getPlans(ctx.userId);
     const plan = findPlanByName(flags['plan'], plans);
 
     if (!plan) {
@@ -65,17 +65,17 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
     }
 
     if (flags['for']) {
-      await checkDayAvailability(from, plan, targetDate, calendarAccounts, settings.timezone);
+      await checkDayAvailability(ctx, plan, targetDate, calendarAccounts);
     } else {
-      await checkWeekAvailability(from, plan, targetDate, calendarAccounts, settings.timezone);
+      await checkWeekAvailability(ctx, plan, targetDate, calendarAccounts);
     }
     return;
   }
 
   // ── Regular mode ───────────────────────────────────
   try {
-    const tz = settings.timezone;
-    const { events: allEvents, disconnected } = await fetchEventsForDate(calendarAccounts, targetDate, tz);
+    const tz = ctx.timezone;
+    const { events: allEvents, disconnected } = await fetchEventsForDate(ctx, calendarAccounts, targetDate);
     if (disconnected.length > 0) {
       await sendMessage(from, disconnected.map((a) => `⚠️ Calendar *${a}* is disconnected. Reconnect via admin panel.`).join('\n'));
     }
@@ -105,15 +105,15 @@ export async function myscheduleHandler(parsed: ParsedCommand, from: string): Pr
 }
 
 async function fetchEventsForDate(
+  ctx: Ctx,
   accounts: Awaited<ReturnType<typeof getAllAccounts>>,
   date: Date,
-  tz: string,
 ): Promise<{ events: CalendarEvent[]; disconnected: string[] }> {
   const disconnected: string[] = [];
   const results = await Promise.all(
     accounts.map(async (acc) => {
       try {
-        return await getEventsForDate(acc, date, tz);
+        return await getEventsForDate(ctx.userId, acc, date, ctx.timezone);
       } catch (err) {
         if (err instanceof CalendarDisconnectedError) {
           disconnected.push(acc.alias);
@@ -127,12 +127,13 @@ async function fetchEventsForDate(
 }
 
 async function showWeekSchedule(
-  from: string,
+  ctx: Ctx,
   referenceDate: Date,
   calendarAccounts: Awaited<ReturnType<typeof getAllAccounts>>,
-  tz: string,
 ): Promise<void> {
-  const monday = getMondayOfWeek(referenceDate);
+  const from = ctx.userId;
+  const tz = ctx.timezone;
+  const monday = getMondayOfWeek(referenceDate, tz);
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
@@ -141,7 +142,7 @@ async function showWeekSchedule(
 
   const eventsByDay = await Promise.all(
     weekDays.map(async (day) => {
-      const { events } = await fetchEventsForDate(calendarAccounts, day, tz);
+      const { events } = await fetchEventsForDate(ctx, calendarAccounts, day);
       events.sort((a, b) => a.start.getTime() - b.start.getTime());
       return { day, events };
     })
@@ -170,13 +171,14 @@ async function showWeekSchedule(
 }
 
 async function checkDayAvailability(
-  from: string,
+  ctx: Ctx,
   plan: PlanType,
   date: Date,
   calendarAccounts: Awaited<ReturnType<typeof getAllAccounts>>,
-  tz: string,
 ): Promise<void> {
-  const { events } = await fetchEventsForDate(calendarAccounts, date, tz);
+  const from = ctx.userId;
+  const tz = ctx.timezone;
+  const { events } = await fetchEventsForDate(ctx, calendarAccounts, date);
 
   const dayLabel = `${DAYS_SHORT[date.getDay()]} ${formatDate(date, false, tz)}`;
   const freeSlots: string[] = [];
@@ -196,18 +198,19 @@ async function checkDayAvailability(
 }
 
 async function checkWeekAvailability(
-  from: string,
+  ctx: Ctx,
   plan: PlanType,
   referenceDate: Date,
   calendarAccounts: Awaited<ReturnType<typeof getAllAccounts>>,
-  tz: string,
 ): Promise<void> {
-  const monday = getMondayOfWeek(referenceDate);
+  const from = ctx.userId;
+  const tz = ctx.timezone;
+  const monday = getMondayOfWeek(referenceDate, tz);
   const days = getWeekDates(monday, plan.days);
 
   const eventsByDay = await Promise.all(
     days.map(async (day) => {
-      const { events } = await fetchEventsForDate(calendarAccounts, day, tz);
+      const { events } = await fetchEventsForDate(ctx, calendarAccounts, day);
       return { day, events };
     })
   );

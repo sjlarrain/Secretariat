@@ -1,8 +1,10 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
+import { Ctx } from '../ctx';
 import { captureNote, MantisUnavailableError } from '../integrations/mantis';
 
-export async function mantisHandler(parsed: ParsedCommand, from: string, messageId: string | null): Promise<void> {
+export async function mantisHandler(parsed: ParsedCommand, ctx: Ctx, messageId: string | null): Promise<void> {
+  const from = ctx.userId;
   const text = parsed.extraArgs.join(' ').trim();
 
   if (!text) {
@@ -15,7 +17,7 @@ export async function mantisHandler(parsed: ParsedCommand, from: string, message
   const sourceRef = messageId ?? `no-id:${Date.now()}`;
 
   try {
-    const { id, deduped } = await captureNote({ text, sourceRef });
+    const { id, deduped } = await captureNote(ctx.userId, { text, sourceRef });
     const shortId = id.slice(0, 8);
     await sendMessage(
       from,

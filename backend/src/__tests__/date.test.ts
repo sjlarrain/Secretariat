@@ -181,40 +181,57 @@ describe('formatTime', () => {
 
 // ─── getMondayOfWeek ─────────────────────────────────────────────────────────
 
+// getMondayOfWeek returns an instant (midnight in `timezone`), which must be
+// read back *in that same timezone* — the machine running the test can be in
+// any timezone, and reading it with local .getDay()/.getDate() would just
+// reintroduce the server-local-time bug this function exists to avoid.
+function dateFieldsInZone(date: Date, timezone: string): { weekday: number; day: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, weekday: 'short', day: 'numeric',
+  }).formatToParts(date);
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekdayStr = parts.find((p) => p.type === 'weekday')!.value;
+  return { weekday: weekdays.indexOf(weekdayStr), day: Number(parts.find((p) => p.type === 'day')!.value) };
+}
+
 describe('getMondayOfWeek', () => {
   it('returns a Monday when given a Wednesday', () => {
     const wed = new Date('2026-05-13T12:00:00Z'); // 2026-05-13 is a Wednesday
-    const mon = getMondayOfWeek(wed);
-    expect(mon.getDay()).toBe(1);
+    const mon = getMondayOfWeek(wed, TZ);
+    expect(dateFieldsInZone(mon, TZ).weekday).toBe(1);
   });
 
   it('returns the same Monday when given a Monday', () => {
     const monday = new Date('2026-05-11T12:00:00Z'); // known Monday
-    const result = getMondayOfWeek(monday);
-    expect(result.getDay()).toBe(1);
-    expect(result.getDate()).toBe(monday.getDate());
+    const result = getMondayOfWeek(monday, TZ);
+    expect(dateFieldsInZone(result, TZ).weekday).toBe(1);
+    expect(dateFieldsInZone(result, TZ).day).toBe(dateFieldsInZone(monday, TZ).day);
   });
 
   it('returns the previous Monday when given a Sunday', () => {
     const sunday = new Date('2026-05-10T12:00:00Z'); // 2026-05-10 is a Sunday
-    const mon = getMondayOfWeek(sunday);
-    expect(mon.getDay()).toBe(1);
+    const mon = getMondayOfWeek(sunday, TZ);
+    expect(dateFieldsInZone(mon, TZ).weekday).toBe(1);
     // Monday is 6 days before this Sunday
-    expect(mon.getDate()).toBe(4);
+    expect(dateFieldsInZone(mon, TZ).day).toBe(4);
   });
 
   it('returns a Monday when given a Saturday', () => {
     const saturday = new Date('2026-05-09T12:00:00Z'); // 2026-05-09 is a Saturday
-    const mon = getMondayOfWeek(saturday);
-    expect(mon.getDay()).toBe(1);
+    const mon = getMondayOfWeek(saturday, TZ);
+    expect(dateFieldsInZone(mon, TZ).weekday).toBe(1);
   });
 
-  it('sets time to midnight', () => {
-    const wed = new Date('2026-05-13T15:30:00');
-    const mon = getMondayOfWeek(wed);
-    expect(mon.getHours()).toBe(0);
-    expect(mon.getMinutes()).toBe(0);
-    expect(mon.getSeconds()).toBe(0);
+  it('sets time to midnight in the given timezone', () => {
+    const wed = new Date('2026-05-13T15:30:00Z');
+    const mon = getMondayOfWeek(wed, TZ);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(mon);
+    const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+    expect(get('hour') % 24).toBe(0); // ICU renders midnight as "00" or "24" depending on version
+    expect(get('minute')).toBe(0);
+    expect(get('second')).toBe(0);
   });
 });
 

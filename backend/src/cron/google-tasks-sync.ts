@@ -3,17 +3,17 @@ import { getSettings, saveSettings } from '../integrations/token-store';
 import { getAllTasks, addTask, applyGoogleUpdate, LocalTask } from '../integrations/local/tasks';
 import { completeTask, getTasksUpdatedSince } from '../integrations/google/tasks';
 
-export async function syncGoogleTasks(): Promise<{ pulled: number; pushed: number; skipped: boolean }> {
-  const account = await resolveAccount('tasks');
+export async function syncGoogleTasks(userId: string): Promise<{ pulled: number; pushed: number; skipped: boolean }> {
+  const account = await resolveAccount(userId, 'tasks');
   if (!account || account.isDisconnected) {
     return { pulled: 0, pushed: 0, skipped: true };
   }
 
-  const settings = await getSettings();
+  const settings = await getSettings(userId);
   const lastSyncAt = settings.googleTasksSync.lastSyncAt ?? new Date(0).toISOString();
 
-  const remoteTasks = await getTasksUpdatedSince(account, lastSyncAt);
-  const localTasks = await getAllTasks();
+  const remoteTasks = await getTasksUpdatedSince(userId, account, lastSyncAt);
+  const localTasks = await getAllTasks(userId);
   const localByGoogleId = new Map<string, LocalTask>(
     localTasks.filter((t) => t.googleTaskId).map((t) => [t.googleTaskId as string, t])
   );
@@ -29,7 +29,7 @@ export async function syncGoogleTasks(): Promise<{ pulled: number; pushed: numbe
 
     if (!local) {
       // Created directly in Google — mirror into local store.
-      await addTask({
+      await addTask(userId, {
         title: gtask.title,
         project: undefined,
         dueDate: gtask.dueDate?.toISOString(),
@@ -47,7 +47,7 @@ export async function syncGoogleTasks(): Promise<{ pulled: number; pushed: numbe
     if (localChangedSinceSync) {
       // Local wins: re-push local state to Google if it diverges.
       if (local.status === 'done' && gtask.status !== 'completed') {
-        await pushGoogleComplete(account, local);
+        await pushGoogleComplete(userId, account, local);
         pushed++;
       }
       continue;
@@ -56,21 +56,21 @@ export async function syncGoogleTasks(): Promise<{ pulled: number; pushed: numbe
     // Local untouched since last sync — accept Google's state.
     const localStatus: LocalTask['status'] = gtask.status === 'completed' ? 'done' : 'open';
     if (localStatus !== local.status || gtask.title !== local.title) {
-      await applyGoogleUpdate(local.id, { status: localStatus, title: gtask.title });
+      await applyGoogleUpdate(userId, local.id, { status: localStatus, title: gtask.title });
       pulled++;
     }
   }
 
   settings.googleTasksSync.lastSyncAt = maxUpdated > lastSyncAt ? maxUpdated : new Date().toISOString();
-  await saveSettings(settings);
+  await saveSettings(userId, settings);
 
   return { pulled, pushed, skipped: false };
 }
 
-async function pushGoogleComplete(account: NonNullable<Awaited<ReturnType<typeof resolveAccount>>>, task: LocalTask): Promise<void> {
+async function pushGoogleComplete(userId: string, account: NonNullable<Awaited<ReturnType<typeof resolveAccount>>>, task: LocalTask): Promise<void> {
   try {
     if (task.googleTaskId) {
-      await completeTask(account, task.googleTaskId);
+      await completeTask(userId, account, task.googleTaskId);
     }
   } catch (err) {
     console.error('Google Tasks sync: failed to push local completion:', err);

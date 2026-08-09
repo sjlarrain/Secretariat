@@ -1,5 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
+import { userKey } from '../../redis/keys';
+import { HashCollection, byId } from '../../redis/hash-collection';
 
 export interface PlanType {
   id: number;
@@ -10,13 +12,11 @@ export interface PlanType {
   bufferMinutes: number;   // travel buffer applied before and after the slot
 }
 
-const PLANS_KEY = 'secretariat:plans';
-
-const DEFAULT_PLANS: PlanType[] = [
-  { id: 1, name: 'Lunch',       days: [1,2,3,4],     slots: ['13:00','13:30','14:00'],          durationMinutes: 60, bufferMinutes: 30 },
-  { id: 2, name: 'Coffee',      days: [1,2,3,4,5],   slots: ['10:00','16:00','17:00'],          durationMinutes: 30, bufferMinutes: 15 },
-  { id: 3, name: 'After-office',days: [1,2,3,4],     slots: ['18:30','19:00','20:00'],          durationMinutes: 90, bufferMinutes: 30 },
-  { id: 4, name: 'Sports',      days: [1,2,3,4,5,6], slots: ['07:00','08:00','19:00','20:00'],  durationMinutes: 60, bufferMinutes: 0  },
+const DEFAULT_PLANS: Omit<PlanType, 'id'>[] = [
+  { name: 'Lunch',       days: [1,2,3,4],     slots: ['13:00','13:30','14:00'],          durationMinutes: 60, bufferMinutes: 30 },
+  { name: 'Coffee',      days: [1,2,3,4,5],   slots: ['10:00','16:00','17:00'],          durationMinutes: 30, bufferMinutes: 15 },
+  { name: 'After-office',days: [1,2,3,4],     slots: ['18:30','19:00','20:00'],          durationMinutes: 90, bufferMinutes: 30 },
+  { name: 'Sports',      days: [1,2,3,4,5,6], slots: ['07:00','08:00','19:00','20:00'],  durationMinutes: 60, bufferMinutes: 0  },
 ];
 
 let _redis: Redis | null = null;
@@ -25,46 +25,48 @@ function getRedis(): Redis {
   return _redis;
 }
 
-export async function getPlans(): Promise<PlanType[]> {
-  const data = await getRedis().get<PlanType[]>(PLANS_KEY);
-  if (!data) {
-    await getRedis().set(PLANS_KEY, DEFAULT_PLANS);
-    return DEFAULT_PLANS;
+function plans(userId: string): HashCollection<PlanType> {
+  return new HashCollection<PlanType>(getRedis(), userKey(userId, 'plans'), userKey(userId, 'plans') + ':seq');
+}
+
+export async function getPlans(userId: string): Promise<PlanType[]> {
+  const existing = await plans(userId).getAll(byId);
+  if (existing.length > 0) return existing;
+
+  // Seed this user's default plans on first read.
+  const seeded: PlanType[] = [];
+  for (const p of DEFAULT_PLANS) {
+    const id = await plans(userId).nextId();
+    const plan: PlanType = { id, ...p };
+    seeded.push(plan);
+    await plans(userId).set(plan);
   }
-  return data;
+  return seeded;
 }
 
-export async function getPlan(id: number): Promise<PlanType | null> {
-  const plans = await getPlans();
-  return plans.find((p) => p.id === id) ?? null;
+export async function getPlan(userId: string, id: number): Promise<PlanType | null> {
+  return plans(userId).get(id);
 }
 
-export async function createPlan(data: Omit<PlanType, 'id'>): Promise<PlanType> {
-  const plans = await getPlans();
-  const id = plans.length > 0 ? Math.max(...plans.map((p) => p.id)) + 1 : 1;
+export async function createPlan(userId: string, data: Omit<PlanType, 'id'>): Promise<PlanType> {
+  const id = await plans(userId).nextId();
   const plan: PlanType = { id, ...data };
-  await getRedis().set(PLANS_KEY, [...plans, plan]);
+  await plans(userId).set(plan);
   return plan;
 }
 
-export async function updatePlan(id: number, data: Partial<Omit<PlanType, 'id'>>): Promise<boolean> {
-  const plans = await getPlans();
-  const idx = plans.findIndex((p) => p.id === id);
-  if (idx < 0) return false;
-  plans[idx] = { ...plans[idx], ...data };
-  await getRedis().set(PLANS_KEY, plans);
+export async function updatePlan(userId: string, id: number, data: Partial<Omit<PlanType, 'id'>>): Promise<boolean> {
+  const plan = await plans(userId).get(id);
+  if (!plan) return false;
+  await plans(userId).set({ ...plan, ...data });
   return true;
 }
 
-export async function deletePlan(id: number): Promise<boolean> {
-  const plans = await getPlans();
-  const filtered = plans.filter((p) => p.id !== id);
-  if (filtered.length === plans.length) return false;
-  await getRedis().set(PLANS_KEY, filtered);
-  return true;
+export async function deletePlan(userId: string, id: number): Promise<boolean> {
+  return plans(userId).remove(id);
 }
 
-export function findPlanByName(name: string, plans: PlanType[]): PlanType | null {
+export function findPlanByName(name: string, planList: PlanType[]): PlanType | null {
   const normalized = name.toLowerCase().replace(/[\s-]/g, '');
-  return plans.find((p) => p.name.toLowerCase().replace(/[\s-]/g, '') === normalized) ?? null;
+  return planList.find((p) => p.name.toLowerCase().replace(/[\s-]/g, '') === normalized) ?? null;
 }

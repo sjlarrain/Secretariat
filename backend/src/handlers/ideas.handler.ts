@@ -1,5 +1,6 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
+import { Ctx } from '../ctx';
 import {
   getIdeas,
   addIdea,
@@ -8,7 +9,8 @@ import {
   findOrCreateProject,
 } from '../integrations/local/ideas';
 
-export async function ideasHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function ideasHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const text = parsed.extraArgs.join(' ').trim();
   // undefined = --project not used; '' = --project with no value; 'X' = --project X
   const projectFlag = parsed.flags['project'] as string | undefined;
@@ -16,8 +18,8 @@ export async function ideasHandler(parsed: ParsedCommand, from: string): Promise
   try {
     // /ideas --project  →  list all projects
     if (projectFlag === '') {
-      const projects = await getProjects();
-      const ideas = await getIdeas();
+      const projects = await getProjects(ctx.userId);
+      const ideas = await getIdeas(ctx.userId);
       const lines = projects.map((p) => {
         const count = ideas.filter((i) => i.projectId === p.id).length;
         const tag = p.isDefault ? ' _(default)_' : '';
@@ -29,13 +31,13 @@ export async function ideasHandler(parsed: ParsedCommand, from: string): Promise
 
     // /ideas --project Work  →  list ideas in that project
     if (projectFlag !== undefined && text === '') {
-      const projects = await getProjects();
+      const projects = await getProjects(ctx.userId);
       const project = projects.find((p) => p.name.toLowerCase() === projectFlag.toLowerCase());
       if (!project) {
         await sendMessage(from, `❌ Project "${projectFlag}" not found. Send \`/ideas --project\` to see your projects.`);
         return;
       }
-      const ideas = (await getIdeas()).filter((i) => i.projectId === project.id);
+      const ideas = (await getIdeas(ctx.userId)).filter((i) => i.projectId === project.id);
       if (ideas.length === 0) {
         await sendMessage(from, `💡 No ideas in *${project.name}* yet.`);
         return;
@@ -48,21 +50,21 @@ export async function ideasHandler(parsed: ParsedCommand, from: string): Promise
     // /ideas <text> [--project Name]  →  save idea
     if (text) {
       const project = projectFlag
-        ? await findOrCreateProject(projectFlag)
-        : await getDefaultProject();
-      const idea = await addIdea(text, project.id);
+        ? await findOrCreateProject(ctx.userId, projectFlag)
+        : await getDefaultProject(ctx.userId);
+      const idea = await addIdea(ctx.userId, text, project.id);
       const projectLabel = project.isDefault ? '' : ` in *${project.name}*`;
       await sendMessage(from, `✅ Idea saved! (#${idea.id})${projectLabel}`);
       return;
     }
 
     // /ideas  →  list all ideas across all projects
-    const ideas = await getIdeas();
+    const ideas = await getIdeas(ctx.userId);
     if (ideas.length === 0) {
       await sendMessage(from, '💡 No ideas saved yet. Send `/ideas your idea` to add one.');
       return;
     }
-    const projects = await getProjects();
+    const projects = await getProjects(ctx.userId);
     const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
     const lines = ideas
       .map((i) => `${i.id}. ${i.text} _(${projectMap[i.projectId] ?? 'Ideas'})_`)

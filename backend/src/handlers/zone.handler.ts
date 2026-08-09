@@ -4,12 +4,14 @@ import { getSettings, saveSettings } from '../integrations/token-store';
 import { parseZoneInput, describeZone } from '../utils/timezone';
 import { reconcileSchedules } from '../qstash/schedules';
 import { formatTime } from '../utils/date';
+import { Ctx } from '../ctx';
 
-export async function zoneHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function zoneHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const input = parsed.extraArgs.join(' ').trim();
 
   try {
-    const current = await getSettings();
+    const current = await getSettings(ctx.userId);
 
     // /zone  →  show the current zone
     if (!input) {
@@ -40,8 +42,8 @@ export async function zoneHandler(parsed: ParsedCommand, from: string): Promise<
       return;
     }
 
-    const next = await reconcileSchedules(current, { ...current, timezone: zone });
-    await saveSettings(next);
+    const next = await reconcileSchedules(ctx.userId, current, { ...current, timezone: zone });
+    await saveSettings(ctx.userId, next);
 
     const now = new Date();
     const lines = [

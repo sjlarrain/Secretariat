@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { google } from 'googleapis';
 import { ConnectedAccount, saveAccount, encryptTokens, decryptTokens } from '../token-store';
 import { GoogleTokens, getAuthenticatedClient, CalendarDisconnectedError } from './oauth';
+import { startOfDayInZone, endOfDayInZone } from '../../utils/date';
 
 export interface CalendarEvent {
   id: string;
@@ -19,12 +20,12 @@ export interface GoogleCalendar {
   backgroundColor?: string;
 }
 
-async function getCalendarClient(account: ConnectedAccount) {
+async function getCalendarClient(userId: string, account: ConnectedAccount) {
   let tokens: GoogleTokens;
   try {
     tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
   } catch {
-    await saveAccount({ ...account, isDisconnected: true });
+    await saveAccount(userId, { ...account, isDisconnected: true });
     throw new CalendarDisconnectedError(account.alias);
   }
 
@@ -37,20 +38,20 @@ async function getCalendarClient(account: ConnectedAccount) {
         refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
         expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
       }, account.id);
-      await saveAccount(account);
+      await saveAccount(userId, account);
     }
 
     return google.calendar({ version: 'v3', auth: client });
   } catch (err) {
     if (err instanceof CalendarDisconnectedError) {
-      await saveAccount({ ...account, isDisconnected: true });
+      await saveAccount(userId, { ...account, isDisconnected: true });
     }
     throw err;
   }
 }
 
-export async function listCalendars(account: ConnectedAccount): Promise<GoogleCalendar[]> {
-  const cal = await getCalendarClient(account);
+export async function listCalendars(userId: string, account: ConnectedAccount): Promise<GoogleCalendar[]> {
+  const cal = await getCalendarClient(userId, account);
   const res = await cal.calendarList.list();
   return (res.data.items ?? []).map((item) => ({
     id: item.id ?? '',
@@ -61,6 +62,7 @@ export async function listCalendars(account: ConnectedAccount): Promise<GoogleCa
 }
 
 export async function createEvent(
+  userId: string,
   account: ConnectedAccount,
   params: {
     title: string;
@@ -73,7 +75,7 @@ export async function createEvent(
     | { allDay?: false; startDatetime: Date; endDatetime: Date }
   )
 ): Promise<{ eventId: string; htmlLink: string; meetLink?: string }> {
-  const cal = await getCalendarClient(account);
+  const cal = await getCalendarClient(userId, account);
 
   const event = await cal.events.insert({
     calendarId: 'primary',
@@ -116,13 +118,11 @@ export async function createEvent(
   };
 }
 
-export async function getEventsForDate(account: ConnectedAccount, date: Date, timezone: string): Promise<CalendarEvent[]> {
-  const cal = await getCalendarClient(account);
+export async function getEventsForDate(userId: string, account: ConnectedAccount, date: Date, timezone: string): Promise<CalendarEvent[]> {
+  const cal = await getCalendarClient(userId, account);
 
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const startOfDay = startOfDayInZone(date, timezone);
+  const endOfDay = endOfDayInZone(date, timezone);
 
   const calendarIds = account.enabledCalendarIds ?? ['primary'];
   const results = await Promise.all(
@@ -161,12 +161,12 @@ export async function getEventsForDate(account: ConnectedAccount, date: Date, ti
   );
 }
 
-export async function getTodayEvents(account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
-  return getEventsForDate(account, new Date(), timezone);
+export async function getTodayEvents(userId: string, account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
+  return getEventsForDate(userId, account, new Date(), timezone);
 }
 
-export async function getWeekEvents(account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
-  const cal = await getCalendarClient(account);
+export async function getWeekEvents(userId: string, account: ConnectedAccount, timezone: string): Promise<CalendarEvent[]> {
+  const cal = await getCalendarClient(userId, account);
 
   const now = new Date();
   const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);

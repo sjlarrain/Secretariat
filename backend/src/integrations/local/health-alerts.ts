@@ -1,8 +1,9 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
+import { systemKey } from '../../redis/keys';
+import { HashCollection } from '../../redis/hash-collection';
 
 const redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
-const ALERTS_KEY = 'secretariat:health-alerts';
 
 export type AlertKind = 'kapso' | 'google' | 'qstash' | 'redis';
 
@@ -18,8 +19,13 @@ export interface HealthAlert {
   lastSeenAt: string;
 }
 
+// System-wide, not per-user: this tracks the health of the shared Kapso
+// number, Google/QStash/Redis connectivity — infrastructure the ops console
+// monitors, not any one user's data.
+const alerts = new HashCollection<HealthAlert>(redis, systemKey('health-alerts'));
+
 export async function getHealthAlerts(): Promise<HealthAlert[]> {
-  return (await redis.get<HealthAlert[]>(ALERTS_KEY)) ?? [];
+  return alerts.getAll();
 }
 
 /**
@@ -37,19 +43,26 @@ export async function reconcileHealthAlerts(
   const previousById = new Map(previous.map((a) => [a.id, a]));
   const now = new Date().toISOString();
 
-  const alerts: HealthAlert[] = found.map((f) => {
+  const next: HealthAlert[] = found.map((f) => {
     const existing = previousById.get(f.id);
     return { ...f, firstSeenAt: existing?.firstSeenAt ?? now, lastSeenAt: now };
   });
 
-  const newAlerts = alerts.filter((a) => !previousById.has(a.id));
+  const newAlerts = next.filter((a) => !previousById.has(a.id));
+  const nextIds = new Set(next.map((a) => a.id));
+  const resolved = previous.filter((a) => !nextIds.has(a.id));
 
-  await redis.set(ALERTS_KEY, alerts);
-  return { alerts, newAlerts };
+  await Promise.all([
+    ...next.map((a) => alerts.set(a)),
+    ...resolved.map((a) => alerts.remove(a.id)),
+  ]);
+
+  return { alerts: next, newAlerts };
 }
 
 export async function clearHealthAlerts(): Promise<void> {
-  await redis.set(ALERTS_KEY, []);
+  const all = await getHealthAlerts();
+  await Promise.all(all.map((a) => alerts.remove(a.id)));
 }
 
 /** Lightweight reachability probe used by the health check itself. */

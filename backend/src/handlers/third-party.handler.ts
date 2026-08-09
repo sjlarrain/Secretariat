@@ -93,9 +93,24 @@ function isFlag(token: string): boolean {
   return token.startsWith('-') || token.startsWith('@');
 }
 
+// Third parties aren't registered users — everything they propose belongs to
+// the owner they're messaging. Until the user registry (v2 Goal 2) exists,
+// that's the single whitelisted owner; this is the same "the owner" fallback
+// already used elsewhere (digests, health-check notifications).
+function ownerId(): string | undefined {
+  return whitelistedNumbers[0];
+}
+
 export async function thirdPartyHandler(text: string | null, from: string, alias: string): Promise<void> {
   if (!text?.trim()) return;
-  await updateThirdPartyLastMessage(from).catch(() => null);
+
+  const owner = ownerId();
+  if (!owner) {
+    await sendMessage(from, '❌ Bot is misconfigured — no owner phone set.');
+    return;
+  }
+
+  await updateThirdPartyLastMessage(owner, from).catch(() => null);
 
   const normalized = text.replace(/[—–]/g, '--').trim();
   const tokens = tokenize(normalized);
@@ -126,7 +141,7 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
       return;
     }
 
-    const settings = await getSettings();
+    const settings = await getSettings(owner);
     const timezone = settings.timezone;
 
     const date = parseDate(parsed.forValue!, timezone);
@@ -141,12 +156,6 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
       return;
     }
 
-    const ownerPhone = whitelistedNumbers[0];
-    if (!ownerPhone) {
-      await sendMessage(from, '❌ Bot is misconfigured — no owner phone set.');
-      return;
-    }
-
     const reminderId = randomUUID();
     const pendingId = randomUUID();
     const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
@@ -158,20 +167,21 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
       reminderMessageId = await scheduleOnce('/internal/reminder/fire', delaySeconds, {
         reminderId,
         title: reminderTitle,
-        phoneNumber: ownerPhone,
+        phoneNumber: owner,
+        userId: owner,
       });
     }
 
-    await saveReminder({
+    await saveReminder(owner, {
       id: reminderId,
       title: reminderTitle,
-      phoneNumber: ownerPhone,
+      phoneNumber: owner,
       fireAt: target.toISOString(),
       messageId: reminderMessageId,
       deferred: delaySeconds > MAX_QSTASH_DELAY,
     });
 
-    await savePendingEvent({
+    await savePendingEvent(owner, {
       id: pendingId,
       title: parsed.title,
       forValue: parsed.forValue!,
@@ -188,7 +198,7 @@ export async function thirdPartyHandler(text: string | null, from: string, alias
     const titleLine = parsed.title ? `\n📌 *${parsed.title}*` : '';
 
     await sendInteractiveButtons(
-      ownerPhone,
+      owner,
       `📩 *${alias}* wants to set an event:${titleLine}\n📅 ${dateLabel}\n\nSaved as reminder. Move to:`,
       [
         { id: `tp_rem_${pendingId}`, title: 'Reminder' },

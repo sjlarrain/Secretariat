@@ -1,8 +1,9 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
+import { userKey } from '../../redis/keys';
+import { HashCollection, byId } from '../../redis/hash-collection';
 
 const redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
-const TASKS_KEY = 'secretariat:tasks';
 
 export interface LocalTask {
   id: number;
@@ -20,28 +21,32 @@ export interface LocalTask {
   updatedAt: string;        // ISO; bumped on create, markTaskDone, and sync-driven updates
 }
 
-async function getAllTasksRaw(): Promise<LocalTask[]> {
-  return (await redis.get<LocalTask[]>(TASKS_KEY)) ?? [];
+function tasks(userId: string): HashCollection<LocalTask> {
+  return new HashCollection<LocalTask>(redis, userKey(userId, 'tasks'), userKey(userId, 'tasks') + ':seq');
 }
 
-export async function getTasks(): Promise<LocalTask[]> {
-  return (await getAllTasksRaw()).filter((t) => t.status === 'open');
+async function getAllTasksRaw(userId: string): Promise<LocalTask[]> {
+  return tasks(userId).getAll(byId);
 }
 
-export async function getDoneTasks(): Promise<LocalTask[]> {
-  return (await getAllTasksRaw()).filter((t) => t.status === 'done');
+export async function getTasks(userId: string): Promise<LocalTask[]> {
+  return (await getAllTasksRaw(userId)).filter((t) => t.status === 'open');
 }
 
-export async function getAllTasks(): Promise<LocalTask[]> {
-  return getAllTasksRaw();
+export async function getDoneTasks(userId: string): Promise<LocalTask[]> {
+  return (await getAllTasksRaw(userId)).filter((t) => t.status === 'done');
+}
+
+export async function getAllTasks(userId: string): Promise<LocalTask[]> {
+  return getAllTasksRaw(userId);
 }
 
 export async function addTask(
+  userId: string,
   data: Pick<LocalTask, 'title' | 'project' | 'notes' | 'dueDate' | 'dueTime' | 'thirdPartyPhone'> &
     Partial<Pick<LocalTask, 'googleTaskId'>> & { status?: LocalTask['status'] }
 ): Promise<LocalTask> {
-  const all = await getAllTasksRaw();
-  const id = all.length ? Math.max(...all.map((t) => t.id)) + 1 : 1;
+  const id = await tasks(userId).nextId();
   const now = new Date().toISOString();
   const status = data.status ?? 'open';
   const task: LocalTask = {
@@ -57,62 +62,53 @@ export async function addTask(
     ...(data.thirdPartyPhone ? { thirdPartyPhone: data.thirdPartyPhone } : {}),
     ...(data.googleTaskId ? { googleTaskId: data.googleTaskId } : {}),
   };
-  await redis.set(TASKS_KEY, [...all, task]);
+  await tasks(userId).set(task);
   return task;
 }
 
-export async function markTaskDone(id: number): Promise<LocalTask | null> {
-  const all = await getAllTasksRaw();
-  const idx = all.findIndex((t) => t.id === id && t.status === 'open');
-  if (idx === -1) return null;
+export async function markTaskDone(userId: string, id: number): Promise<LocalTask | null> {
+  const task = await tasks(userId).get(id);
+  if (!task || task.status !== 'open') return null;
   const now = new Date().toISOString();
-  all[idx].status = 'done';
-  all[idx].doneAt = now;
-  all[idx].updatedAt = now;
-  await redis.set(TASKS_KEY, all);
-  return all[idx];
+  task.status = 'done';
+  task.doneAt = now;
+  task.updatedAt = now;
+  await tasks(userId).set(task);
+  return task;
 }
 
-export async function updateTaskQStashId(id: number, qstashMessageId: string): Promise<void> {
-  const all = await getAllTasksRaw();
-  const idx = all.findIndex((t) => t.id === id);
-  if (idx !== -1) {
-    all[idx].qstashMessageId = qstashMessageId;
-    await redis.set(TASKS_KEY, all);
-  }
+export async function updateTaskQStashId(userId: string, id: number, qstashMessageId: string): Promise<void> {
+  const task = await tasks(userId).get(id);
+  if (!task) return;
+  task.qstashMessageId = qstashMessageId;
+  await tasks(userId).set(task);
 }
 
-export async function setTaskGoogleId(id: number, googleTaskId: string): Promise<void> {
-  const all = await getAllTasksRaw();
-  const idx = all.findIndex((t) => t.id === id);
-  if (idx !== -1) {
-    all[idx].googleTaskId = googleTaskId;
-    await redis.set(TASKS_KEY, all);
-  }
+export async function setTaskGoogleId(userId: string, id: number, googleTaskId: string): Promise<void> {
+  const task = await tasks(userId).get(id);
+  if (!task) return;
+  task.googleTaskId = googleTaskId;
+  await tasks(userId).set(task);
 }
 
 export async function applyGoogleUpdate(
+  userId: string,
   id: number,
   fields: { status?: LocalTask['status']; title?: string; dueDate?: string }
 ): Promise<void> {
-  const all = await getAllTasksRaw();
-  const idx = all.findIndex((t) => t.id === id);
-  if (idx === -1) return;
+  const task = await tasks(userId).get(id);
+  if (!task) return;
   const now = new Date().toISOString();
-  if (fields.title !== undefined) all[idx].title = fields.title;
-  if (fields.dueDate !== undefined) all[idx].dueDate = fields.dueDate;
-  if (fields.status !== undefined && fields.status !== all[idx].status) {
-    all[idx].status = fields.status;
-    if (fields.status === 'done') all[idx].doneAt = now;
+  if (fields.title !== undefined) task.title = fields.title;
+  if (fields.dueDate !== undefined) task.dueDate = fields.dueDate;
+  if (fields.status !== undefined && fields.status !== task.status) {
+    task.status = fields.status;
+    if (fields.status === 'done') task.doneAt = now;
   }
-  all[idx].updatedAt = now;
-  await redis.set(TASKS_KEY, all);
+  task.updatedAt = now;
+  await tasks(userId).set(task);
 }
 
-export async function deleteTask(id: number): Promise<boolean> {
-  const all = await getAllTasksRaw();
-  const filtered = all.filter((t) => t.id !== id);
-  if (filtered.length === all.length) return false;
-  await redis.set(TASKS_KEY, filtered);
-  return true;
+export async function deleteTask(userId: string, id: number): Promise<boolean> {
+  return tasks(userId).remove(id);
 }

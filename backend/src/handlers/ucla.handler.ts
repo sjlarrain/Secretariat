@@ -1,12 +1,12 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../kapso/client';
+import { Ctx } from '../ctx';
 import {
   getUclaItems,
   addUclaItem,
   markUclaItemDone,
   updateUclaItem,
 } from '../integrations/local/ucla';
-import { getSettings } from '../integrations/token-store';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 
@@ -24,6 +24,7 @@ const DUE_DEFAULT_TIME = '23:59';
  * 24 hours, so a 24h-before reminder would fire in the past).
  */
 async function scheduleDueReminder(
+  ctx: Ctx,
   itemId: number,
   text: string,
   dueAt: Date,
@@ -38,10 +39,12 @@ async function scheduleDueReminder(
     text,
     dueAt: dueAt.toISOString(),
     phoneNumber,
+    userId: ctx.userId,
   });
 }
 
-export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const text = parsed.extraArgs.join(' ').trim();
   const doneFlag = parsed.flags['done'];
   const dueFlag = parsed.flags['due'];
@@ -54,8 +57,7 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
   }
 
   try {
-    const settings = await getSettings();
-    const tz = settings.timezone;
+    const tz = ctx.timezone;
 
     // /ucla --done N  →  mark item as done
     if (doneFlag !== undefined) {
@@ -64,13 +66,13 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
         await sendMessage(from, '❌ Use `/ucla --done N` where N is the item number from `/ucla`.');
         return;
       }
-      const items = await getUclaItems();
+      const items = await getUclaItems(ctx.userId);
       const item = items[n - 1];
       if (!item) {
         await sendMessage(from, `❌ No item #${n}. Send \`/ucla\` to see your list.`);
         return;
       }
-      const done = await markUclaItemDone(item.id);
+      const done = await markUclaItemDone(ctx.userId, item.id);
       // Cancel both the user's reminder and the automatic due reminder.
       for (const id of [done?.qstashMessageId, done?.dueReminderId]) {
         if (id) await cancelMessage(id).catch(() => null);
@@ -95,7 +97,7 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
       if (forFlag && atFlag) {
         const date = parseDate(forFlag, tz);
         if (!date) {
-          await sendMessage(from, `❌ Could not parse date: "${forFlag}". Try "tomorrow", "next friday", or DD-MM-YYYY.`);
+          await sendMessage(from, `❌ Could not parse date: "${forFlag}".`);
           return;
         }
         reminderAt = combineDateAndTime(date, atFlag, tz);
@@ -108,15 +110,15 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
         return;
       }
 
-      const item = await addUclaItem(text, { dueDate: dueAt?.toISOString() });
+      const item = await addUclaItem(ctx.userId, text, { dueDate: dueAt?.toISOString() });
 
       const lines = [`✅ Added to UCLA list! (#${item.id})`];
 
       if (dueAt) {
         lines.push(`📅 Due ${formatDate(dueAt, true, tz)} at ${formatTime(dueAt, tz)}`);
-        const dueReminderId = await scheduleDueReminder(item.id, text, dueAt, from);
+        const dueReminderId = await scheduleDueReminder(ctx, item.id, text, dueAt, from);
         if (dueReminderId) {
-          await updateUclaItem(item.id, { dueReminderId });
+          await updateUclaItem(ctx.userId, item.id, { dueReminderId });
           const remindAt = new Date(dueAt.getTime() - DUE_REMINDER_LEAD_MS);
           lines.push(`🔔 I'll remind you 24h before — ${formatDate(remindAt, true, tz)} at ${formatTime(remindAt, tz)}`);
         } else {
@@ -128,9 +130,9 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
         const messageId = await scheduleOnce(
           '/internal/ucla/reminder/fire',
           Math.floor((reminderAt.getTime() - Date.now()) / 1000),
-          { uclaItemId: item.id, text, phoneNumber: from }
+          { uclaItemId: item.id, text, phoneNumber: from, userId: ctx.userId }
         );
-        await updateUclaItem(item.id, { reminderFor: reminderAt.toISOString(), qstashMessageId: messageId });
+        await updateUclaItem(ctx.userId, item.id, { reminderFor: reminderAt.toISOString(), qstashMessageId: messageId });
         lines.push(`⏰ Reminder set for ${formatDate(reminderAt, true, tz)} at ${formatTime(reminderAt, tz)}`);
       }
 
@@ -139,7 +141,7 @@ export async function uclaHandler(parsed: ParsedCommand, from: string): Promise<
     }
 
     // /ucla  →  list pending items
-    const items = await getUclaItems();
+    const items = await getUclaItems(ctx.userId);
     if (items.length === 0) {
       await sendMessage(from, '✅ UCLA list is clear!');
       return;

@@ -9,7 +9,7 @@ import { buildCron } from '../utils/timezone';
 async function reconcileCron<T extends { enabled: boolean; scheduleId?: string }>(
   prev: T,
   next: T,
-  opts: { path: string; label: string; zoneChanged: boolean; buildExpr: () => string }
+  opts: { path: string; label: string; zoneChanged: boolean; buildExpr: () => string; body: object }
 ): Promise<void> {
   const changed = opts.zoneChanged || JSON.stringify(prev) !== JSON.stringify(next);
 
@@ -20,7 +20,7 @@ async function reconcileCron<T extends { enabled: boolean; scheduleId?: string }
 
   if (next.enabled && !next.scheduleId) {
     try {
-      next.scheduleId = await scheduleCron(opts.path, opts.buildExpr(), {});
+      next.scheduleId = await scheduleCron(opts.path, opts.buildExpr(), opts.body);
     } catch (err) {
       console.error(`Failed to create ${opts.label} schedule:`, err);
     }
@@ -28,15 +28,23 @@ async function reconcileCron<T extends { enabled: boolean; scheduleId?: string }
 }
 
 /**
- * Brings every QStash schedule in line with `next`, mutating and returning it
- * with up-to-date schedule IDs. Callers must persist the result.
+ * Brings every QStash schedule for `userId` in line with `next`, mutating and
+ * returning it with up-to-date schedule IDs. Callers must persist the result.
  *
  * Shared by the admin panel's PUT /settings and the /zone command so a timezone
  * change regenerates all schedules regardless of which entry point made it.
+ *
+ * Each schedule's QStash body carries `{ userId }` so the fire handler in
+ * routes/internal.ts knows whose data to act on — until the user registry
+ * (v2 Goal 2) and cron collapse (Goal 3) land, every user who enables one of
+ * these ends up with their own schedule hitting the same shared endpoint,
+ * which is fine at today's scale but is exactly what Goal 3 replaces with a
+ * single sweeper (QStash's free tier caps at 3 cron schedules total).
  */
-export async function reconcileSchedules(current: Settings, next: Settings): Promise<Settings> {
+export async function reconcileSchedules(userId: string, current: Settings, next: Settings): Promise<Settings> {
   const zoneChanged = current.timezone !== next.timezone;
   const tz = next.timezone;
+  const body = { userId };
 
   // The reminder promoter can never be disabled: deferred reminders (those
   // beyond QStash's 7-day max delay) have no queued message and depend entirely
@@ -52,6 +60,7 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
     label: 'morning digest',
     zoneChanged,
     buildExpr: () => buildCron(nextMorning.time, tz, nextMorning.days),
+    body,
   });
 
   const nextWeekly = next.weeklySummary;
@@ -60,6 +69,7 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
     label: 'weekly summary',
     zoneChanged,
     buildExpr: () => buildCron(nextWeekly.time, tz, [nextWeekly.day]),
+    body,
   });
 
   // UCLA reminder — fires every Monday
@@ -70,6 +80,7 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
     label: 'ucla reminder',
     zoneChanged,
     buildExpr: () => buildCron(nextUcla.time, tz, [1]),
+    body,
   });
   next.uclaReminder = nextUcla;
 
@@ -81,10 +92,13 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
     label: 'reminder promoter',
     zoneChanged,
     buildExpr: () => buildCron(nextPromoter.time, tz, [0]),
+    body,
   });
   next.reminderPromoter = nextPromoter;
 
-  // Nightly health check — every day at the configured local time
+  // Nightly health check — every day at the configured local time. System-wide
+  // (not per-user data), but scheduled off this user's timezone/settings until
+  // Goal 2 gives the ops console its own schedule surface.
   const prevHealth = current.healthCheck ?? { enabled: false, time: '23:00' };
   const nextHealth = next.healthCheck ?? prevHealth;
   await reconcileCron(prevHealth, nextHealth, {
@@ -92,6 +106,7 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
     label: 'health check',
     zoneChanged,
     buildExpr: () => buildCron(nextHealth.time, tz, []),
+    body,
   });
   next.healthCheck = nextHealth;
 
@@ -108,7 +123,7 @@ export async function reconcileSchedules(current: Settings, next: Settings): Pro
 
   if (nextTasksSync.enabled && !nextTasksSync.scheduleId) {
     try {
-      nextTasksSync.scheduleId = await scheduleCron('/internal/tasks/sync', '*/15 * * * *', {});
+      nextTasksSync.scheduleId = await scheduleCron('/internal/tasks/sync', '*/15 * * * *', body);
     } catch (err) {
       console.error('Failed to create Google Tasks sync schedule:', err);
     }

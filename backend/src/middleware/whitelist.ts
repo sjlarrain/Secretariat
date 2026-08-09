@@ -74,7 +74,11 @@ export async function whitelistMiddleware(
 
   if (!phone || !whitelistedNumbers.includes(phone)) {
     if (phone) {
-      const contact = await findThirdPartyContact(phone).catch(() => null);
+      // Third parties propose events to the owner they're messaging — until
+      // the user registry (v2 Goal 2) exists, that's the single whitelisted
+      // owner, same fallback used throughout crons/handlers.
+      const owner = whitelistedNumbers[0];
+      const contact = owner ? await findThirdPartyContact(owner, phone).catch(() => null) : null;
       if (contact) {
         (req as WebhookRequest).isThirdParty = true;
         (req as WebhookRequest).thirdPartyAlias = contact.alias;

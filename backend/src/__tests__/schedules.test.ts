@@ -13,6 +13,8 @@ vi.mock('../qstash/client', () => ({
   deleteSchedule: (id: string) => deleteSchedule(id),
 }));
 
+const TEST_USER = 'test-user';
+
 function makeSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     timezone: 'America/Santiago',
@@ -44,7 +46,7 @@ describe('reconcileSchedules — timezone change', () => {
     const current = makeSettings();
     const next = makeSettings({ timezone: 'Europe/Madrid' });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     // Each stale schedule deleted...
     for (const id of ['sched_morning', 'sched_weekly', 'sched_ucla', 'sched_promoter', 'sched_health']) {
@@ -67,7 +69,7 @@ describe('reconcileSchedules — timezone change', () => {
     const current = makeSettings();
     const next = makeSettings({ timezone: 'Asia/Tokyo' });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     // 08:00 stays 08:00 — the old code rewrote this into a UTC hour.
     expect(cronFor('/internal/digest/morning')).toBe('CRON_TZ=Asia/Tokyo 0 8 * * 1,2,3,4,5');
@@ -79,7 +81,7 @@ describe('reconcileSchedules — timezone change', () => {
     const current = makeSettings();
     const next = makeSettings();
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(scheduleCron).not.toHaveBeenCalled();
     expect(deleteSchedule).not.toHaveBeenCalled();
@@ -89,7 +91,7 @@ describe('reconcileSchedules — timezone change', () => {
     const current = makeSettings();
     const next = makeSettings({ timezone: 'Europe/Madrid' });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(deleteSchedule).not.toHaveBeenCalledWith('sched_sync');
     expect(next.googleTasksSync.scheduleId).toBe('sched_sync');
@@ -101,7 +103,7 @@ describe('reconcileSchedules — timezone change', () => {
       googleTasksSync: { enabled: true, scheduleId: 'sched_sync', lastSyncAt: new Date().toISOString() },
     });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(deleteSchedule).not.toHaveBeenCalledWith('sched_sync');
   });
@@ -116,7 +118,7 @@ describe('reconcileSchedules — config changes', () => {
       morningDigest: { enabled: true, time: '07:30', days: [1, 2, 3, 4, 5], scheduleId: 'sched_morning' },
     });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(deleteSchedule).toHaveBeenCalledWith('sched_morning');
     expect(deleteSchedule).toHaveBeenCalledTimes(1);
@@ -129,7 +131,7 @@ describe('reconcileSchedules — config changes', () => {
       healthCheck: { enabled: false, time: '23:00', scheduleId: 'sched_health' },
     });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(deleteSchedule).toHaveBeenCalledWith('sched_health');
     expect(cronFor('/internal/health-check')).toBeUndefined();
@@ -140,7 +142,7 @@ describe('reconcileSchedules — config changes', () => {
     const current = makeSettings({ healthCheck: { enabled: false, time: '23:00' } });
     const next = makeSettings({ healthCheck: { enabled: true, time: '22:00' } });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(cronFor('/internal/health-check')).toBe('CRON_TZ=America/Santiago 0 22 * * *');
     expect(next.healthCheck.scheduleId).toBe('sched_/internal/health-check');
@@ -151,7 +153,7 @@ describe('reconcileSchedules — config changes', () => {
     const current = makeSettings({ healthCheck: { enabled: false, time: '23:00' } });
     const next = makeSettings({ healthCheck: { enabled: true, time: '22:00' } });
 
-    await expect(reconcileSchedules(current, next)).resolves.toBeDefined();
+    await expect(reconcileSchedules(TEST_USER, current, next)).resolves.toBeDefined();
     expect(next.healthCheck.scheduleId).toBeUndefined();
   });
 });
@@ -169,7 +171,7 @@ describe('reconcileSchedules — reminder promoter is always on', () => {
       reminderPromoter: { enabled: false as unknown as true, time: '08:00', scheduleId: 'sched_promoter' },
     });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(next.reminderPromoter.enabled).toBe(true);
     expect(deleteSchedule).not.toHaveBeenCalledWith('sched_promoter');
@@ -180,7 +182,7 @@ describe('reconcileSchedules — reminder promoter is always on', () => {
     const current = makeSettings({ reminderPromoter: { enabled: true, time: '08:00' } });
     const next = makeSettings({ reminderPromoter: { enabled: true, time: '08:00' } });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(cronFor('/internal/reminder/promote')).toBe('CRON_TZ=America/Santiago 0 8 * * 0');
     expect(next.reminderPromoter.scheduleId).toBe('sched_/internal/reminder/promote');
@@ -192,7 +194,7 @@ describe('reconcileSchedules — reminder promoter is always on', () => {
       reminderPromoter: { enabled: true, time: '06:30', scheduleId: 'sched_promoter' },
     });
 
-    await reconcileSchedules(current, next);
+    await reconcileSchedules(TEST_USER, current, next);
 
     expect(deleteSchedule).toHaveBeenCalledWith('sched_promoter');
     expect(cronFor('/internal/reminder/promote')).toBe('CRON_TZ=America/Santiago 30 6 * * 0');

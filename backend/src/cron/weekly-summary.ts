@@ -3,22 +3,21 @@ import { getWeekEvents, CalendarEvent } from '../integrations/google/calendar';
 import { getPendingTasks } from '../integrations/google/tasks';
 import { formatDate, formatTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
-import { whitelistedNumbers } from '../env';
 
-export async function fireWeeklySummary(): Promise<void> {
-  const settings = await getSettings();
+export async function fireWeeklySummary(userId: string): Promise<void> {
+  const settings = await getSettings(userId);
   if (!settings.weeklySummary.enabled) return;
 
-  const allAccounts = await getAllAccounts();
+  const allAccounts = await getAllAccounts(userId);
   const calAccounts = allAccounts.filter((a) => a.type === 'calendar');
   const taskAccounts = allAccounts.filter((a) => a.type === 'tasks');
 
   const allEvents = (
-    await Promise.all(calAccounts.map((acc) => getWeekEvents(acc, settings.timezone)))
+    await Promise.all(calAccounts.map((acc) => getWeekEvents(userId, acc, settings.timezone)))
   ).flat();
   allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const allTasks = taskAccounts.length > 0 ? await getPendingTasks(taskAccounts[0]) : [];
+  const allTasks = taskAccounts.length > 0 ? await getPendingTasks(userId, taskAccounts[0]) : [];
 
   const lines = ['📋 *Your week ahead:*\n'];
 
@@ -52,8 +51,5 @@ export async function fireWeeklySummary(): Promise<void> {
     }
   }
 
-  const owner = whitelistedNumbers[0];
-  if (owner) {
-    await sendMessage(owner, lines.join('\n'));
-  }
+  await sendMessage(userId, lines.join('\n'));
 }

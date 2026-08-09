@@ -1,7 +1,7 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { resolveAccount } from '../integrations/registry';
 import { createEvent } from '../integrations/google/calendar';
-import { getSettings } from '../integrations/token-store';
+import { Ctx } from '../ctx';
 import {
   parseDate,
   combineDateAndTime,
@@ -14,10 +14,10 @@ import {
 } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 
-export async function scheduleHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function scheduleHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const { flags, extraArgs } = parsed;
-  const settings = await getSettings();
-  const timezone = settings.timezone;
+  const timezone = ctx.timezone;
 
   const title = flags['title'] || extraArgs.join(' ').trim();
   if (!title) {
@@ -26,7 +26,7 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
   }
 
   const alias = flags['using'];
-  const account = await resolveAccount('calendar', alias);
+  const account = await resolveAccount(ctx.userId, 'calendar', alias);
 
   if (!account) {
     await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
@@ -59,7 +59,7 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
       const startDate = formatDateOnly(date, timezone);
       const endDate = addDaysToDateOnly(startDate, durationDays); // Google's end.date is exclusive
 
-      const { meetLink } = await createEvent(account, {
+      const { meetLink } = await createEvent(ctx.userId, account, {
         title,
         allDay: true,
         startDate,
@@ -93,7 +93,7 @@ export async function scheduleHandler(parsed: ParsedCommand, from: string): Prom
     const startDatetime = combineDateAndTime(date, flags['at'], timezone);
     const endDatetime = new Date(startDatetime.getTime() + durationHours * 60 * 60 * 1000);
 
-    const { meetLink } = await createEvent(account, {
+    const { meetLink } = await createEvent(ctx.userId, account, {
       title,
       startDatetime,
       endDatetime,

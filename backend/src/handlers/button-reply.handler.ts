@@ -1,5 +1,5 @@
 import { sendMessage } from '../kapso/client';
-import { getSettings } from '../integrations/token-store';
+import { Ctx } from '../ctx';
 import { getReminders, updateReminder, removeReminder, saveReminder, PendingReminder } from '../integrations/local/reminders';
 import { getReplyTarget } from '../integrations/local/wa-reply-map';
 import { getTasks, markTaskDone, updateTaskQStashId, addTask } from '../integrations/local/tasks';
@@ -42,26 +42,25 @@ function parseButtonId(id: string): { action: 'snooze' | 'done'; option: SnoozeO
   return { action: 'snooze', option, type, itemId };
 }
 
-export async function buttonReplyHandler(buttonId: string, from: string, contextMessageId: string | null = null): Promise<void> {
+export async function buttonReplyHandler(buttonId: string, ctx: Ctx, contextMessageId: string | null = null): Promise<void> {
+  const from = ctx.userId;
+
   // Third-party pending event buttons
   if (buttonId.startsWith('tp_')) {
-    await handleThirdPartyButton(buttonId, from);
+    await handleThirdPartyButton(buttonId, ctx);
     return;
   }
 
   const parsed = parseButtonId(buttonId);
   if (!parsed) return; // unrecognised button — silently ignore
 
-  const settings = await getSettings();
-  const timezone = settings.timezone ?? 'America/Santiago';
-
   try {
     if (parsed.type === 'rem') {
-      await handleReminderButton(parsed.action, parsed.option, parsed.itemId, from, timezone, contextMessageId);
+      await handleReminderButton(parsed.action, parsed.option, parsed.itemId, ctx, contextMessageId);
     } else if (parsed.type === 'task') {
-      await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
+      await handleTaskButton(parsed.action, parsed.option, Number(parsed.itemId), ctx);
     } else {
-      await handleUclaButton(parsed.action, parsed.option, Number(parsed.itemId), from, timezone);
+      await handleUclaButton(parsed.action, parsed.option, Number(parsed.itemId), ctx);
     }
 
   } catch (err) {
@@ -78,11 +77,11 @@ async function handleReminderButton(
   action: 'snooze' | 'done',
   option: SnoozeOption | null,
   reminderId: string,
-  from: string,
-  timezone: string,
+  ctx: Ctx,
   contextMessageId: string | null,
 ) {
-  const reminders = await getReminders();
+  const from = ctx.userId;
+  const reminders = await getReminders(ctx.userId);
   const reminder = reminders.find((r) => r.id === reminderId);
 
   let title = reminder?.title;
@@ -104,36 +103,37 @@ async function handleReminderButton(
   }
 
   if (action === 'done') {
-    if (reminder) await removeReminder(reminderId);
+    if (reminder) await removeReminder(ctx.userId, reminderId);
     await sendMessage(from, `✅ Done: _"${title}"_`);
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, timezone);
+  const fireAt = getSnoozeDate(option!, ctx.timezone);
   const newMessageId = await scheduleOnce('/internal/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     reminderId,
     title,
     phoneNumber,
+    userId: ctx.userId,
   });
 
   if (reminder) {
-    await updateReminder(reminderId, { fireAt: fireAt.toISOString(), messageId: newMessageId });
+    await updateReminder(ctx.userId, reminderId, { fireAt: fireAt.toISOString(), messageId: newMessageId });
   } else {
     const fresh: PendingReminder = { id: reminderId, title, phoneNumber, fireAt: fireAt.toISOString(), messageId: newMessageId };
-    await saveReminder(fresh);
+    await saveReminder(ctx.userId, fresh);
   }
 
-  await sendMessage(from, `⏰ Snoozed: _"${title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
+  await sendMessage(from, `⏰ Snoozed: _"${title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: ctx.timezone })}`);
 }
 
 async function handleTaskButton(
   action: 'snooze' | 'done',
   option: SnoozeOption | null,
   taskId: number,
-  from: string,
-  timezone: string,
+  ctx: Ctx,
 ) {
-  const tasks = await getTasks();
+  const from = ctx.userId;
+  const tasks = await getTasks(ctx.userId);
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
     await sendMessage(from, '❌ Task not found.');
@@ -145,32 +145,33 @@ async function handleTaskButton(
   }
 
   if (action === 'done') {
-    await markTaskDone(taskId);
+    await markTaskDone(ctx.userId, taskId);
     await sendMessage(from, `✅ *Task done!* _"${task.title}"_`);
-    if (task.thirdPartyPhone && await canNotifyThirdParty(task.thirdPartyPhone)) {
+    if (task.thirdPartyPhone && await canNotifyThirdParty(ctx.userId, task.thirdPartyPhone)) {
       await sendMessage(task.thirdPartyPhone, `✅ _"${task.title}"_ is done!`).catch(() => null);
     }
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, timezone);
+  const fireAt = getSnoozeDate(option!, ctx.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId,
     title: task.title,
     phoneNumber: from,
+    userId: ctx.userId,
   });
-  await updateTaskQStashId(taskId, newMessageId);
-  await sendMessage(from, `⏰ Task snoozed: _"${task.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
+  await updateTaskQStashId(ctx.userId, taskId, newMessageId);
+  await sendMessage(from, `⏰ Task snoozed: _"${task.title}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: ctx.timezone })}`);
 }
 
 async function handleUclaButton(
   action: 'snooze' | 'done',
   option: SnoozeOption | null,
   uclaId: number,
-  from: string,
-  timezone: string,
+  ctx: Ctx,
 ) {
-  const item = await getUclaItem(uclaId);
+  const from = ctx.userId;
+  const item = await getUclaItem(ctx.userId, uclaId);
   if (!item) {
     await sendMessage(from, '❌ UCLA item not found.');
     return;
@@ -185,23 +186,25 @@ async function handleUclaButton(
     if (item.dueReminderId) {
       await cancelMessage(item.dueReminderId).catch(() => null);
     }
-    await markUclaItemDone(uclaId);
+    await markUclaItemDone(ctx.userId, uclaId);
     await sendMessage(from, `✅ Done! _"${item.text}"_ marked as completed.`);
     return;
   }
 
-  const fireAt = getSnoozeDate(option!, timezone);
+  const fireAt = getSnoozeDate(option!, ctx.timezone);
   const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     uclaItemId: uclaId,
     text: item.text,
     phoneNumber: from,
+    userId: ctx.userId,
   });
-  await updateUclaItemReminder(uclaId, fireAt.toISOString(), newMessageId);
-  await sendMessage(from, `⏰ UCLA item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })}`);
+  await updateUclaItemReminder(ctx.userId, uclaId, fireAt.toISOString(), newMessageId);
+  await sendMessage(from, `⏰ UCLA item snoozed: _"${item.text}"_\nNew time: ${fireAt.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: ctx.timezone })}`);
 }
 
 // tp_rem_<id> | tp_task_<id> | tp_cal_<id>
-async function handleThirdPartyButton(buttonId: string, from: string): Promise<void> {
+async function handleThirdPartyButton(buttonId: string, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const parts = buttonId.split('_');
   if (parts.length < 3 || parts[0] !== 'tp') return;
   const type = parts[1];
@@ -212,15 +215,13 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
     return;
   }
 
-  const pending = await removePendingEvent(pendingId);
+  const pending = await removePendingEvent(ctx.userId, pendingId);
   if (!pending) {
     await sendMessage(from, '❌ This request has already been handled or expired.');
     return;
   }
 
-  const settings = await getSettings();
-  const timezone = settings.timezone ?? 'America/Santiago';
-
+  const timezone = ctx.timezone;
   const target = new Date(pending.fireAt);
   const dateLabel = `${formatDate(target, true, timezone)} at ${formatTime(target, timezone)}`;
   const titleDisplay = pending.title || '(no title)';
@@ -235,17 +236,17 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
       if (pending.reminderMessageId) {
         await cancelMessage(pending.reminderMessageId).catch(() => null);
       }
-      await removeReminder(pending.reminderId).catch(() => null);
+      await removeReminder(ctx.userId, pending.reminderId).catch(() => null);
 
-      const task = await addTask({ title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue, thirdPartyPhone: pending.senderPhone });
+      const task = await addTask(ctx.userId, { title: pending.title || `From ${pending.senderAlias}`, dueDate: target.toISOString(), dueTime: pending.atValue, thirdPartyPhone: pending.senderPhone });
       const delaySeconds = Math.floor((target.getTime() - Date.now()) / 1000);
       if (delaySeconds > 0) {
         const msgId = await scheduleOnce(
           '/internal/task/reminder/fire',
           delaySeconds,
-          { taskId: task.id, title: task.title, phoneNumber: from }
+          { taskId: task.id, title: task.title, phoneNumber: from, userId: ctx.userId }
         );
-        await updateTaskQStashId(task.id, msgId);
+        await updateTaskQStashId(ctx.userId, task.id, msgId);
       }
 
       await sendMessage(from, `✅ *Moved to task* (#${task.id})\n📌 ${titleDisplay}\n📅 ${dateLabel}\n_From ${pending.senderAlias}_`);
@@ -255,16 +256,16 @@ async function handleThirdPartyButton(buttonId: string, from: string): Promise<v
       if (pending.reminderMessageId) {
         await cancelMessage(pending.reminderMessageId).catch(() => null);
       }
-      await removeReminder(pending.reminderId).catch(() => null);
+      await removeReminder(ctx.userId, pending.reminderId).catch(() => null);
 
-      const account = await resolveAccount('calendar');
+      const account = await resolveAccount(ctx.userId, 'calendar');
       if (!account) {
         await sendMessage(from, '❌ No calendar account connected. Visit the admin panel.');
         return;
       }
 
       const endDatetime = new Date(target.getTime() + 60 * 60 * 1000);
-      await createEvent(account, {
+      await createEvent(ctx.userId, account, {
         title: pending.title || `From ${pending.senderAlias}`,
         startDatetime: target,
         endDatetime,

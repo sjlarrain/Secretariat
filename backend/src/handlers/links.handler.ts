@@ -1,5 +1,6 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage, sendMessageWithId } from '../kapso/client';
+import { Ctx } from '../ctx';
 import { Link, getLinks, addLink, markLinkRead, updateLink } from '../integrations/local/links';
 import { storeReplyTarget } from '../integrations/local/wa-reply-map';
 import { setPendingLink } from '../integrations/local/link-pending';
@@ -7,13 +8,14 @@ import { setPendingLink } from '../integrations/local/link-pending';
 // All "#N" addressing (list, --read, --tags, --name, lookup) refers to this
 // same 1-based position in the unread list, so the number shown anywhere is
 // always the number you type back.
-async function getSortedUnread(): Promise<Link[]> {
-  return (await getLinks()).sort(
+async function getSortedUnread(userId: string): Promise<Link[]> {
+  return (await getLinks(userId)).sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 }
 
-export async function linksHandler(parsed: ParsedCommand, from: string): Promise<void> {
+export async function linksHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+  const from = ctx.userId;
   const url     = parsed.extraArgs[0]?.trim() ?? '';
   const readArg = parsed.flags['read'] as string | undefined;
   const tagsArg = parsed.flags['tags'] as string | undefined;
@@ -27,13 +29,13 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
         await sendMessage(from, '❌ Usage: `/links --read <N>` where N is the link number.');
         return;
       }
-      const unread = await getSortedUnread();
+      const unread = await getSortedUnread(ctx.userId);
       const target = unread[n - 1];
       if (!target) {
         await sendMessage(from, `❌ No unread link #${n}. Send \`/links\` to see the list.`);
         return;
       }
-      await markLinkRead(target.id);
+      await markLinkRead(ctx.userId, target.id);
       await sendMessage(from, `✅ Link #${n} marked as read.`);
       return;
     }
@@ -45,7 +47,7 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
         await sendMessage(from, '❌ Usage: `/links #N -t tag1 tag2`');
         return;
       }
-      const unread = await getSortedUnread();
+      const unread = await getSortedUnread(ctx.userId);
       const target = unread[n - 1];
       if (!target) {
         await sendMessage(from, `❌ No unread link #${n}. Send \`/links\` to see the list.`);
@@ -53,7 +55,7 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
       }
       const newTags = tagsArg.split(/\s+/).map((t) => t.toLowerCase()).filter(Boolean);
       const merged = [...new Set([...target.tags, ...newTags])];
-      await updateLink(target.id, { tags: merged });
+      await updateLink(ctx.userId, target.id, { tags: merged });
       await sendMessage(from, `✅ Tags updated on #${n}: ${merged.join(', ')}`);
       return;
     }
@@ -65,13 +67,13 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
         await sendMessage(from, '❌ Usage: `/links #N --name <text>`');
         return;
       }
-      const unread = await getSortedUnread();
+      const unread = await getSortedUnread(ctx.userId);
       const target = unread[n - 1];
       if (!target) {
         await sendMessage(from, `❌ No unread link #${n}. Send \`/links\` to see the list.`);
         return;
       }
-      await updateLink(target.id, { name: nameArg.trim() });
+      await updateLink(ctx.userId, target.id, { name: nameArg.trim() });
       await sendMessage(from, `✅ Link #${n} named "${nameArg.trim()}".`);
       return;
     }
@@ -83,7 +85,7 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
         await sendMessage(from, '❌ Usage: `/links #N` where N is the link number.');
         return;
       }
-      const unread = await getSortedUnread();
+      const unread = await getSortedUnread(ctx.userId);
       const target = unread[n - 1];
       if (!target) {
         await sendMessage(from, `❌ No unread link #${n}. Send \`/links\` to see the list.`);
@@ -99,8 +101,8 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
       const tags = tagsArg
         ? tagsArg.split(/\s+/).map((t) => t.toLowerCase()).filter(Boolean)
         : [];
-      const link = await addLink(url, tags);
-      const unread = await getSortedUnread();
+      const link = await addLink(ctx.userId, url, tags);
+      const unread = await getSortedUnread(ctx.userId);
       const position = unread.findIndex((l) => l.id === link.id) + 1;
       const tagLabel = tags.length ? ` — tags: ${tags.join(', ')}` : '';
 
@@ -114,14 +116,15 @@ export async function linksHandler(parsed: ParsedCommand, from: string): Promise
           id: String(link.id),
           title: link.url,
           phoneNumber: from,
+          userId: ctx.userId,
         }).catch(() => null);
       }
-      await setPendingLink(link.id, position).catch(() => null);
+      await setPendingLink(ctx.userId, link.id, position).catch(() => null);
       return;
     }
 
     // /links  →  list all unread links
-    const unread = await getSortedUnread();
+    const unread = await getSortedUnread(ctx.userId);
     if (unread.length === 0) {
       await sendMessage(from, '🔗 No unread links. Send a URL or `/links <url>` to save one.');
       return;

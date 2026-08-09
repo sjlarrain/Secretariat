@@ -4,6 +4,9 @@ import { env } from '../env';
 import { parseCommand } from '../parser/command.parser';
 import { extractWebhookData, whitelistMiddleware, WebhookRequest } from '../middleware/whitelist';
 import { sendMessage } from '../kapso/client';
+import { getSettings } from '../integrations/token-store';
+import { Ctx } from '../ctx';
+import { pointKey } from '../redis/keys';
 import { startHandler } from '../handlers/start.handler';
 import { scheduleHandler } from '../handlers/schedule.handler';
 import { taskHandler } from '../handlers/task.handler';
@@ -44,7 +47,7 @@ function getRedis(): Redis {
 async function isDuplicate(messageId: string | null): Promise<boolean> {
   if (!messageId) return false;
   try {
-    const claimed = await getRedis().set(`secretariat:dedup:${messageId}`, Date.now(), {
+    const claimed = await getRedis().set(pointKey('dedup', messageId), Date.now(), {
       nx: true,
       ex: DEDUP_TTL_SEC,
     });
@@ -76,9 +79,13 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
     return;
   }
 
+  // `from` is a whitelisted number past this point, so it is this user's id.
+  const settings = await getSettings(from);
+  const ctx: Ctx = { userId: from, timezone: settings.timezone };
+
   if (buttonReplyId) {
     try {
-      await buttonReplyHandler(buttonReplyId, from, contextMessageId);
+      await buttonReplyHandler(buttonReplyId, ctx, contextMessageId);
     } catch (err) {
       console.error('Button reply unhandled error:', err);
     }
@@ -90,14 +97,14 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   // If this is a reply to a bot reminder/task/work message, attempt reschedule
   if (contextMessageId) {
     try {
-      const handled = await replyRescheduleHandler(contextMessageId, text.trim(), from);
+      const handled = await replyRescheduleHandler(contextMessageId, text.trim(), ctx);
       if (handled) return;
     } catch (err) {
       console.error('Reply reschedule error:', err);
     }
 
     try {
-      const handled = await replyLinkNameHandler(contextMessageId, text.trim(), from);
+      const handled = await replyLinkNameHandler(contextMessageId, text.trim(), ctx);
       if (handled) return;
     } catch (err) {
       console.error('Reply link name error:', err);
@@ -107,7 +114,7 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
   // Plain "--name <text>" / "-n <text>" right after a link was saved, with no
   // swipe-reply needed — targets whichever link was most recently saved.
   try {
-    const handled = await pendingLinkNameHandler(text.trim(), from);
+    const handled = await pendingLinkNameHandler(text.trim(), ctx);
     if (handled) return;
   } catch (err) {
     console.error('Pending link name error:', err);
@@ -118,7 +125,7 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
     const trimmed = text.trim();
     if (/^https?:\/\/\S+$/.test(trimmed)) {
       const synthetic: ParsedCommand = { command: 'links', flags: {}, extraArgs: [trimmed], raw: trimmed };
-      await linksHandler(synthetic, from);
+      await linksHandler(synthetic, ctx);
       return;
     }
 
@@ -133,40 +140,40 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
 
     switch (data.command) {
       case 'start':
-        await startHandler(data, from);
+        await startHandler(data, ctx);
         break;
       case 'menu':
-        await menuHandler(data, from);
+        await menuHandler(data, ctx);
         break;
       case 'schedule':
-        await scheduleHandler(data, from);
+        await scheduleHandler(data, ctx);
         break;
       case 'task':
-        await taskHandler(data, from);
+        await taskHandler(data, ctx);
         break;
       case 'reminder':
-        await reminderHandler(data, from);
+        await reminderHandler(data, ctx);
         break;
       case 'myschedule':
-        await myscheduleHandler(data, from);
+        await myscheduleHandler(data, ctx);
         break;
       case 'ideas':
-        await ideasHandler(data, from);
+        await ideasHandler(data, ctx);
         break;
       case 'links':
-        await linksHandler(data, from);
+        await linksHandler(data, ctx);
         break;
       case 'ucla':
-        await uclaHandler(data, from);
+        await uclaHandler(data, ctx);
         break;
       case 'status':
-        await statusHandler(data, from);
+        await statusHandler(data, ctx);
         break;
       case 'zone':
-        await zoneHandler(data, from);
+        await zoneHandler(data, ctx);
         break;
       case 'mantis':
-        await mantisHandler(data, from, messageId);
+        await mantisHandler(data, ctx, messageId);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

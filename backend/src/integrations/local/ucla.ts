@@ -1,10 +1,9 @@
 import { Redis } from '@upstash/redis';
-import { env } from '../../env';
+import { env, whitelistedNumbers } from '../../env';
+import { userKey, legacyWorkKey } from '../../redis/keys';
+import { HashCollection, byId } from '../../redis/hash-collection';
 
 const redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
-const UCLA_KEY = 'secretariat:ucla';
-/** v1.14: `/work` became `/ucla`. Read-only — used once to migrate old items. */
-const LEGACY_WORK_KEY = 'secretariat:work';
 
 export interface UclaItem {
   id: number;
@@ -21,32 +20,41 @@ export interface UclaItem {
   qstashMessageId?: string;
 }
 
-async function getAllUclaRaw(): Promise<UclaItem[]> {
-  const items = await redis.get<UclaItem[]>(UCLA_KEY);
-  if (items) return items;
+function ucla(userId: string): HashCollection<UclaItem> {
+  return new HashCollection<UclaItem>(redis, userKey(userId, 'ucla'), userKey(userId, 'ucla') + ':seq');
+}
+
+async function getAllUclaRaw(userId: string): Promise<UclaItem[]> {
+  const items = await ucla(userId).getAll(byId);
+  if (items.length > 0) return items;
 
   // One-time migration: adopt the old /work list if it exists and we have not
-  // written a UCLA list yet. Writing the result makes this a no-op afterwards.
-  const legacy = await redis.get<UclaItem[]>(LEGACY_WORK_KEY);
+  // written a UCLA list yet. The legacy key (see `legacyWorkKey()`) only ever
+  // held Santiago's v1 data, so this only ever applies to the one legacy
+  // owner — never to any other user, whose empty list should just stay
+  // empty. Writing the result into this user's hash makes this a no-op
+  // afterwards.
+  if (userId !== whitelistedNumbers[0]) return [];
+
+  const legacy = await redis.get<UclaItem[]>(legacyWorkKey());
   if (legacy?.length) {
-    await redis.set(UCLA_KEY, legacy);
+    await Promise.all(legacy.map((item) => ucla(userId).set(item)));
     return legacy;
   }
 
   return [];
 }
 
-export async function getUclaItems(): Promise<UclaItem[]> {
-  return (await getAllUclaRaw()).filter((w) => !w.doneAt);
+export async function getUclaItems(userId: string): Promise<UclaItem[]> {
+  return (await getAllUclaRaw(userId)).filter((w) => !w.doneAt);
 }
 
-export async function getDoneUclaItems(): Promise<UclaItem[]> {
-  return (await getAllUclaRaw()).filter((w) => !!w.doneAt);
+export async function getDoneUclaItems(userId: string): Promise<UclaItem[]> {
+  return (await getAllUclaRaw(userId)).filter((w) => !!w.doneAt);
 }
 
-export async function getUclaItem(id: number): Promise<UclaItem | null> {
-  const all = await getAllUclaRaw();
-  return all.find((w) => w.id === id) ?? null;
+export async function getUclaItem(userId: string, id: number): Promise<UclaItem | null> {
+  return ucla(userId).get(id);
 }
 
 /**
@@ -55,13 +63,14 @@ export async function getUclaItem(id: number): Promise<UclaItem | null> {
  * should not be announced as "due in the next 48h".
  */
 export async function getUpcomingUclaItems(
+  userId: string,
   hours: number,
   now: Date = new Date()
 ): Promise<{ upcoming: UclaItem[]; overdue: UclaItem[] }> {
   const nowMs = now.getTime();
   const cutoff = nowMs + hours * 60 * 60 * 1000;
 
-  const dated = (await getUclaItems())
+  const dated = (await getUclaItems(userId))
     .filter((w) => !!w.dueDate)
     .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 
@@ -75,50 +84,49 @@ export async function getUpcomingUclaItems(
 }
 
 export async function addUclaItem(
+  userId: string,
   text: string,
   fields?: Partial<Pick<UclaItem, 'dueDate' | 'dueReminderId' | 'reminderFor' | 'qstashMessageId'>>
 ): Promise<UclaItem> {
-  const all = await getAllUclaRaw();
-  const id = all.length ? Math.max(...all.map((w) => w.id)) + 1 : 1;
+  const id = await ucla(userId).nextId();
   const item: UclaItem = {
     id,
     text: text.trim(),
     createdAt: new Date().toISOString(),
     ...fields,
   };
-  await redis.set(UCLA_KEY, [...all, item]);
+  await ucla(userId).set(item);
   return item;
 }
 
-export async function markUclaItemDone(id: number): Promise<UclaItem | null> {
-  const all = await getAllUclaRaw();
-  const idx = all.findIndex((w) => w.id === id && !w.doneAt);
-  if (idx === -1) return null;
-  all[idx].doneAt = new Date().toISOString();
-  await redis.set(UCLA_KEY, all);
-  return all[idx];
+export async function markUclaItemDone(userId: string, id: number): Promise<UclaItem | null> {
+  const item = await ucla(userId).get(id);
+  if (!item || item.doneAt) return null;
+  item.doneAt = new Date().toISOString();
+  await ucla(userId).set(item);
+  return item;
 }
 
-export async function updateUclaItem(id: number, fields: Partial<UclaItem>): Promise<UclaItem | null> {
-  const all = await getAllUclaRaw();
-  const idx = all.findIndex((w) => w.id === id);
-  if (idx === -1) return null;
-  all[idx] = { ...all[idx], ...fields };
-  await redis.set(UCLA_KEY, all);
-  return all[idx];
+export async function updateUclaItem(userId: string, id: number, fields: Partial<UclaItem>): Promise<UclaItem | null> {
+  const item = await ucla(userId).get(id);
+  if (!item) return null;
+  const updated = { ...item, ...fields };
+  await ucla(userId).set(updated);
+  return updated;
 }
 
-export async function updateUclaItemReminder(id: number, reminderFor: string, qstashMessageId: string): Promise<void> {
-  await updateUclaItem(id, {
+export async function updateUclaItemReminder(
+  userId: string,
+  id: number,
+  reminderFor: string,
+  qstashMessageId: string
+): Promise<void> {
+  await updateUclaItem(userId, id, {
     reminderFor: reminderFor || undefined,
     qstashMessageId: qstashMessageId || undefined,
   });
 }
 
-export async function deleteUclaItem(id: number): Promise<boolean> {
-  const all = await getAllUclaRaw();
-  const filtered = all.filter((w) => w.id !== id);
-  if (filtered.length === all.length) return false;
-  await redis.set(UCLA_KEY, filtered);
-  return true;
+export async function deleteUclaItem(userId: string, id: number): Promise<boolean> {
+  return ucla(userId).remove(id);
 }

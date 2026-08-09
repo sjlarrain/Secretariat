@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { env } from '../env';
+import { env, whitelistedNumbers } from '../env';
 import {
   getAllAccounts,
   getAccount,
@@ -10,8 +10,7 @@ import {
   saveSettings,
 } from '../integrations/token-store';
 import { setDefault } from '../integrations/registry';
-import { scheduleCron, deleteSchedule, scheduleOnce } from '../qstash/client';
-import { whitelistedNumbers } from '../env';
+import { scheduleOnce } from '../qstash/client';
 import { getThirdPartyContacts, addThirdPartyContact, removeThirdPartyContact } from '../integrations/local/third-party';
 import {
   getIdeas,
@@ -46,6 +45,14 @@ import { parseZoneInput } from '../utils/timezone';
 import { reconcileSchedules } from '../qstash/schedules';
 
 const router = Router();
+
+// The admin panel is a single global operator session until the per-user
+// panel (v2 Goal 2) splits ops from user data — every route here acts on the
+// one whitelisted owner's namespace, the same fallback used by crons and
+// third-party handling.
+function ownerId(): string {
+  return whitelistedNumbers[0];
+}
 
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -83,7 +90,7 @@ router.post('/logout', (req: Request, res: Response) => {
 
 // --- Accounts ---
 router.get('/accounts', requireAuth, async (_req, res) => {
-  const accounts = (await getAllAccounts()).map((a) => ({
+  const accounts = (await getAllAccounts(ownerId())).map((a) => ({
     id: a.id,
     alias: a.alias,
     provider: a.provider,
@@ -95,12 +102,12 @@ router.get('/accounts', requireAuth, async (_req, res) => {
 });
 
 router.delete('/accounts/:id', requireAuth, async (req, res) => {
-  await deleteAccount(String(req.params.id));
+  await deleteAccount(ownerId(), String(req.params.id));
   res.json({ ok: true });
 });
 
 router.patch('/accounts/:id', requireAuth, async (req, res) => {
-  const account = await getAccount(String(req.params.id));
+  const account = await getAccount(ownerId(), String(req.params.id));
   if (!account) {
     res.status(404).json({ error: 'Account not found' });
     return;
@@ -110,27 +117,27 @@ router.patch('/accounts/:id', requireAuth, async (req, res) => {
 
   if (body.alias) account.alias = body.alias;
   if (body.isDefault === true) {
-    await setDefault(account.id);
+    await setDefault(ownerId(), account.id);
     res.json({ ok: true });
     return;
   }
 
-  await saveAccount(account);
+  await saveAccount(ownerId(), account);
   res.json({ ok: true });
 });
 
 router.get('/accounts/:id/calendars', requireAuth, async (req, res) => {
-  const account = await getAccount(String(req.params.id));
+  const account = await getAccount(ownerId(), String(req.params.id));
   if (!account) {
     res.status(404).json({ error: 'Account not found' });
     return;
   }
-  const calendars = await listCalendars(account);
+  const calendars = await listCalendars(ownerId(), account);
   res.json({ calendars, enabledCalendarIds: account.enabledCalendarIds ?? ['primary'] });
 });
 
 router.patch('/accounts/:id/calendars', requireAuth, async (req, res) => {
-  const account = await getAccount(String(req.params.id));
+  const account = await getAccount(ownerId(), String(req.params.id));
   if (!account) {
     res.status(404).json({ error: 'Account not found' });
     return;
@@ -138,7 +145,7 @@ router.patch('/accounts/:id/calendars', requireAuth, async (req, res) => {
   const { calendarIds, calendarNames } = req.body as { calendarIds: string[]; calendarNames?: Record<string, string> };
   account.enabledCalendarIds = calendarIds;
   if (calendarNames) account.calendarNames = calendarNames;
-  await saveAccount(account);
+  await saveAccount(ownerId(), account);
   res.json({ ok: true });
 });
 
@@ -163,7 +170,7 @@ router.delete('/whitelist/:number', requireAuth, (_req, res) => {
 
 // --- Third-party contacts ---
 router.get('/third-party-contacts', requireAuth, async (_req, res) => {
-  const contacts = await getThirdPartyContacts();
+  const contacts = await getThirdPartyContacts(ownerId());
   res.json({ contacts });
 });
 
@@ -174,13 +181,13 @@ router.post('/third-party-contacts', requireAuth, async (req, res) => {
     return;
   }
   const normalized = number.startsWith('+') ? number : `+${number}`;
-  await addThirdPartyContact({ number: normalized, alias: alias.trim() });
+  await addThirdPartyContact(ownerId(), { number: normalized, alias: alias.trim() });
   res.json({ ok: true });
 });
 
 router.delete('/third-party-contacts/:number', requireAuth, async (req, res) => {
   const number = decodeURIComponent(req.params['number'] as string);
-  const removed = await removeThirdPartyContact(number);
+  const removed = await removeThirdPartyContact(ownerId(), number);
   if (!removed) {
     res.status(404).json({ error: 'Contact not found' });
     return;
@@ -190,12 +197,12 @@ router.delete('/third-party-contacts/:number', requireAuth, async (req, res) => 
 
 // --- Settings ---
 router.get('/settings', requireAuth, async (_req, res) => {
-  res.json(await getSettings());
+  res.json(await getSettings(ownerId()));
 });
 
 router.put('/settings', requireAuth, async (req, res) => {
-  const body = req.body as Parameters<typeof saveSettings>[0];
-  const current = await getSettings();
+  const body = req.body as Parameters<typeof saveSettings>[1];
+  const current = await getSettings(ownerId());
   const next = { ...current, ...body };
 
   // Normalize here rather than only in the /zone handler, so the panel accepts
@@ -208,14 +215,14 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
   next.timezone = zone;
 
-  const reconciled = await reconcileSchedules(current, next);
-  await saveSettings(reconciled);
+  const reconciled = await reconcileSchedules(ownerId(), current, next);
+  await saveSettings(ownerId(), reconciled);
   res.json({ ok: true, settings: reconciled });
 });
 
 // --- Projects ---
 router.get('/projects', requireAuth, async (_req, res) => {
-  const [projects, ideas] = await Promise.all([getProjects(), getIdeas()]);
+  const [projects, ideas] = await Promise.all([getProjects(ownerId()), getIdeas(ownerId())]);
   const withCounts = projects.map((p) => ({
     ...p,
     ideaCount: ideas.filter((i) => i.projectId === p.id).length,
@@ -226,7 +233,7 @@ router.get('/projects', requireAuth, async (_req, res) => {
 router.post('/projects', requireAuth, async (req, res) => {
   const { name } = req.body as { name?: string };
   if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
-  const project = await findOrCreateProject(name);
+  const project = await findOrCreateProject(ownerId(), name);
   res.json({ project });
 });
 
@@ -234,98 +241,98 @@ router.patch('/projects/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { name } = req.body as { name?: string };
   if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
-  const ok = await updateProject(id, name);
+  const ok = await updateProject(ownerId(), id, name);
   if (!ok) { res.status(404).json({ error: 'Project not found' }); return; }
   res.json({ ok: true });
 });
 
 router.delete('/projects/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const result = await deleteProject(id);
+  const result = await deleteProject(ownerId(), id);
   if (!result.ok) { res.status(400).json({ error: result.error }); return; }
   res.json({ ok: true });
 });
 
 // --- Ideas ---
 router.get('/ideas', requireAuth, async (_req, res) => {
-  const ideas = await getIdeas();
+  const ideas = await getIdeas(ownerId());
   res.json({ ideas });
 });
 
 router.post('/ideas', requireAuth, async (req, res) => {
   const { text, projectId } = req.body as { text?: string; projectId?: number };
   if (!text?.trim()) { res.status(400).json({ error: 'text is required' }); return; }
-  const pid = projectId ?? (await getDefaultProject()).id;
-  const idea = await addIdea(text, pid);
+  const pid = projectId ?? (await getDefaultProject(ownerId())).id;
+  const idea = await addIdea(ownerId(), text, pid);
   res.json({ idea });
 });
 
 router.patch('/ideas/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { text, projectId } = req.body as { text?: string; projectId?: number };
-  const ok = await updateIdea(id, { text, projectId });
+  const ok = await updateIdea(ownerId(), id, { text, projectId });
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
 });
 
 // Trash routes before /:id to avoid Express matching "trash" as an id
 router.get('/ideas/trash', requireAuth, async (_req, res) => {
-  const ideas = await getTrashedIdeas();
+  const ideas = await getTrashedIdeas(ownerId());
   res.json({ ideas });
 });
 
 router.delete('/ideas/trash', requireAuth, async (_req, res) => {
-  await emptyTrash();
+  await emptyTrash(ownerId());
   res.json({ ok: true });
 });
 
 // Soft delete → trash
 router.delete('/ideas/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const ok = await deleteIdea(id);
+  const ok = await deleteIdea(ownerId(), id);
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
 });
 
 router.post('/ideas/:id/restore', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const ok = await restoreIdea(id);
+  const ok = await restoreIdea(ownerId(), id);
   if (!ok) { res.status(404).json({ error: 'Idea not found in trash' }); return; }
   res.json({ ok: true });
 });
 
 router.delete('/ideas/:id/permanent', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const ok = await permanentlyDeleteIdea(id);
+  const ok = await permanentlyDeleteIdea(ownerId(), id);
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
 });
 
 router.patch('/ideas/:id/done', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const ok = await markIdeaAsDone(id);
+  const ok = await markIdeaAsDone(ownerId(), id);
   if (!ok) { res.status(404).json({ error: 'Idea not found' }); return; }
   res.json({ ok: true });
 });
 
 router.get('/ideas/done', requireAuth, async (_req, res) => {
-  const ideas = await getDoneIdeas();
+  const ideas = await getDoneIdeas(ownerId());
   res.json({ ideas });
 });
 
 // --- Dashboard ---
 router.get('/dashboard', requireAuth, async (_req, res) => {
-  const settings = await getSettings();
+  const settings = await getSettings(ownerId());
   const tz = settings.timezone;
 
   const [calAccount, ideasRes, localTasks] = await Promise.all([
-    resolveAccount('calendar'),
-    getIdeas(),
-    getTasks(),
+    resolveAccount(ownerId(), 'calendar'),
+    getIdeas(ownerId()),
+    getTasks(ownerId()),
   ]);
 
   const events = calAccount
-    ? await getEventsForDate(calAccount, new Date(), tz).catch(() => [])
+    ? await getEventsForDate(ownerId(), calAccount, new Date(), tz).catch(() => [])
     : [];
 
   events.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -367,7 +374,7 @@ router.get('/commands', requireAuth, (_req, res) => {
 
 // --- Plan types ---
 router.get('/plans', requireAuth, async (_req, res) => {
-  const plans = await getPlans();
+  const plans = await getPlans(ownerId());
   res.json({ plans });
 });
 
@@ -377,14 +384,14 @@ router.post('/plans', requireAuth, async (req, res) => {
   if (!Array.isArray(days) || days.length === 0) { res.status(400).json({ error: 'days is required' }); return; }
   if (!Array.isArray(slots) || slots.length === 0) { res.status(400).json({ error: 'slots is required' }); return; }
   if (!durationMinutes || durationMinutes < 1) { res.status(400).json({ error: 'durationMinutes is required' }); return; }
-  const plan = await createPlan({ name: name.trim(), days, slots, durationMinutes, bufferMinutes: bufferMinutes ?? 30 });
+  const plan = await createPlan(ownerId(), { name: name.trim(), days, slots, durationMinutes, bufferMinutes: bufferMinutes ?? 30 });
   res.json({ plan });
 });
 
 router.patch('/plans/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { name, days, slots, durationMinutes, bufferMinutes } = req.body as Partial<{ name: string; days: number[]; slots: string[]; durationMinutes: number; bufferMinutes: number }>;
-  const ok = await updatePlan(id, {
+  const ok = await updatePlan(ownerId(), id, {
     ...(name !== undefined && { name: name.trim() }),
     ...(days !== undefined && { days }),
     ...(slots !== undefined && { slots }),
@@ -397,14 +404,14 @@ router.patch('/plans/:id', requireAuth, async (req, res) => {
 
 router.delete('/plans/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const ok = await deletePlan(id);
+  const ok = await deletePlan(ownerId(), id);
   if (!ok) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json({ ok: true });
 });
 
 // --- Pending reminders ---
 router.get('/reminders', requireAuth, async (_req, res) => {
-  const reminders = await getReminders();
+  const reminders = await getReminders(ownerId());
   res.json({ reminders });
 });
 
@@ -416,7 +423,7 @@ router.put('/reminders/:id', requireAuth, async (req, res) => {
   if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
     res.status(400).json({ error: 'fireAt must be a valid future datetime' }); return;
   }
-  const reminders = await getReminders();
+  const reminders = await getReminders(ownerId());
   const reminder = reminders.find((r) => r.id === id);
   if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
   await cancelMessage(reminder.messageId).catch(() => {});
@@ -425,17 +432,18 @@ router.put('/reminders/:id', requireAuth, async (req, res) => {
     reminderId: id,
     title: reminder.title,
     phoneNumber: reminder.phoneNumber,
+    userId: ownerId(),
   });
-  await updateReminder(id, { fireAt: newFireAt.toISOString(), messageId: newMessageId });
+  await updateReminder(ownerId(), id, { fireAt: newFireAt.toISOString(), messageId: newMessageId });
   res.json({ ok: true });
 });
 
 router.delete('/reminders/:id', requireAuth, async (req, res) => {
   const id = req.params['id'] as string;
-  const reminders = await getReminders();
+  const reminders = await getReminders(ownerId());
   const reminder = reminders.find((r) => r.id === id);
   if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
-  await removeReminder(id);
+  await removeReminder(ownerId(), id);
   await cancelMessage(reminder.messageId).catch(() => {});
   res.json({ ok: true });
 });
@@ -443,39 +451,39 @@ router.delete('/reminders/:id', requireAuth, async (req, res) => {
 // --- Links ---
 router.get('/links', requireAuth, async (req, res) => {
   const filter = (req.query as { filter?: string }).filter;
-  const links = filter === 'read' ? await getReadLinks() : await getLinks();
+  const links = filter === 'read' ? await getReadLinks(ownerId()) : await getLinks(ownerId());
   res.json({ links });
 });
 
 router.post('/links', requireAuth, async (req, res) => {
   const { url, tags, name } = req.body as { url?: string; tags?: string[]; name?: string };
   if (!url?.trim()) { res.status(400).json({ error: 'url is required' }); return; }
-  res.json({ link: await addLink(url, tags ?? [], name) });
+  res.json({ link: await addLink(ownerId(), url, tags ?? [], name) });
 });
 
 router.patch('/links/:id', requireAuth, async (req, res) => {
-  const ok = await updateLink(Number(req.params['id']), req.body as { url?: string; tags?: string[]; name?: string });
+  const ok = await updateLink(ownerId(), Number(req.params['id']), req.body as { url?: string; tags?: string[]; name?: string });
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
 router.post('/links/:id/read', requireAuth, async (req, res) => {
-  const ok = await markLinkRead(Number(req.params['id']));
+  const ok = await markLinkRead(ownerId(), Number(req.params['id']));
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found or already read' });
 });
 
 router.delete('/links/:id', requireAuth, async (req, res) => {
-  const ok = await deleteLink(Number(req.params['id']));
+  const ok = await deleteLink(ownerId(), Number(req.params['id']));
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
 // --- UCLA ---
 router.get('/ucla', requireAuth, async (_req, res) => {
-  const items = await getUclaItems();
+  const items = await getUclaItems(ownerId());
   res.json({ items });
 });
 
 router.get('/ucla/done', requireAuth, async (_req, res) => {
-  const items = await getDoneUclaItems();
+  const items = await getDoneUclaItems(ownerId());
   res.json({ items });
 });
 
@@ -490,11 +498,11 @@ router.post('/ucla', requireAuth, async (req, res) => {
     due = parsedDue.toISOString();
   }
 
-  const item = await addUclaItem(text.trim(), { dueDate: due });
+  const item = await addUclaItem(ownerId(), text.trim(), { dueDate: due });
 
   // Mirror the WhatsApp flow: a due date schedules the automatic 24h reminder.
   if (due) {
-    const owner = ownerPhone();
+    const owner = ownerId();
     const fireAt = new Date(due).getTime() - 24 * 60 * 60 * 1000;
     const delaySeconds = Math.floor((fireAt - Date.now()) / 1000);
     if (owner && delaySeconds > 0) {
@@ -503,8 +511,9 @@ router.post('/ucla', requireAuth, async (req, res) => {
         text: item.text,
         dueAt: due,
         phoneNumber: owner,
+        userId: owner,
       });
-      await updateUclaItem(item.id, { dueReminderId });
+      await updateUclaItem(ownerId(), item.id, { dueReminderId });
       item.dueReminderId = dueReminderId;
     }
   }
@@ -514,7 +523,7 @@ router.post('/ucla', requireAuth, async (req, res) => {
 
 router.patch('/ucla/:id/done', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const item = await markUclaItemDone(id);
+  const item = await markUclaItemDone(ownerId(), id);
   if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
   for (const messageId of [item.qstashMessageId, item.dueReminderId]) {
     if (messageId) await cancelMessage(messageId).catch(() => {});
@@ -524,35 +533,35 @@ router.patch('/ucla/:id/done', requireAuth, async (req, res) => {
 
 router.delete('/ucla/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const item = await getUclaItem(id);
+  const item = await getUclaItem(ownerId(), id);
   for (const messageId of [item?.qstashMessageId, item?.dueReminderId]) {
     if (messageId) await cancelMessage(messageId).catch(() => {});
   }
-  const ok = await deleteUclaItem(id);
+  const ok = await deleteUclaItem(ownerId(), id);
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
 // --- Local Tasks ---
 router.get('/tasks', requireAuth, async (_req, res) => {
-  const items = await getTasks();
+  const items = await getTasks(ownerId());
   res.json({ items });
 });
 
 router.get('/tasks/done', requireAuth, async (_req, res) => {
-  const items = await getDoneTasks();
+  const items = await getDoneTasks(ownerId());
   res.json({ items });
 });
 
 router.post('/tasks', requireAuth, async (req, res) => {
   const { title, project } = req.body as { title?: string; project?: string };
   if (!title?.trim()) { res.status(400).json({ error: 'title required' }); return; }
-  const item = await addTask({ title: title.trim(), project });
+  const item = await addTask(ownerId(), { title: title.trim(), project });
   res.json({ item });
 });
 
 router.patch('/tasks/:id/done', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const task = await markTaskDone(id);
+  const task = await markTaskDone(ownerId(), id);
   if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
   if (task.qstashMessageId) {
     await cancelMessage(task.qstashMessageId).catch(() => null);
@@ -561,14 +570,9 @@ router.patch('/tasks/:id/done', requireAuth, async (req, res) => {
 });
 
 router.delete('/tasks/:id', requireAuth, async (req, res) => {
-  const ok = await deleteTask(Number(req.params.id));
+  const ok = await deleteTask(ownerId(), Number(req.params.id));
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
-
-// --- Snooze / Remind helpers ---
-function ownerPhone(): string {
-  return env.WHITELISTED_NUMBERS.split(',')[0].trim();
-}
 
 function parseSnoozeOption(body: unknown): SnoozeOption | null {
   const option = (body as { option?: string }).option;
@@ -581,8 +585,8 @@ router.post('/reminders/:id/snooze', requireAuth, async (req, res) => {
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const settings = await getSettings();
-  const reminders = await getReminders();
+  const settings = await getSettings(ownerId());
+  const reminders = await getReminders(ownerId());
   const reminder = reminders.find((r) => r.id === req.params.id);
   if (!reminder) { res.status(404).json({ error: 'Reminder not found' }); return; }
 
@@ -592,8 +596,9 @@ router.post('/reminders/:id/snooze', requireAuth, async (req, res) => {
     reminderId: reminder.id,
     title: reminder.title,
     phoneNumber: reminder.phoneNumber,
+    userId: ownerId(),
   });
-  await updateReminder(reminder.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
+  await updateReminder(ownerId(), reminder.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -603,20 +608,21 @@ router.post('/tasks/:id/snooze', requireAuth, async (req, res) => {
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const tasks = await getTasks();
+  const tasks = await getTasks(ownerId());
   const task = tasks.find((t) => t.id === id);
   if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
 
   if (task.qstashMessageId) await cancelMessage(task.qstashMessageId).catch(() => {});
 
-  const settings = await getSettings();
+  const settings = await getSettings(ownerId());
   const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
-    phoneNumber: ownerPhone(),
+    phoneNumber: ownerId(),
+    userId: ownerId(),
   });
-  await updateTaskQStashId(id, newMessageId);
+  await updateTaskQStashId(ownerId(), id, newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -626,18 +632,19 @@ router.post('/tasks/:id/remind', requireAuth, async (req, res) => {
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const tasks = await getTasks();
+  const tasks = await getTasks(ownerId());
   const task = tasks.find((t) => t.id === id);
   if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
 
-  const settings = await getSettings();
+  const settings = await getSettings(ownerId());
   const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
-    phoneNumber: ownerPhone(),
+    phoneNumber: ownerId(),
+    userId: ownerId(),
   });
-  await updateTaskQStashId(id, newMessageId);
+  await updateTaskQStashId(ownerId(), id, newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -647,19 +654,20 @@ router.post('/ucla/:id/snooze', requireAuth, async (req, res) => {
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const item = await getUclaItem(id);
+  const item = await getUclaItem(ownerId(), id);
   if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
 
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
 
-  const settings = await getSettings();
+  const settings = await getSettings(ownerId());
   const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     uclaItemId: id,
     text: item.text,
-    phoneNumber: ownerPhone(),
+    phoneNumber: ownerId(),
+    userId: ownerId(),
   });
-  await updateUclaItemReminder(id, fireAt.toISOString(), newMessageId);
+  await updateUclaItemReminder(ownerId(), id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -672,16 +680,17 @@ router.put('/tasks/:id/reminder', requireAuth, async (req, res) => {
   if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
     res.status(400).json({ error: 'Invalid or past date' }); return;
   }
-  const tasks = await getTasks();
+  const tasks = await getTasks(ownerId());
   const task = tasks.find((t) => t.id === id);
   if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
   if (task.qstashMessageId) await cancelMessage(task.qstashMessageId).catch(() => {});
   const newMessageId = await scheduleOnce('/internal/task/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
     taskId: id,
     title: task.title,
-    phoneNumber: ownerPhone(),
+    phoneNumber: ownerId(),
+    userId: ownerId(),
   });
-  await updateTaskQStashId(id, newMessageId);
+  await updateTaskQStashId(ownerId(), id, newMessageId);
   res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 
@@ -691,23 +700,24 @@ router.post('/ucla/:id/remind', requireAuth, async (req, res) => {
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const item = await getUclaItem(id);
+  const item = await getUclaItem(ownerId(), id);
   if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
 
-  const settings = await getSettings();
+  const settings = await getSettings(ownerId());
   const fireAt = getSnoozeDate(option, settings.timezone);
   const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
     uclaItemId: id,
     text: item.text,
-    phoneNumber: ownerPhone(),
+    phoneNumber: ownerId(),
+    userId: ownerId(),
   });
-  await updateUclaItemReminder(id, fireAt.toISOString(), newMessageId);
+  await updateUclaItemReminder(ownerId(), id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
 // --- Health alerts (nightly health check) ---
 router.get('/health-alerts', requireAuth, async (_req, res) => {
-  const [alerts, settings] = await Promise.all([getHealthAlerts(), getSettings()]);
+  const [alerts, settings] = await Promise.all([getHealthAlerts(), getSettings(ownerId())]);
   res.json({ alerts, lastRunAt: settings.healthCheck?.lastRunAt ?? null });
 });
 
@@ -720,15 +730,16 @@ router.put('/ucla/:id/reminder', requireAuth, async (req, res) => {
   if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
     res.status(400).json({ error: 'Invalid or past date' }); return;
   }
-  const item = await getUclaItem(id);
+  const item = await getUclaItem(ownerId(), id);
   if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
   const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
     uclaItemId: id,
     text: item.text,
-    phoneNumber: ownerPhone(),
+    phoneNumber: ownerId(),
+    userId: ownerId(),
   });
-  await updateUclaItemReminder(id, newFireAt.toISOString(), newMessageId);
+  await updateUclaItemReminder(ownerId(), id, newFireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 

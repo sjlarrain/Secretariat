@@ -3,8 +3,8 @@ import { scheduleOnce } from '../qstash/client';
 
 const PROMOTE_WINDOW = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
 
-export async function promoteDeferred(): Promise<{ promoted: number; skipped: number }> {
-  const reminders = await getReminders();
+export async function promoteDeferred(userId: string): Promise<{ promoted: number; skipped: number }> {
+  const reminders = await getReminders(userId);
   const deferred = reminders.filter((r) => r.deferred);
   const now = Date.now();
 
@@ -27,8 +27,9 @@ export async function promoteDeferred(): Promise<{ promoted: number; skipped: nu
       reminderId: r.id,
       title: r.title,
       phoneNumber: r.phoneNumber,
+      userId,
     });
-    await updateReminder(r.id, { messageId, deferred: false });
+    await updateReminder(userId, r.id, { messageId, deferred: false });
     promoted++;
   }
 

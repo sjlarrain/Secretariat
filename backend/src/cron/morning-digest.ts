@@ -3,17 +3,16 @@ import { getTodayEvents } from '../integrations/google/calendar';
 import { getUpcomingUclaItems } from '../integrations/local/ucla';
 import { formatDate, formatTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
-import { whitelistedNumbers } from '../env';
 
 const UCLA_LOOKAHEAD_HOURS = 48;
 
-export async function fireMorningDigest(): Promise<void> {
-  const settings = await getSettings();
+export async function fireMorningDigest(userId: string): Promise<void> {
+  const settings = await getSettings(userId);
   if (!settings.morningDigest.enabled) return;
 
-  const calAccounts = (await getAllAccounts()).filter((a) => a.type === 'calendar');
+  const calAccounts = (await getAllAccounts(userId)).filter((a) => a.type === 'calendar');
   const allEvents = (
-    await Promise.all(calAccounts.map((acc) => getTodayEvents(acc, settings.timezone)))
+    await Promise.all(calAccounts.map((acc) => getTodayEvents(userId, acc, settings.timezone)))
   ).flat();
 
   allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -34,7 +33,7 @@ export async function fireMorningDigest(): Promise<void> {
     }
   }
 
-  const { upcoming, overdue } = await getUpcomingUclaItems(UCLA_LOOKAHEAD_HOURS, today);
+  const { upcoming, overdue } = await getUpcomingUclaItems(userId, UCLA_LOOKAHEAD_HOURS, today);
 
   if (overdue.length > 0) {
     lines.push('\n🎓 *UCLA — overdue:*');
@@ -52,8 +51,5 @@ export async function fireMorningDigest(): Promise<void> {
     }
   }
 
-  const owner = whitelistedNumbers[0];
-  if (owner) {
-    await sendMessage(owner, lines.join('\n'));
-  }
+  await sendMessage(userId, lines.join('\n'));
 }

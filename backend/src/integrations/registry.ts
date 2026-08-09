@@ -2,8 +2,12 @@ import { ConnectedAccount, getAllAccounts, getAccount, saveAccount, deleteAccoun
 
 export { ConnectedAccount };
 
-export async function resolveAccount(type: 'calendar' | 'tasks', alias?: string): Promise<ConnectedAccount | null> {
-  const accounts = await getAllAccounts();
+export async function resolveAccount(
+  userId: string,
+  type: 'calendar' | 'tasks',
+  alias?: string
+): Promise<ConnectedAccount | null> {
+  const accounts = await getAllAccounts(userId);
 
   if (alias) {
     return accounts.find((a) => a.alias.toLowerCase() === alias.toLowerCase() && a.type === type) ?? null;
@@ -12,8 +16,8 @@ export async function resolveAccount(type: 'calendar' | 'tasks', alias?: string)
   return accounts.find((a) => a.isDefault && a.type === type) ?? null;
 }
 
-export async function setDefault(id: string): Promise<void> {
-  await setDefaultAccount(id);
+export async function setDefault(userId: string, id: string): Promise<void> {
+  await setDefaultAccount(userId, id);
 }
 
 export { getAllAccounts, getAccount, saveAccount, deleteAccount };

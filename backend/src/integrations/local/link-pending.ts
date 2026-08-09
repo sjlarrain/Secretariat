@@ -1,16 +1,15 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
+import { userKey } from '../../redis/keys';
 
 const redis = new Redis({
   url: env.UPSTASH_REDIS_REST_URL,
   token: env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-const PENDING_KEY = 'secretariat:links:pending';
-
-// Single-user bot: one pending "awaiting a name" link at a time is enough.
-// Saving a new link overwrites this, so naming always targets the most
-// recently saved link unless the user swipe-replies to an older confirmation.
+// One pending "awaiting a name" link at a time, per user, is enough. Saving a
+// new link overwrites this, so naming always targets that user's most
+// recently saved link unless they swipe-reply to an older confirmation.
 const TTL_SEC = 600; // 10 minutes
 
 export interface PendingLink {
@@ -18,14 +17,14 @@ export interface PendingLink {
   position: number;
 }
 
-export async function setPendingLink(linkId: number, position: number): Promise<void> {
-  await redis.set(PENDING_KEY, { linkId, position }, { ex: TTL_SEC });
+export async function setPendingLink(userId: string, linkId: number, position: number): Promise<void> {
+  await redis.set(userKey(userId, 'links-pending'), { linkId, position }, { ex: TTL_SEC });
 }
 
-export async function getPendingLink(): Promise<PendingLink | null> {
-  return redis.get<PendingLink>(PENDING_KEY);
+export async function getPendingLink(userId: string): Promise<PendingLink | null> {
+  return redis.get<PendingLink>(userKey(userId, 'links-pending'));
 }
 
-export async function clearPendingLink(): Promise<void> {
-  await redis.del(PENDING_KEY);
+export async function clearPendingLink(userId: string): Promise<void> {
+  await redis.del(userKey(userId, 'links-pending'));
 }

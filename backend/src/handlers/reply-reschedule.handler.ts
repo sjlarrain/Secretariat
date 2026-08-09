@@ -1,11 +1,12 @@
 import { getReplyTarget } from '../integrations/local/wa-reply-map';
-import { getSettings } from '../integrations/token-store';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../utils/date';
 import { sendMessage } from '../kapso/client';
 import { scheduleOnce, cancelMessage } from '../qstash/client';
 import { getReminders, updateReminder, saveReminder } from '../integrations/local/reminders';
 import { getTasks, updateTaskQStashId } from '../integrations/local/tasks';
 import { getUclaItem, updateUclaItemReminder } from '../integrations/local/ucla';
+import { getSettings } from '../integrations/token-store';
+import { Ctx } from '../ctx';
 
 // Extracts --for / -f and --at / -a / @HH:MM from a plain text reply.
 function extractRescheduleFlags(text: string): { forStr: string | null; atStr: string | null } {
@@ -19,13 +20,12 @@ function extractRescheduleFlags(text: string): { forStr: string | null; atStr: s
 }
 
 // Returns true if the reply was handled (matched a known reminder/task/ucla message).
-export async function replyRescheduleHandler(contextMessageId: string, text: string, from: string): Promise<boolean> {
+export async function replyRescheduleHandler(contextMessageId: string, text: string, ctx: Ctx): Promise<boolean> {
+  const from = ctx.userId;
   const target = await getReplyTarget(contextMessageId);
   if (!target) return false;
 
-  const settings = await getSettings();
-  const { timezone, defaultTaskTime } = settings;
-  const time = defaultTaskTime ?? '09:00';
+  const { timezone } = ctx;
 
   const { forStr, atStr } = extractRescheduleFlags(text);
   if (!forStr) {
@@ -39,7 +39,10 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
     return true;
   }
 
-  const fireAt = combineDateAndTime(date, atStr ?? time, timezone);
+  // Reschedules that omit --at fall back to the *data owner's* default task
+  // time (not the replier's), since that's whose reminder/task this is.
+  const ownerSettings = await getSettings(target.userId);
+  const fireAt = combineDateAndTime(date, atStr ?? ownerSettings.defaultTaskTime ?? '09:00', timezone);
   if (fireAt.getTime() <= Date.now()) {
     await sendMessage(from, '❌ That date is in the past.');
     return true;
@@ -47,13 +50,14 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
 
   const delaySeconds = Math.floor((fireAt.getTime() - Date.now()) / 1000);
   const label = `${formatDate(fireAt, false, timezone)} at ${formatTime(fireAt, timezone)}`;
+  const ownerId = target.userId;
 
   try {
     if (target.type === 'rem') {
       // The reminder is deleted from Redis the moment it fires (routes/internal.ts),
       // so fall back to the title/phone cached in the wa-reply-map (`target`) and
       // re-save the reminder if it's no longer there.
-      const reminders = await getReminders();
+      const reminders = await getReminders(ownerId);
       const reminder = reminders.find((r) => r.id === target.id);
       if (reminder) {
         await cancelMessage(reminder.messageId).catch(() => null);
@@ -62,17 +66,18 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
         reminderId: target.id,
         title: target.title,
         phoneNumber: target.phoneNumber,
+        userId: ownerId,
       });
       if (reminder) {
-        await updateReminder(target.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
+        await updateReminder(ownerId, target.id, { fireAt: fireAt.toISOString(), messageId: newMessageId });
       } else {
-        await saveReminder({ id: target.id, title: target.title, phoneNumber: target.phoneNumber, fireAt: fireAt.toISOString(), messageId: newMessageId });
+        await saveReminder(ownerId, { id: target.id, title: target.title, phoneNumber: target.phoneNumber, fireAt: fireAt.toISOString(), messageId: newMessageId });
       }
       await sendMessage(from, `⏰ Rescheduled: _"${target.title}"_\nNew time: ${label}`);
 
     } else if (target.type === 'task') {
       const taskId = Number(target.id);
-      const tasks = await getTasks();
+      const tasks = await getTasks(ownerId);
       const task = tasks.find((t) => t.id === taskId);
       if (!task) {
         await sendMessage(from, '❌ Task not found.');
@@ -83,13 +88,14 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
         taskId,
         title: task.title,
         phoneNumber: from,
+        userId: ownerId,
       });
-      await updateTaskQStashId(taskId, newMessageId);
+      await updateTaskQStashId(ownerId, taskId, newMessageId);
       await sendMessage(from, `📌 Task rescheduled: _"${task.title}"_\nNew time: ${label}`);
 
     } else {
       const uclaId = Number(target.id);
-      const item = await getUclaItem(uclaId);
+      const item = await getUclaItem(ownerId, uclaId);
       if (!item) {
         await sendMessage(from, '❌ UCLA item not found.');
         return true;
@@ -99,8 +105,9 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
         uclaItemId: uclaId,
         text: item.text,
         phoneNumber: from,
+        userId: ownerId,
       });
-      await updateUclaItemReminder(uclaId, fireAt.toISOString(), newMessageId);
+      await updateUclaItemReminder(ownerId, uclaId, fireAt.toISOString(), newMessageId);
       await sendMessage(from, `🎓 UCLA item rescheduled: _"${item.text}"_\nNew time: ${label}`);
     }
   } catch (err) {

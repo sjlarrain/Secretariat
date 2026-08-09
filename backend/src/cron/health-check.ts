@@ -3,7 +3,6 @@ import { fetchPhoneHealth } from '../kapso/platform';
 import { sendMessage, kapsoStats } from '../kapso/client';
 import { listSchedules } from '../qstash/client';
 import { reconcileHealthAlerts, pingRedis, HealthAlert } from '../integrations/local/health-alerts';
-import { whitelistedNumbers } from '../env';
 import { GoogleTokens, getAuthenticatedClient, CalendarDisconnectedError } from '../integrations/google/oauth';
 
 type Found = Omit<HealthAlert, 'firstSeenAt' | 'lastSeenAt'>;
@@ -15,9 +14,15 @@ type Found = Omit<HealthAlert, 'firstSeenAt' | 'lastSeenAt'>;
  * reliable surface. The WhatsApp notification is best-effort on top: outside
  * Meta's 24-hour session window a proactive message can be rejected, so a
  * failure to notify is logged rather than treated as a failed run.
+ *
+ * Alerts themselves (`reconcileHealthAlerts`) are system-wide, not per-user —
+ * this checks the shared Kapso number, QStash, and Redis regardless of who
+ * `userId` is. Google account verification is per-user because accounts are;
+ * `userId` is the single known user until the v2 registry (Goal 2) lets this
+ * loop over everyone.
  */
-export async function runHealthCheck(): Promise<{ alerts: number; notified: boolean }> {
-  const settings = await getSettings();
+export async function runHealthCheck(userId: string): Promise<{ alerts: number; notified: boolean }> {
+  const settings = await getSettings(userId);
   const found: Found[] = [];
 
   // --- Kapso messaging health (same probe /status uses) ---
@@ -67,13 +72,13 @@ export async function runHealthCheck(): Promise<{ alerts: number; notified: bool
   // flag: that flag is only ever set as a side effect of some other command
   // actually calling the Google API, so an account nobody has used since it was
   // revoked would stay marked "connected" forever and this check would miss it.
-  const accounts = await getAllAccounts();
+  const accounts = await getAllAccounts(userId);
   for (const account of accounts) {
     try {
       const tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
       const { refreshedTokens } = await getAuthenticatedClient(tokens, account.alias);
       if (refreshedTokens?.access_token) {
-        await saveAccount({
+        await saveAccount(userId, {
           ...account,
           encryptedTokens: encryptTokens({
             access_token: refreshedTokens.access_token,
@@ -84,7 +89,7 @@ export async function runHealthCheck(): Promise<{ alerts: number; notified: bool
       }
     } catch (err) {
       if (err instanceof CalendarDisconnectedError) {
-        await saveAccount({ ...account, isDisconnected: true });
+        await saveAccount(userId, { ...account, isDisconnected: true });
         found.push({
           id: `google:disconnected:${account.id}`,
           kind: 'google',
@@ -176,15 +181,14 @@ export async function runHealthCheck(): Promise<{ alerts: number; notified: bool
   // Notify only about newly-appeared issues, so a long-standing problem does
   // not send the same message every night.
   let notified = false;
-  const owner = whitelistedNumbers[0];
-  if (owner && newAlerts.length > 0) {
+  if (newAlerts.length > 0) {
     const lines = ['🩺 *Health check — new issues:*\n'];
     for (const alert of newAlerts) {
       lines.push(`${alert.severity === 'error' ? '❌' : '⚠️'} ${alert.message}`);
     }
     lines.push('\n_Open the admin panel for details._');
     try {
-      await sendMessage(owner, lines.join('\n'));
+      await sendMessage(userId, lines.join('\n'));
       notified = true;
     } catch (err) {
       // Expected outside Meta's 24h session window — the admin banner still shows it.
@@ -193,7 +197,7 @@ export async function runHealthCheck(): Promise<{ alerts: number; notified: bool
   }
 
   settings.healthCheck = { ...settings.healthCheck, lastRunAt: new Date().toISOString() };
-  await saveSettings(settings);
+  await saveSettings(userId, settings);
 
   return { alerts: alerts.length, notified };
 }

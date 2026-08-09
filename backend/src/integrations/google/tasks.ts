@@ -11,12 +11,12 @@ export interface Task {
   updated: string;
 }
 
-async function getTasksClient(account: ConnectedAccount) {
+async function getTasksClient(userId: string, account: ConnectedAccount) {
   let tokens: GoogleTokens;
   try {
     tokens = decryptTokens<GoogleTokens>(account.encryptedTokens, account.id);
   } catch {
-    await saveAccount({ ...account, isDisconnected: true });
+    await saveAccount(userId, { ...account, isDisconnected: true });
     throw new CalendarDisconnectedError(account.alias);
   }
 
@@ -29,23 +29,24 @@ async function getTasksClient(account: ConnectedAccount) {
         refresh_token: refreshedTokens.refresh_token ?? tokens.refresh_token,
         expiry_date: refreshedTokens.expiry_date ?? tokens.expiry_date,
       }, account.id);
-      await saveAccount(account);
+      await saveAccount(userId, account);
     }
 
     return google.tasks({ version: 'v1', auth: client });
   } catch (err) {
     if (err instanceof CalendarDisconnectedError) {
-      await saveAccount({ ...account, isDisconnected: true });
+      await saveAccount(userId, { ...account, isDisconnected: true });
     }
     throw err;
   }
 }
 
 export async function createTask(
+  userId: string,
   account: ConnectedAccount,
   params: { title: string; dueDate?: Date; notes?: string }
 ): Promise<{ taskId: string }> {
-  const tasks = await getTasksClient(account);
+  const tasks = await getTasksClient(userId, account);
 
   const task = await tasks.tasks.insert({
     tasklist: '@default',
@@ -59,8 +60,8 @@ export async function createTask(
   return { taskId: task.data.id ?? '' };
 }
 
-export async function getPendingTasks(account: ConnectedAccount): Promise<Task[]> {
-  const tasks = await getTasksClient(account);
+export async function getPendingTasks(userId: string, account: ConnectedAccount): Promise<Task[]> {
+  const tasks = await getTasksClient(userId, account);
 
   const res = await tasks.tasks.list({
     tasklist: '@default',
@@ -97,8 +98,8 @@ function mapGoogleTask(t: {
   };
 }
 
-export async function completeTask(account: ConnectedAccount, taskId: string): Promise<void> {
-  const tasks = await getTasksClient(account);
+export async function completeTask(userId: string, account: ConnectedAccount, taskId: string): Promise<void> {
+  const tasks = await getTasksClient(userId, account);
   await tasks.tasks.patch({
     tasklist: '@default',
     task: taskId,
@@ -107,10 +108,11 @@ export async function completeTask(account: ConnectedAccount, taskId: string): P
 }
 
 export async function getTasksUpdatedSince(
+  userId: string,
   account: ConnectedAccount,
   updatedMinISO: string
 ): Promise<Task[]> {
-  const tasks = await getTasksClient(account);
+  const tasks = await getTasksClient(userId, account);
 
   const res = await tasks.tasks.list({
     tasklist: '@default',

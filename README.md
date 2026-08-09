@@ -480,12 +480,16 @@ See [BACKLOG.md](./BACKLOG.md) for the full ordered queue.
 | v1.2 | Flags Manager | ✅ Done — calendar, plans, schedule improvements |
 | v1.3 | Links Manager | ✅ Done — save & tag URLs from WhatsApp |
 | v1.4 | Fixes & /work | ✅ Done — bug fixes, /work list, Ideas done, disconnection detection |
-| v1.6 | Code Review & Hardening | ✅ Done — webhook sig, HKDF tokens, rate limit, XSS fixes |
 | v1.7 | Local Task Manager | ✅ Done — /task command, project tags, reminder scheduling, admin Tasks page |
 | v1.8 | Snooze | ✅ Done — snooze/remind for reminders, tasks, work; WhatsApp interactive buttons; admin modal |
-| v1.9 | Multi-User | ✅ Done (partial) — third-party contacts: /set, /menu, reclassify buttons, done notification |
-| v1.10 | Todoist | Task integration via Todoist API |
-| v1.11 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
-| v1.12 | NLP | Natural language messages via Claude API |
+| v1.9 | Multi-User (precursors) | ✅ Done (partial) — third-party contacts: /set, /menu, reclassify buttons, done notification |
 | v1.13 | Google Tasks Sync | ✅ Done — two-way `/task` ↔ Google Tasks sync, 15-min poll, admin toggle |
-| v1.14 | Review & Feature Request | ✅ Done — `/zone` + `CRON_TZ` digest-time fix, `/gtask` retired into `/task`, `/work` → `/ucla` with due dates, Kapso retry, nightly health check, `/schedule -v` Meet links, admin nav split |
+| v1.14 | Review & Feature Request | ✅ Done — `/zone` + `CRON_TZ` digest-time fix, `/gtask` retired into `/task`, `/work` → `/ucla` with due dates, Kapso retry, nightly health check, `/schedule -v` Meet links, `/mantis` CRM inbox capture, admin nav split |
+| v1.15 | Webhook Hardening | Re-enable webhook HMAC signature verification once Kapso supports it |
+| v2.0 | Multi-User Platform | Full multi-user support — shared state, per-user permissions, multiple owners |
+| v2.1 | Secretariat for Groups | 🔒 Blocked — WhatsApp group chat support |
+| v2.2 | Admin Secrets Manager | Configure Kapso/QStash/Google/Upstash secrets from the admin panel |
+| v2.3 | Slack Integration | Proactive Slack notification when an important message is awaiting a reply/action |
+| v2.4 | Microsoft / Outlook | Azure OAuth2, calendar + tasks |
+| v2.5 | NLP | Natural language messages via Claude API |
+| v2.6 | Reliability & Delivery | Meta-approved message template for proactive digests + alerts |

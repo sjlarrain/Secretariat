@@ -120,7 +120,7 @@ blip from a real outage. `kapso/platform.ts` is the separate Kapso *platform* AP
 
 `integrations/google/oauth.ts` handles the full OAuth2 flow. Every Google API call goes through `getAuthenticatedClient()`, which auto-refreshes the access token if expired and persists the new tokens back to Redis via `saveAccount()`. If the refresh token is invalid (e.g. `invalid_grant`), the error propagates up and the handler replies with the error message.
 
-Currently only Google is implemented. Microsoft (v1.7) and Todoist (v1.6) are in the backlog.
+Currently only Google is implemented. Slack (v2.3) and Microsoft (v2.4) are in the backlog.
 
 ### `/myschedule --plan` Availability Logic
 

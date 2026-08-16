@@ -63,7 +63,13 @@ export interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  timezone: 'America/Santiago',
+  // UTC, not any real user's zone. A user who hasn't set one yet must not
+  // silently inherit someone else's local time — that would land their digests
+  // and day boundaries hours off with no visible error. Registration requires a
+  // timezone (docs/v2-plan.md §B.2), so this is only ever the pre-registration
+  // fallback. `'UTC'` is also what `parseZoneInput()` canonicalizes to, so it
+  // matches what `/zone` would store.
+  timezone: 'UTC',
   morningDigest: { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5] },
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
   uclaReminder: { enabled: true, time: '09:00' },

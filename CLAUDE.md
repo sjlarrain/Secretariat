@@ -89,6 +89,16 @@ cd admin && npm install && npm run build && cd ../backend && npm install && npm 
 
 The backend serves the built admin panel as static files from `admin/dist/`. In development, run both `npm run dev` processes simultaneously.
 
+### Choosing an environment
+
+`env.ts` loads a single dotenv file, by default the one a level above the repo root. `ENV_FILE` selects a different one — use it to run against the v2 Upstash DB without touching the file that holds live v1 credentials:
+
+```bash
+ENV_FILE=../.env.v2 npm run dev    # relative paths resolve from the working directory
+```
+
+The selected file **replaces** the default; it is not layered on top. Every variable must be present in it, so a missing one exits at startup rather than silently falling back to the other environment's value — which is what would otherwise point a v2 run at v1's production Redis. Inline vars (`FOO=bar npm run dev`) still override whichever file is loaded.
+
 > **Note:** the full-build line above contains `npm install`, which you are not permitted to run. Use `npm run build` in each directory and assume dependencies are present.
 
 ---

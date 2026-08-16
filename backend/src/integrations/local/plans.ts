@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
-import { userKey } from '../../redis/keys';
+import { userKey, userSeqKey } from '../../redis/keys';
 import { HashCollection, byId } from '../../redis/hash-collection';
 
 export interface PlanType {
@@ -26,7 +26,7 @@ function getRedis(): Redis {
 }
 
 function plans(userId: string): HashCollection<PlanType> {
-  return new HashCollection<PlanType>(getRedis(), userKey(userId, 'plans'), userKey(userId, 'plans') + ':seq');
+  return new HashCollection<PlanType>(getRedis(), userKey(userId, 'plans'), userSeqKey(userId, 'plans'));
 }
 
 export async function getPlans(userId: string): Promise<PlanType[]> {

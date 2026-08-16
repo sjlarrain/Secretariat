@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
-import { userKey } from '../../redis/keys';
+import { userKey, userSeqKey } from '../../redis/keys';
 import { HashCollection, byId } from '../../redis/hash-collection';
 
 const redis = new Redis({
@@ -18,7 +18,7 @@ export interface Link {
 }
 
 function links(userId: string): HashCollection<Link> {
-  return new HashCollection<Link>(redis, userKey(userId, 'links'), userKey(userId, 'links') + ':seq');
+  return new HashCollection<Link>(redis, userKey(userId, 'links'), userSeqKey(userId, 'links'));
 }
 
 async function getAllLinksRaw(userId: string): Promise<Link[]> {

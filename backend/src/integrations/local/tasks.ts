@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../../env';
-import { userKey } from '../../redis/keys';
+import { userKey, userSeqKey } from '../../redis/keys';
 import { HashCollection, byId } from '../../redis/hash-collection';
 
 const redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
@@ -22,7 +22,7 @@ export interface LocalTask {
 }
 
 function tasks(userId: string): HashCollection<LocalTask> {
-  return new HashCollection<LocalTask>(redis, userKey(userId, 'tasks'), userKey(userId, 'tasks') + ':seq');
+  return new HashCollection<LocalTask>(redis, userKey(userId, 'tasks'), userSeqKey(userId, 'tasks'));
 }
 
 async function getAllTasksRaw(userId: string): Promise<LocalTask[]> {

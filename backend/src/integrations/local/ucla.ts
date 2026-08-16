@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env, whitelistedNumbers } from '../../env';
-import { userKey, legacyWorkKey } from '../../redis/keys';
+import { userKey, userSeqKey, legacyWorkKey } from '../../redis/keys';
 import { HashCollection, byId } from '../../redis/hash-collection';
 
 const redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
@@ -21,7 +21,7 @@ export interface UclaItem {
 }
 
 function ucla(userId: string): HashCollection<UclaItem> {
-  return new HashCollection<UclaItem>(redis, userKey(userId, 'ucla'), userKey(userId, 'ucla') + ':seq');
+  return new HashCollection<UclaItem>(redis, userKey(userId, 'ucla'), userSeqKey(userId, 'ucla'));
 }
 
 async function getAllUclaRaw(userId: string): Promise<UclaItem[]> {

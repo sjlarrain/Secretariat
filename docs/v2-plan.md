@@ -146,6 +146,16 @@ Five QStash crons → one hourly sweeper with per-user timezone resolution and i
 8. Test end-to-end with one non-Santiago user before inviting the rest.
 9. Migrate Santiago's v1 data to `u:<santiago>:*`, remove the proxy shim, leave v1 deployed but idle for one week.
 
+### Migration requirement: seed every `:seq` counter
+
+**The migration script must set each id-minting collection's `:seq` key to the highest id it just wrote.** Skipping this silently destroys data.
+
+`HashCollection.nextId()` mints ids with `INCR` on `u:<userId>:<name>:seq`, which starts at 0 in a fresh namespace. If the migration writes ideas 1–40 but leaves `:seq` unset, the next `/ideas` mints id 1 and the `HSET` **overwrites idea 1** — no error, no duplicate-key failure, the item is just gone.
+
+Six collections mint their own ids and need seeding: `projects`, `ideas`, `links`, `plans`, `tasks`, `ucla`. Build the key with `userSeqKey(userId, name)` — never by hand. `SET <seq> <maxId>` (not `INCR`), so re-running the migration is idempotent.
+
+The remaining collections take externally supplied ids and have no `:seq`: `reminders` (string ids), `accounts` (UUIDs), `third-party-*` (phone numbers), `health-alerts`.
+
 ---
 
 ## Open

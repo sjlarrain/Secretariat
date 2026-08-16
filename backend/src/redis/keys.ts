@@ -43,14 +43,15 @@ export type SystemCollection =
   // every tick, and one HGETALL is cheaper and more predictable than a SCAN
   // over `users:*`. See docs/v2-plan.md §C.3.
   | 'users'
-  | 'unrecognized';
+  | 'unrecognized'
+  | 'invites';
 
 /** Shared/system key, not owned by any single user. */
 export function systemKey(name: SystemCollection): string {
   return `sys:${name}`;
 }
 
-export type PointNamespace = 'dedup' | 'oauth-state' | 'wa-reply';
+export type PointNamespace = 'dedup' | 'oauth-state' | 'wa-reply' | 'invite-claim';
 
 /**
  * Ephemeral, per-flow/per-message point key (single get/set/del, usually

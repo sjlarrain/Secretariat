@@ -68,8 +68,15 @@ export class FakeRedis {
     return decode<T>(entry.value);
   }
 
-  async set(key: string, value: unknown, opts?: { ex?: number }): Promise<'OK'> {
+  // `nx` returns null instead of 'OK' when the key already exists, which is how
+  // a single-use claim (an invite token) is settled atomically rather than by a
+  // read-then-write that two simultaneous redemptions could both pass.
+  async set(key: string, value: unknown, opts?: { ex?: number; nx?: boolean }): Promise<'OK' | null> {
     await tick();
+    if (opts?.nx) {
+      const existing = store.get(key);
+      if (existing && !isExpired(existing)) return null;
+    }
     store.set(key, {
       value: JSON.stringify(value),
       expiresAt: opts?.ex !== undefined ? Date.now() + opts.ex * 1000 : undefined,

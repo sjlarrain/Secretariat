@@ -10,6 +10,12 @@ import {
   saveSettings,
 } from '../integrations/token-store';
 import { setDefault } from '../integrations/registry';
+import { listInvites, createInvite, revokeInvite } from '../integrations/local/invites';
+import {
+  getRegisteredUsers,
+  getUnrecognizedSenders,
+  setUserStatus,
+} from '../integrations/local/users';
 import { scheduleOnce } from '../qstash/client';
 import { getThirdPartyContacts, addThirdPartyContact, removeThirdPartyContact } from '../integrations/local/third-party';
 import {
@@ -748,6 +754,54 @@ router.get('/auth/google/start', requireAuth, (req, res) => {
   const alias = req.query['alias'] as string || 'default';
   const type = req.query['type'] as string || 'calendar';
   res.redirect(`/auth/google/start?alias=${encodeURIComponent(alias)}&type=${encodeURIComponent(type)}`);
+});
+
+// --- Invites (ops) ---
+// Registration is invite-only, so these are how anyone gets in at all. The
+// token is returned in full on creation because the operator has to copy the
+// link out of band; it stays listed so an unused one can be revoked.
+
+router.get('/invites', requireAuth, async (_req, res) => {
+  res.json(await listInvites());
+});
+
+router.post('/invites', requireAuth, async (req: Request, res: Response) => {
+  const { note } = (req.body ?? {}) as { note?: string };
+  const invite = await createInvite(note);
+  res.status(201).json(invite);
+});
+
+router.delete('/invites/:token', requireAuth, async (req: Request, res: Response) => {
+  const result = await revokeInvite(String(req.params['token'] ?? ''));
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// --- Users (ops) ---
+
+router.get('/users', requireAuth, async (_req, res) => {
+  res.json(await getRegisteredUsers());
+});
+
+router.get('/unrecognized', requireAuth, async (_req, res) => {
+  res.json(await getUnrecognizedSenders());
+});
+
+router.patch('/users/:phone/status', requireAuth, async (req: Request, res: Response) => {
+  const { status } = (req.body ?? {}) as { status?: string };
+  if (status !== 'active' && status !== 'disabled') {
+    res.status(400).json({ error: 'status must be "active" or "disabled"' });
+    return;
+  }
+  const ok = await setUserStatus(String(req.params['phone'] ?? ''), status);
+  if (!ok) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 export default router;

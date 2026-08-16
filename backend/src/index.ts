@@ -7,6 +7,7 @@ import webhookRouter from './routes/webhook';
 import internalRouter from './routes/internal';
 import authRouter from './routes/auth';
 import adminRouter from './admin/api';
+import registerRouter from './routes/register';
 
 const app = express();
 
@@ -41,6 +42,9 @@ app.use('/webhook/whatsapp', webhookRouter);
 app.use('/internal', internalRouter);
 app.use('/auth', authRouter);
 app.use('/api/admin', adminRouter);
+// Public — invite-token gated, no session. Mounted before the SPA fallback so
+// it is not swallowed by it.
+app.use('/api/register', registerRouter);
 
 // Serve admin panel static files
 app.use(express.static(path.join(__dirname, '../../admin/dist')));

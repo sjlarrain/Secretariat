@@ -33,6 +33,13 @@ export interface RegisteredUser {
   timezone: string;
   /** Only set if the user asked for calendar linking during onboarding. */
   email?: string;
+  /**
+   * Where the user is in the two-step calendar flow. Only present when an email
+   * was supplied. `pending` means they are waiting on the operator to add that
+   * address as a Google test user — a manual Cloud Console step with no API,
+   * which is why this is tracked rather than inferred.
+   */
+  calendarAccess?: 'pending' | 'ready';
   status: UserStatus;
   createdAt: string;
 }
@@ -66,11 +73,14 @@ export async function registerUser(input: {
   timezone: string;
   email?: string;
 }): Promise<RegisteredUser> {
+  const email = input.email?.trim();
   const user: RegisteredUser = {
     id: input.phone,
     name: input.name.trim(),
     timezone: input.timezone,
-    ...(input.email ? { email: input.email.trim() } : {}),
+    // An email is a request for calendar linking, so it starts the approval
+    // flow rather than just being recorded.
+    ...(email ? { email, calendarAccess: 'pending' as const } : {}),
     status: 'active',
     createdAt: new Date().toISOString(),
   };

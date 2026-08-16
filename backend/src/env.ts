@@ -34,7 +34,14 @@ if (envFileOverride) {
 
 // Note: dotenv does not overwrite variables already present in process.env, so
 // an inline `FOO=bar npm run dev` still wins over whichever file is loaded.
-dotenv.config({ path: envPath });
+//
+// A missing file here is not an error: on a hosted deploy (Render) there is no
+// env file at all and every variable comes from the platform environment. The
+// absence is only worth reporting if validation then fails, which is what the
+// error branch below does — otherwise a machine with no env file produces a
+// list of "Required" errors that never mentions the file was never found.
+const dotenvResult = dotenv.config({ path: envPath });
+const envFileWasLoaded = !dotenvResult.error;
 
 const envSchema = z.object({
   // Admin
@@ -83,9 +90,34 @@ if (!parsed.success) {
   parsed.error.issues.forEach((issue) => {
     console.error(`  ${issue.path.join('.')}: ${issue.message}`);
   });
+  console.error(
+    envFileWasLoaded
+      ? `\nLoaded from ${envPath} — the variables above are missing or invalid in that file.`
+      : `\nNo env file was found at ${envPath}, so every variable had to come from the ` +
+        `process environment. On a hosted deploy that is normal; locally, point ENV_FILE at a file ` +
+        `(e.g. ENV_FILE=../v2.env npm run dev).`
+  );
   process.exit(1);
 }
 
 export const env = parsed.data;
+
+/** Hostname only — the token is the secret, and it must never reach a log. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '(unparseable)';
+  }
+}
+
+// Say out loud which environment this process is pointed at. v1 and v2 share
+// Kapso, QStash, and Google credentials, so the Redis host and BASE_URL are
+// most of what distinguishes them — and pointing a run at the wrong database is
+// invisible in behaviour: the two write different key namespaces, so a
+// misdirected run silently accumulates a parallel dataset instead of failing.
+console.log(
+  `🔌 redis=${hostOf(env.UPSTASH_REDIS_REST_URL)} base=${hostOf(env.BASE_URL)} env=${env.NODE_ENV}`
+);
 
 export const whitelistedNumbers = env.WHITELISTED_NUMBERS.split(',').map((n) => n.trim());

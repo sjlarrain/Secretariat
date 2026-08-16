@@ -4,8 +4,14 @@ import { Redis } from '@upstash/redis';
  * Generic per-user hash-backed collection. HSET/HDEL on a single field are
  * each one atomic Redis op, replacing the v1 pattern (read the whole array,
  * mutate it in memory, write the whole array back) that silently drops
- * concurrent writes when two callers touch the same key close together —
- * see docs/v2-inventory.md §2 for which crons/handlers actually collide.
+ * concurrent writes when two callers touch the same key close together.
+ *
+ * The collections where a cron and an inbound message genuinely race:
+ *   reminders — reminder-promoter vs. /reminder and the snooze button
+ *   tasks     — google-tasks-sync vs. /task
+ *   settings  — health-check and google-tasks-sync vs. /zone and the admin panel
+ *   accounts  — health-check's disconnect marking vs. the OAuth callback
+ * morning-digest and weekly-summary are read-only and race with nothing.
  *
  * Id assignment is atomic too: `nextId()` mints via INCR on a companion
  * `<key>:seq` key instead of the old `Math.max(...ids) + 1` scan, which was

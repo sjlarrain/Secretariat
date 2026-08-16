@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { whitelistedNumbers } from '../env';
-import { sendMessage } from '../kapso/client';
 import { findThirdPartyContact } from '../integrations/local/third-party';
+import {
+  resolveSender,
+  recordUnrecognizedSender,
+  type RegisteredUser,
+} from '../integrations/local/users';
 
 // require() works around the package-exports subpath limitation in CommonJS moduleResolution
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -26,6 +30,8 @@ export interface WebhookExtras {
   contextMessageId: string | null; // set when the user replies to a specific message
   isThirdParty: boolean;
   thirdPartyAlias: string;
+  /** The resolved registry entry. Set for every request that reaches a handler. */
+  user: RegisteredUser | null;
 }
 
 export type WebhookRequest = Request & WebhookExtras;
@@ -62,38 +68,65 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
   }
   (req as WebhookRequest).isThirdParty = false;
   (req as WebhookRequest).thirdPartyAlias = '';
+  (req as WebhookRequest).user = null;
   next();
 }
 
-export async function whitelistMiddleware(
+/**
+ * Resolves the sender against the user registry and attaches the result.
+ *
+ * Three deliberate behaviours, all from docs/v2-plan.md §B.5:
+ *   * An unregistered number gets **no reply**. v1 answered "Unauthorized
+ *     number", which on a shared number tells any wrong-number sender that
+ *     something is listening. The number is recorded for the ops console
+ *     instead.
+ *   * A disabled user is treated the same way — silence, no explanation.
+ *   * Third-party contacts still pass through, since they are a known
+ *     relationship rather than an unknown sender.
+ */
+export async function resolveSenderMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   const phone = (req as WebhookRequest).senderPhone;
-
-  if (!phone || !whitelistedNumbers.includes(phone)) {
-    if (phone) {
-      // Third parties propose events to the owner they're messaging — until
-      // the user registry (v2 Goal 2) exists, that's the single whitelisted
-      // owner, same fallback used throughout crons/handlers.
-      const owner = whitelistedNumbers[0];
-      const contact = owner ? await findThirdPartyContact(owner, phone).catch(() => null) : null;
-      if (contact) {
-        (req as WebhookRequest).isThirdParty = true;
-        (req as WebhookRequest).thirdPartyAlias = contact.alias;
-        next();
-        return;
-      }
-      try {
-        await sendMessage(phone, '❌ Unauthorized number.');
-      } catch {
-        // suppress — still return 200
-      }
-    }
-    res.status(200).json({ ok: false, reason: 'unauthorized' });
+  if (!phone) {
+    res.status(200).json({ ok: false, reason: 'no-sender' });
     return;
   }
 
-  next();
+  const resolved = await resolveSender(phone);
+
+  if (resolved.kind === 'user') {
+    (req as WebhookRequest).user = resolved.user;
+    next();
+    return;
+  }
+
+  if (resolved.kind === 'disabled') {
+    res.status(200).json({ ok: false, reason: 'disabled' });
+    return;
+  }
+
+  // Unknown sender. They may still be a third party proposing an event to a
+  // user who registered them.
+  //
+  // Which user, though, is not yet answerable: third-party contacts are stored
+  // per owner, and scanning every registered user on each unknown message is
+  // work this does not need to do until the feature's multi-user semantics are
+  // specified. Until then it keeps the v1 behaviour of consulting the single
+  // legacy owner. Tracked as part of Goal 2b.
+  const legacyOwner = whitelistedNumbers[0];
+  const contact = legacyOwner
+    ? await findThirdPartyContact(legacyOwner, phone).catch(() => null)
+    : null;
+  if (contact) {
+    (req as WebhookRequest).isThirdParty = true;
+    (req as WebhookRequest).thirdPartyAlias = contact.alias;
+    next();
+    return;
+  }
+
+  await recordUnrecognizedSender(phone).catch(() => undefined);
+  res.status(200).json({ ok: false, reason: 'unrecognized' });
 }

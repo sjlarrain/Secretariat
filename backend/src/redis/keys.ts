@@ -35,7 +35,15 @@ export function userSeqKey(userId: string, name: UserCollection): string {
   return `u:${userId}:${name}:seq`;
 }
 
-export type SystemCollection = 'health-alerts';
+export type SystemCollection =
+  | 'health-alerts'
+  // The user registry, and the log of numbers that messaged without being in
+  // it. Both are single hashes keyed by phone number rather than one Redis key
+  // per user: the hourly sweeper (v2 Goal 3) has to enumerate every user on
+  // every tick, and one HGETALL is cheaper and more predictable than a SCAN
+  // over `users:*`. See docs/v2-plan.md §C.3.
+  | 'users'
+  | 'unrecognized';
 
 /** Shared/system key, not owned by any single user. */
 export function systemKey(name: SystemCollection): string {

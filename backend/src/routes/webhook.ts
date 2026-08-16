@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Redis } from '@upstash/redis';
 import { env } from '../env';
 import { parseCommand } from '../parser/command.parser';
-import { extractWebhookData, whitelistMiddleware, WebhookRequest } from '../middleware/whitelist';
+import { extractWebhookData, resolveSenderMiddleware, WebhookRequest } from '../middleware/whitelist';
 import { sendMessage } from '../kapso/client';
 import { getSettings } from '../integrations/token-store';
 import { Ctx } from '../ctx';
@@ -58,7 +58,7 @@ async function isDuplicate(messageId: string | null): Promise<boolean> {
   }
 }
 
-router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, res: Response) => {
+router.post('/', extractWebhookData, resolveSenderMiddleware, async (req: Request, res: Response) => {
   // Always return 200 — Kapso retries on non-200
   res.status(200).json({ ok: true });
 
@@ -79,9 +79,14 @@ router.post('/', extractWebhookData, whitelistMiddleware, async (req: Request, r
     return;
   }
 
-  // `from` is a whitelisted number past this point, so it is this user's id.
-  const settings = await getSettings(from);
-  const ctx: Ctx = { userId: from, timezone: settings.timezone };
+  // Past the resolution middleware the sender is a known, active user, so their
+  // phone number is their userId. Timezone comes from their settings rather
+  // than the registry entry — `/zone` and the admin panel write settings, so it
+  // is the only value that stays current.
+  const user = (req as WebhookRequest).user;
+  const userId = user?.id ?? from;
+  const settings = await getSettings(userId);
+  const ctx: Ctx = { userId, timezone: settings.timezone };
 
   if (buttonReplyId) {
     try {

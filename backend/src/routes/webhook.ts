@@ -19,6 +19,7 @@ import { uclaHandler } from '../handlers/ucla.handler';
 import { statusHandler } from '../handlers/status.handler';
 import { zoneHandler } from '../handlers/zone.handler';
 import { mantisHandler } from '../handlers/mantis.handler';
+import { panelHandler } from '../handlers/panel.handler';
 import { buttonReplyHandler } from '../handlers/button-reply.handler';
 import { replyRescheduleHandler } from '../handlers/reply-reschedule.handler';
 import { replyLinkNameHandler, pendingLinkNameHandler } from '../handlers/link-name.handler';
@@ -179,6 +180,9 @@ router.post('/', extractWebhookData, resolveSenderMiddleware, async (req: Reques
         break;
       case 'mantis':
         await mantisHandler(data, ctx, messageId);
+        break;
+      case 'panel':
+        await panelHandler(data, ctx);
         break;
       default:
         await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);

@@ -51,7 +51,13 @@ export function systemKey(name: SystemCollection): string {
   return `sys:${name}`;
 }
 
-export type PointNamespace = 'dedup' | 'oauth-state' | 'wa-reply' | 'invite-claim';
+export type PointNamespace =
+  | 'dedup'
+  | 'oauth-state'
+  | 'wa-reply'
+  | 'invite-claim'
+  | 'panel-login'
+  | 'panel-login-claim';
 
 /**
  * Ephemeral, per-flow/per-message point key (single get/set/del, usually

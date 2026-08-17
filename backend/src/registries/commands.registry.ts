@@ -78,4 +78,10 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: [],
     requiredFlags: [],
   },
+  panel: {
+    name: '/panel',
+    description: 'Get a one-time link to sign in to your personal panel.',
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
 };

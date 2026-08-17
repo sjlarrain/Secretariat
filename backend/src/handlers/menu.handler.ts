@@ -69,6 +69,7 @@ Reply _--name text_ after saving to name it right away
 */zone*                   — Show current timezone
 */zone* America/Santiago  — Set timezone (city name tracks DST)
 */zone* GMT-3             — Set timezone by fixed offset
+*/panel*                  — Get a one-time link to your panel
 
 _Send /start to wake up the bot._`;
 

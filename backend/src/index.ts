@@ -8,6 +8,8 @@ import internalRouter from './routes/internal';
 import authRouter from './routes/auth';
 import adminRouter from './admin/api';
 import registerRouter from './routes/register';
+import panelRouter from './routes/panel';
+import userApiRouter from './routes/user-api';
 
 const app = express();
 
@@ -45,6 +47,11 @@ app.use('/api/admin', adminRouter);
 // Public — invite-token gated, no session. Mounted before the SPA fallback so
 // it is not swallowed by it.
 app.use('/api/register', registerRouter);
+// Public login page + session establishment for the per-user panel — see
+// docs/v2-plan.md §B.4. Also mounted before the SPA fallback.
+app.use('/panel', panelRouter);
+// Per-user panel API. Every route inside is gated by requireUserSession.
+app.use('/api/user', userApiRouter);
 
 // Serve admin panel static files
 app.use(express.static(path.join(__dirname, '../../admin/dist')));
@@ -55,7 +62,8 @@ app.get('*', (req, res) => {
     !req.path.startsWith('/api') &&
     !req.path.startsWith('/webhook') &&
     !req.path.startsWith('/internal') &&
-    !req.path.startsWith('/auth')
+    !req.path.startsWith('/auth') &&
+    !req.path.startsWith('/panel')
   ) {
     res.sendFile(path.join(__dirname, '../../admin/dist/index.html'));
   }

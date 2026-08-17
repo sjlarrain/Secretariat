@@ -101,6 +101,20 @@ export async function setUserStatus(phone: string, status: UserStatus): Promise<
   return true;
 }
 
+/**
+ * The operator's half of calendar linking (docs/v2-plan.md §A "Note on #3"):
+ * granting Google access itself is a manual Cloud Console step with no API,
+ * so this only flips the tracked status — it does not touch Google.
+ * Returns null if the user has no pending calendar request to approve.
+ */
+export async function setCalendarReady(phone: string): Promise<RegisteredUser | null> {
+  const user = await users.get(phone);
+  if (!user || user.calendarAccess !== 'pending') return null;
+  const updated: RegisteredUser = { ...user, calendarAccess: 'ready' };
+  await users.set(updated);
+  return updated;
+}
+
 // ── Unrecognized senders ──────────────────────────────────────────────────────
 
 export async function getUnrecognizedSenders(): Promise<UnrecognizedSender[]> {
@@ -117,6 +131,11 @@ export async function recordUnrecognizedSender(phone: string): Promise<void> {
     lastSeenAt: now,
     messageCount: (existing?.messageCount ?? 0) + 1,
   });
+}
+
+/** Drops a number from the unrecognized list — used when it's blocked or registered. */
+export async function removeUnrecognizedSender(phone: string): Promise<boolean> {
+  return unrecognized.remove(phone);
 }
 
 // ── Resolution ────────────────────────────────────────────────────────────────

@@ -23,8 +23,10 @@ import {
   getRegisteredUser,
   getRegisteredUsers,
   setUserStatus,
+  setCalendarReady,
   resolveSender,
   recordUnrecognizedSender,
+  removeUnrecognizedSender,
   getUnrecognizedSenders,
 } from '../integrations/local/users';
 
@@ -154,5 +156,40 @@ describe('unrecognized senders', () => {
     await recordUnrecognizedSender(CARLA);
     await registerUser({ name: 'Carla', phone: CARLA, timezone: 'UTC' });
     expect(await getUnrecognizedSenders()).toHaveLength(0);
+  });
+
+  it('can be cleared explicitly, e.g. when the operator blocks the number', async () => {
+    await recordUnrecognizedSender(STRANGER);
+    expect(await removeUnrecognizedSender(STRANGER)).toBe(true);
+    expect(await getUnrecognizedSenders()).toHaveLength(0);
+  });
+
+  it('reports false removing a number that was never recorded', async () => {
+    expect(await removeUnrecognizedSender(STRANGER)).toBe(false);
+  });
+});
+
+describe('calendar approval', () => {
+  it('moves a pending request to ready', async () => {
+    await registerUser({ name: 'Carla', phone: CARLA, timezone: 'UTC', email: 'carla@example.com' });
+    const updated = await setCalendarReady(CARLA);
+    expect(updated?.calendarAccess).toBe('ready');
+    expect((await getRegisteredUser(CARLA))?.calendarAccess).toBe('ready');
+  });
+
+  it('refuses a user with no email on file', async () => {
+    await registerUser({ name: 'Carla', phone: CARLA, timezone: 'UTC' });
+    expect(await setCalendarReady(CARLA)).toBeNull();
+  });
+
+  it('refuses a request that is already ready', async () => {
+    // Otherwise re-clicking "mark ready" would silently re-notify the user.
+    await registerUser({ name: 'Carla', phone: CARLA, timezone: 'UTC', email: 'carla@example.com' });
+    await setCalendarReady(CARLA);
+    expect(await setCalendarReady(CARLA)).toBeNull();
+  });
+
+  it('returns null for an unregistered number', async () => {
+    expect(await setCalendarReady(STRANGER)).toBeNull();
   });
 });

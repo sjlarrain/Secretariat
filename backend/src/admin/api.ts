@@ -15,7 +15,11 @@ import {
   getRegisteredUsers,
   getUnrecognizedSenders,
   setUserStatus,
+  setCalendarReady,
+  removeUnrecognizedSender,
 } from '../integrations/local/users';
+import { getBlockedSenders, blockSender, unblockSender } from '../integrations/local/blocklist';
+import { sendMessage } from '../kapso/client';
 import { scheduleOnce } from '../qstash/client';
 import { getThirdPartyContacts, addThirdPartyContact, removeThirdPartyContact } from '../integrations/local/third-party';
 import {
@@ -799,6 +803,48 @@ router.patch('/users/:phone/status', requireAuth, async (req: Request, res: Resp
   const ok = await setUserStatus(String(req.params['phone'] ?? ''), status);
   if (!ok) {
     res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+/**
+ * The only thing this endpoint does on Google's side is nothing — granting
+ * access is the Cloud Console step described in docs/v2-plan.md §A "Note on
+ * #3", done by hand before this is ever clicked. This just flips the tracked
+ * status and tells the user their turn is next.
+ */
+router.patch('/users/:phone/calendar-ready', requireAuth, async (req: Request, res: Response) => {
+  const phone = String(req.params['phone'] ?? '');
+  const user = await setCalendarReady(phone);
+  if (!user) {
+    res.status(404).json({ error: 'User not found, or has no pending calendar request' });
+    return;
+  }
+  await sendMessage(
+    phone,
+    `Your calendar access is ready! Send /panel here on WhatsApp to get your sign-in link, then connect Google Calendar from Settings > Accounts.`
+  ).catch(() => undefined); // best-effort — see docs/v2-plan.md's WhatsApp 24h-window note
+  res.json({ ok: true, user });
+});
+
+// --- Unrecognized senders / blocklist (ops) ---
+
+router.get('/blocked', requireAuth, async (_req, res) => {
+  res.json(await getBlockedSenders());
+});
+
+router.post('/unrecognized/:phone/block', requireAuth, async (req: Request, res: Response) => {
+  const phone = String(req.params['phone'] ?? '');
+  const entry = await blockSender(phone);
+  await removeUnrecognizedSender(phone).catch(() => undefined);
+  res.status(201).json(entry);
+});
+
+router.delete('/blocked/:phone', requireAuth, async (req: Request, res: Response) => {
+  const ok = await unblockSender(String(req.params['phone'] ?? ''));
+  if (!ok) {
+    res.status(404).json({ error: 'Not found in blocklist' });
     return;
   }
   res.json({ ok: true });

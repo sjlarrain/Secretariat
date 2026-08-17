@@ -44,7 +44,8 @@ export type SystemCollection =
   // over `users:*`. See docs/v2-plan.md §C.3.
   | 'users'
   | 'unrecognized'
-  | 'invites';
+  | 'invites'
+  | 'blocked';
 
 /** Shared/system key, not owned by any single user. */
 export function systemKey(name: SystemCollection): string {

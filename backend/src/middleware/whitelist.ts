@@ -6,6 +6,7 @@ import {
   recordUnrecognizedSender,
   type RegisteredUser,
 } from '../integrations/local/users';
+import { isBlocked } from '../integrations/local/blocklist';
 
 // require() works around the package-exports subpath limitation in CommonJS moduleResolution
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -105,6 +106,13 @@ export async function resolveSenderMiddleware(
 
   if (resolved.kind === 'disabled') {
     res.status(200).json({ ok: false, reason: 'disabled' });
+    return;
+  }
+
+  // Blocked takes priority over the third-party check below — a blocked
+  // number shouldn't get a foothold just by matching someone's contact list.
+  if (await isBlocked(phone).catch(() => false)) {
+    res.status(200).json({ ok: false, reason: 'blocked' });
     return;
   }
 

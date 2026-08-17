@@ -88,8 +88,9 @@ function loginPage(token: string): string {
           return;
         }
         document.getElementById('title').textContent = 'Signed in';
-        document.getElementById('message').textContent = "You're signed in as " + body.name + ".";
+        document.getElementById('message').textContent = "You're signed in as " + body.name + ". Taking you to your panel…";
         btn.remove();
+        setTimeout(function () { window.location.href = '/app'; }, 800);
       } catch (err) {
         document.getElementById('title').textContent = 'Something went wrong';
         document.getElementById('message').textContent = 'Check your connection and try again.';

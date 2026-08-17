@@ -22,7 +22,7 @@ function getRedis(): Redis {
 
 function stateKey(id: string) { return pointKey('oauth-state', id); }
 
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -31,9 +31,9 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-type CallbackPageVariant = 'success' | 'error';
+export type CallbackPageVariant = 'success' | 'error';
 
-function callbackPage(variant: CallbackPageVariant, title: string, message: string): string {
+export function callbackPage(variant: CallbackPageVariant, title: string, message: string): string {
   const isSuccess = variant === 'success';
   const icon = isSuccess ? '✓' : '✕';
   const iconColor = isSuccess ? '#4ade80' : '#f87171';

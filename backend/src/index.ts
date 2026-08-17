@@ -6,6 +6,7 @@ import { env } from './env';
 import webhookRouter from './routes/webhook';
 import internalRouter from './routes/internal';
 import authRouter from './routes/auth';
+import userAuthRouter from './routes/user-auth';
 import adminRouter from './admin/api';
 import registerRouter from './routes/register';
 import panelRouter from './routes/panel';
@@ -42,6 +43,10 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/webhook/whatsapp', webhookRouter);
 app.use('/internal', internalRouter);
+// Mounted before /auth so its routes are matched first — otherwise a
+// request to /auth/user/* would first be tested (and fall through) against
+// authRouter's own routes before ever reaching this one.
+app.use('/auth/user', userAuthRouter);
 app.use('/auth', authRouter);
 app.use('/api/admin', adminRouter);
 // Public — invite-token gated, no session. Mounted before the SPA fallback so

@@ -11,6 +11,7 @@ import adminRouter from './ops/api';
 import registerRouter from './platform/routes/register';
 import panelRouter from './platform/routes/panel';
 import userApiRouter from './platform/routes/user-api';
+import { ensureSweeperSchedule } from './platform/ensureSweeperSchedule';
 
 const app = express();
 
@@ -77,3 +78,6 @@ app.get('*', (req, res) => {
 app.listen(env.PORT, () => {
   console.log(`Secretariat listening on port ${env.PORT} (${env.NODE_ENV})`);
 });
+
+// Fire-and-forget: does not block the server from accepting requests.
+void ensureSweeperSchedule();

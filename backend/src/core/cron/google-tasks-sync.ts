@@ -4,12 +4,16 @@ import { getAllTasks, addTask, applyGoogleUpdate, LocalTask } from '../integrati
 import { completeTask, getTasksUpdatedSince } from '../integrations/google/tasks';
 
 export async function syncGoogleTasks(userId: string): Promise<{ pulled: number; pushed: number; skipped: boolean }> {
+  const settings = await getSettings(userId);
+  if (!settings.googleTasksSync.enabled) {
+    return { pulled: 0, pushed: 0, skipped: true };
+  }
+
   const account = await resolveAccount(userId, 'tasks');
   if (!account || account.isDisconnected) {
     return { pulled: 0, pushed: 0, skipped: true };
   }
 
-  const settings = await getSettings(userId);
   const lastSyncAt = settings.googleTasksSync.lastSyncAt ?? new Date(0).toISOString();
 
   const remoteTasks = await getTasksUpdatedSince(userId, account, lastSyncAt);

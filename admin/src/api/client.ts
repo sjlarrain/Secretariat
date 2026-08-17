@@ -375,7 +375,6 @@ export interface DigestConfig {
   time: string;
   days?: number[];
   day?: number;
-  scheduleId?: string;
 }
 
 export interface Settings {
@@ -384,10 +383,9 @@ export interface Settings {
   morningDigest: DigestConfig & { days: number[] };
   weeklySummary: DigestConfig & { day: number };
   defaultTaskTime: string; // HH:MM — default reminder time for tasks with --for but no --at
-  reminderPromoter: DigestConfig; // weekly cron to promote deferred reminders to QStash
+  reminderPromoter: DigestConfig; // weekly job to promote deferred reminders to QStash
   googleTasksSync: {
     enabled: boolean;
-    scheduleId?: string;
     lastSyncAt?: string;
   };
   healthCheck: DigestConfig & { lastRunAt?: string }; // nightly system health check

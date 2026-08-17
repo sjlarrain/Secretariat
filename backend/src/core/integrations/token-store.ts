@@ -20,20 +20,17 @@ export interface Settings {
   timezone: string;
   morningDigest: {
     enabled: boolean;
-    time: string;    // HH:MM
+    time: string;    // HH:MM — the hourly sweeper (platform/sweeper.ts) matches on the hour only
     days: number[];  // 0=Sun, 1=Mon, ... 6=Sat
-    scheduleId?: string;
   };
   weeklySummary: {
     enabled: boolean;
     day: number;
     time: string;
-    scheduleId?: string;
   };
   uclaReminder: {
     enabled: boolean;
     time: string;    // HH:MM — fires every Monday
-    scheduleId?: string;
   };
   defaultTaskTime: string; // HH:MM — default reminder time when --for is set but --at is omitted
   reminderPromoter: {
@@ -42,22 +39,18 @@ export interface Settings {
      * than QStash's 7-day max delay are stored as `deferred` with no queued
      * message, and this cron is the only thing that ever converts them into
      * real reminders. Disabling it would silently strand every deferred
-     * reminder, so the value is forced on read, on write, and in
-     * reconcileSchedules. The field is kept only for schedule-config symmetry.
+     * reminder, so the value is forced on read and on write (normalizeSettings).
      */
     enabled: true;
-    time: string;    // HH:MM — weekly run time to promote deferred reminders to QStash
-    scheduleId?: string;
+    time: string;    // HH:MM — weekly run time (Sunday) to promote deferred reminders to QStash
   };
   googleTasksSync: {
     enabled: boolean;      // default false — opt in via admin panel
-    scheduleId?: string;
     lastSyncAt?: string;   // ISO cursor used as updatedMin for the next poll
   };
   healthCheck: {
     enabled: boolean;      // default false — opt in via admin panel
     time: string;          // HH:MM — fires nightly
-    scheduleId?: string;
     lastRunAt?: string;    // ISO timestamp of the last completed run
   };
 }
@@ -142,9 +135,11 @@ export async function deleteAccount(userId: string, id: string): Promise<void> {
 /**
  * Enforces invariants that must hold no matter what is in Redis or what a
  * client sends. Applied on both read and write, so a stored `false` heals
- * itself and a bad write can never persist.
+ * itself and a bad write can never persist. Also the one place PUT /settings
+ * and the /zone handler call before saving, so the response they return
+ * matches what actually lands in Redis.
  */
-function normalizeSettings(settings: Settings): Settings {
+export function normalizeSettings(settings: Settings): Settings {
   // The reminder promoter is not optional — see the Settings type. Deferred
   // reminders have no queued message and depend entirely on it.
   settings.reminderPromoter = { ...settings.reminderPromoter, enabled: true };

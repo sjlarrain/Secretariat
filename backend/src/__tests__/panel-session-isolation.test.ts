@@ -25,11 +25,12 @@ vi.mock('@upstash/redis', async () => {
   return { Redis: FakeRedis };
 });
 
-// reconcileSchedules (hit by PUT /settings) calls out to QStash. Stubbed the
-// same way schedules.test.ts does, so this test never touches the network.
+// user-api.ts imports scheduleOnce/cancelMessage at module load time, which
+// would otherwise construct a real QStash client requiring QSTASH_TOKEN.
+// Stubbed so this test never touches the network.
 vi.mock('../shared/qstash/client', () => ({
-  scheduleCron: vi.fn(async (path: string) => `sched_${path}`),
-  deleteSchedule: vi.fn(async () => undefined),
+  scheduleOnce: vi.fn(async () => 'msg_test'),
+  cancelMessage: vi.fn(async () => undefined),
 }));
 
 import { resetFakeRedis } from './helpers/fake-redis';

@@ -1,17 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { qstashVerify } from '../middleware/qstash-verify';
 import { sendMessage, sendInteractiveButtons } from '../../shared/kapso/client';
-import { fireMorningDigest } from '../../core/cron/morning-digest';
-import { fireWeeklySummary } from '../../core/cron/weekly-summary';
-import { promoteDeferred } from '../../core/cron/reminder-promoter';
-import { syncGoogleTasks } from '../../core/cron/google-tasks-sync';
-import { getUclaItems } from '../../core/integrations/local/ucla';
 import { getSettings } from '../../core/integrations/token-store';
 import { storeReplyTarget } from '../../core/integrations/local/wa-reply-map';
 import { removeReminder } from '../../core/integrations/local/reminders';
-import { runHealthCheck } from '../../ops/cron/health-check';
 import { formatDate, formatTime } from '../../shared/utils/date';
-import { whitelistedNumbers } from '../../shared/env';
+import { runSweep } from '../sweeper';
 
 const router = Router();
 
@@ -49,28 +43,6 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
   } catch (err) {
     console.error('Reminder fire error:', err);
     res.status(500).json({ error: 'Failed to send reminder' });
-  }
-});
-
-router.post('/digest/morning', qstashVerify, async (req: Request, res: Response) => {
-  const { userId } = req.body as { userId?: string };
-  try {
-    await fireMorningDigest(userId ?? whitelistedNumbers[0]);
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('Morning digest error:', err);
-    res.status(500).json({ error: 'Digest failed' });
-  }
-});
-
-router.post('/digest/weekly', qstashVerify, async (req: Request, res: Response) => {
-  const { userId } = req.body as { userId?: string };
-  try {
-    await fireWeeklySummary(userId ?? whitelistedNumbers[0]);
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('Weekly summary error:', err);
-    res.status(500).json({ error: 'Summary failed' });
   }
 });
 
@@ -181,61 +153,20 @@ router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Respo
   }
 });
 
-async function fireUclaDigest(req: Request, res: Response): Promise<void> {
-  const { userId } = req.body as { userId?: string };
-  const owner = userId ?? whitelistedNumbers[0];
+// The hourly sweeper (docs/v2-plan.md §C.5) — replaces the per-user QStash
+// cron schedules that used to hit /digest/morning, /digest/weekly,
+// /digest/ucla, /reminder/promote, /tasks/sync, and /health-check. Those
+// routes are gone: the sweeper calls the same job functions in-process,
+// across every registered user, instead of QStash calling one route per
+// user per job. The one QStash schedule that remains is this one, created
+// once at boot — see platform/ensureSweeperSchedule.ts.
+router.post('/tick', qstashVerify, async (_req: Request, res: Response) => {
   try {
-    const items = await getUclaItems(owner);
-    const settings = await getSettings(owner);
-    if (items.length === 0) {
-      await sendMessage(owner, '✅ UCLA list is clear. Enjoy the week!');
-    } else {
-      const lines = ['🎓 *UCLA list — Monday reminder:*\n'];
-      items.forEach((item, i) => {
-        const due = item.dueDate ? ` _(📅 due ${formatDate(new Date(item.dueDate), true, settings.timezone)})_` : '';
-        lines.push(`${i + 1}. ${item.text}${due}`);
-      });
-      await sendMessage(owner, lines.join('\n'));
-    }
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('UCLA digest error:', err);
-    res.status(500).json({ error: 'UCLA digest failed' });
-  }
-}
-
-router.post('/digest/ucla', qstashVerify, fireUclaDigest);
-
-router.post('/reminder/promote', qstashVerify, async (req: Request, res: Response) => {
-  const { userId } = req.body as { userId?: string };
-  try {
-    const result = await promoteDeferred(userId ?? whitelistedNumbers[0]);
+    const result = await runSweep();
     res.status(200).json({ ok: true, ...result });
   } catch (err) {
-    console.error('Reminder promote error:', err);
-    res.status(500).json({ error: 'Promotion failed' });
-  }
-});
-
-router.post('/tasks/sync', qstashVerify, async (req: Request, res: Response) => {
-  const { userId } = req.body as { userId?: string };
-  try {
-    const result = await syncGoogleTasks(userId ?? whitelistedNumbers[0]);
-    res.status(200).json({ ok: true, ...result });
-  } catch (err) {
-    console.error('Google Tasks sync error:', err);
-    res.status(500).json({ error: 'Sync failed' });
-  }
-});
-
-router.post('/health-check', qstashVerify, async (req: Request, res: Response) => {
-  const { userId } = req.body as { userId?: string };
-  try {
-    const result = await runHealthCheck(userId ?? whitelistedNumbers[0]);
-    res.status(200).json({ ok: true, ...result });
-  } catch (err) {
-    console.error('Health check error:', err);
-    res.status(500).json({ error: 'Health check failed' });
+    console.error('Sweeper tick error:', err);
+    res.status(500).json({ error: 'Sweep failed' });
   }
 });
 

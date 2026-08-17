@@ -118,44 +118,28 @@ export async function runHealthCheck(userId: string): Promise<{ alerts: number; 
     });
   }
 
-  // --- QStash schedule sanity: catch schedules deleted or expired out-of-band ---
-  const expected: { id: string | undefined; label: string; enabled: boolean }[] = [
-    { id: settings.morningDigest.scheduleId, label: 'Morning digest', enabled: settings.morningDigest.enabled },
-    { id: settings.weeklySummary.scheduleId, label: 'Weekly summary', enabled: settings.weeklySummary.enabled },
-    { id: settings.uclaReminder?.scheduleId, label: 'UCLA reminder', enabled: settings.uclaReminder?.enabled ?? false },
-    { id: settings.reminderPromoter?.scheduleId, label: 'Reminder promoter', enabled: settings.reminderPromoter?.enabled ?? false },
-    { id: settings.googleTasksSync?.scheduleId, label: 'Google Tasks sync', enabled: settings.googleTasksSync?.enabled ?? false },
-    { id: settings.healthCheck?.scheduleId, label: 'Health check', enabled: settings.healthCheck?.enabled ?? false },
-  ];
-
-  // An enabled schedule with no ID never got created — typically because
-  // scheduleCron threw (QStash cron quota exceeded) and the error was only
-  // logged. It is silently dead, so it must be reported even though there is no
-  // ID to look up.
-  for (const { id, label, enabled } of expected) {
-    if (enabled && !id) {
+  // --- QStash sweeper schedule sanity ---
+  // Since the cron collapse (docs/v2-plan.md §C.5), digests/reminders/sync
+  // aren't individual per-user QStash schedules any more — there is exactly
+  // one, hitting /internal/tick hourly (created at boot by
+  // platform/ensureSweeperSchedule.ts). If it's missing or duplicated, no
+  // user's digests, reminder promotion, or Google Tasks sync will fire.
+  try {
+    const sweeperSchedules = (await listSchedules()).filter((s) => s.destination.endsWith('/internal/tick'));
+    if (sweeperSchedules.length === 0) {
       found.push({
-        id: `qstash:uncreated:${label}`,
+        id: 'qstash:sweeper-missing',
         kind: 'qstash',
         severity: 'error',
-        message: `${label} is enabled but has no QStash schedule — creating it failed, so it will never fire. Check the QStash cron quota, then re-save settings.`,
-        resolveLink: '/settings/cron',
+        message: 'The hourly sweeper QStash schedule (/internal/tick) is missing — no digests, reminder promotion, or Google Tasks sync will fire for anyone. Restart the server to recreate it, or check the QStash cron quota.',
       });
-    }
-  }
-
-  try {
-    const live = new Set((await listSchedules()).map((s) => s.scheduleId));
-    for (const { id, label, enabled } of expected) {
-      if (enabled && id && !live.has(id)) {
-        found.push({
-          id: `qstash:missing:${label}`,
-          kind: 'qstash',
-          severity: 'error',
-          message: `${label} is enabled but its QStash schedule no longer exists — it will never fire. Re-save settings to recreate it.`,
-          resolveLink: '/settings/cron',
-        });
-      }
+    } else if (sweeperSchedules.length > 1) {
+      found.push({
+        id: 'qstash:sweeper-duplicated',
+        kind: 'qstash',
+        severity: 'warn',
+        message: `${sweeperSchedules.length} sweeper schedules exist for /internal/tick — jobs may fire more than once per hour. Delete the extras in the QStash console.`,
+      });
     }
   } catch (err) {
     found.push({

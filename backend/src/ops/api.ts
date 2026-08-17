@@ -8,6 +8,7 @@ import {
   deleteAccount,
   getSettings,
   saveSettings,
+  normalizeSettings,
 } from '../core/integrations/token-store';
 import { setDefault } from '../core/integrations/registry';
 import { listInvites, createInvite, revokeInvite } from '../auth/invites';
@@ -52,7 +53,6 @@ import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask, updateTaskQS
 import { cancelMessage } from '../shared/qstash/client';
 import { getSnoozeDate, SnoozeOption } from '../shared/utils/snooze';
 import { parseZoneInput } from '../shared/utils/timezone';
-import { reconcileSchedules } from '../core/qstash/schedules';
 
 const router = Router();
 
@@ -225,9 +225,9 @@ router.put('/settings', requireAuth, async (req, res) => {
   }
   next.timezone = zone;
 
-  const reconciled = await reconcileSchedules(ownerId(), current, next);
-  await saveSettings(ownerId(), reconciled);
-  res.json({ ok: true, settings: reconciled });
+  const normalized = normalizeSettings(next);
+  await saveSettings(ownerId(), normalized);
+  res.json({ ok: true, settings: normalized });
 });
 
 // --- Projects ---

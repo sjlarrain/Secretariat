@@ -58,7 +58,12 @@ export type PointNamespace =
   | 'wa-reply'
   | 'invite-claim'
   | 'panel-login'
-  | 'panel-login-claim';
+  | 'panel-login-claim'
+  // Idempotency claim for the hourly sweeper (platform/sweeper.ts): id is
+  // `<userId>:<job>:<bucket>`, where bucket is a local date (daily-cadence
+  // jobs) or `<date>T<hour>` (google-tasks-sync, which fires every tick it's
+  // enabled). A doubled sweep loses the race on the same SET NX and skips.
+  | 'fired';
 
 /**
  * Ephemeral, per-flow/per-message point key (single get/set/del, usually

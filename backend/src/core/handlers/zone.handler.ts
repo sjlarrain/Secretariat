@@ -1,8 +1,7 @@
 import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../../shared/kapso/client';
-import { getSettings, saveSettings } from '../integrations/token-store';
+import { getSettings, saveSettings, normalizeSettings } from '../integrations/token-store';
 import { parseZoneInput, describeZone } from '../../shared/utils/timezone';
-import { reconcileSchedules } from '../qstash/schedules';
 import { formatTime } from '../../shared/utils/date';
 import { Ctx } from '../../shared/ctx';
 
@@ -42,7 +41,7 @@ export async function zoneHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
       return;
     }
 
-    const next = await reconcileSchedules(ctx.userId, current, { ...current, timezone: zone });
+    const next = normalizeSettings({ ...current, timezone: zone });
     await saveSettings(ctx.userId, next);
 
     const now = new Date();
@@ -57,16 +56,18 @@ export async function zoneHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
       lines.push('', '⚠️ Fixed offset — this will _not_ adjust for daylight saving. Use a city name (e.g. `/zone America/Santiago`) if you want that.');
     }
 
-    const rescheduled = [
+    const active = [
       next.morningDigest.enabled && 'morning digest',
       next.weeklySummary.enabled && 'weekly summary',
       next.uclaReminder?.enabled && 'UCLA reminder',
-      next.reminderPromoter?.enabled && 'reminder promoter',
       next.healthCheck?.enabled && 'health check',
     ].filter(Boolean) as string[];
 
-    if (rescheduled.length) {
-      lines.push('', `🔄 Rescheduled: ${rescheduled.join(', ')}.`);
+    // The hourly sweeper (platform/sweeper.ts) reads settings.timezone fresh
+    // on every tick, so there is no separate schedule to recreate — the new
+    // zone applies starting with the next tick that reaches your local time.
+    if (active.length) {
+      lines.push('', `🔄 Now using the new zone for: ${active.join(', ')}.`);
     }
 
     lines.push('', '_Existing one-off reminders keep their original absolute time._');

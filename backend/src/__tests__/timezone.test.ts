@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseZoneInput, buildCron, isValidZone, describeZone } from '../shared/utils/timezone';
+import { parseZoneInput, isValidZone, describeZone } from '../shared/utils/timezone';
 
 // ─── parseZoneInput — IANA names ──────────────────────────────────────────────
 
@@ -80,43 +80,6 @@ describe('parseZoneInput — GMT offsets map to inverted Etc/GMT zones', () => {
   });
 });
 
-// ─── buildCron ────────────────────────────────────────────────────────────────
-
-describe('buildCron', () => {
-  it('embeds the zone and applies no offset math', () => {
-    expect(buildCron('08:00', 'America/Santiago', [1, 2, 3, 4, 5])).toBe(
-      'CRON_TZ=America/Santiago 0 8 * * 1,2,3,4,5'
-    );
-  });
-
-  it('keeps local hour intact regardless of zone', () => {
-    // The old offset-math version rewrote 08:00 into a UTC hour; this must not.
-    expect(buildCron('08:00', 'Asia/Tokyo', [1])).toBe('CRON_TZ=Asia/Tokyo 0 8 * * 1');
-    expect(buildCron('08:00', 'UTC', [1])).toBe('CRON_TZ=UTC 0 8 * * 1');
-  });
-
-  it('does not shift the weekday across a date boundary', () => {
-    // 23:30 Monday in Santiago is Tuesday UTC; under CRON_TZ the day stays 1.
-    expect(buildCron('23:30', 'America/Santiago', [1])).toBe('CRON_TZ=America/Santiago 30 23 * * 1');
-  });
-
-  it('sorts days', () => {
-    expect(buildCron('09:00', 'UTC', [5, 1, 3])).toBe('CRON_TZ=UTC 0 9 * * 1,3,5');
-  });
-
-  it('uses a wildcard for an empty day list', () => {
-    expect(buildCron('09:00', 'UTC', [])).toBe('CRON_TZ=UTC 0 9 * * *');
-  });
-
-  it('handles midnight and single-digit minutes', () => {
-    expect(buildCron('00:05', 'UTC', [0])).toBe('CRON_TZ=UTC 5 0 * * 0');
-  });
-
-  it('throws on malformed time', () => {
-    expect(() => buildCron('not-a-time', 'UTC', [1])).toThrow();
-  });
-});
-
 // ─── isValidZone ──────────────────────────────────────────────────────────────
 
 describe('isValidZone', () => {
@@ -140,9 +103,9 @@ describe('parseZoneInput — idempotence', () => {
 
   it('preserves the uppercase GMT in Etc zones', () => {
     // Regression: title-casing produced "Etc/Gmt+3", which Intl accepts (so it
-    // looked fine) but which QStash's case-sensitive CRON_TZ lookup would not.
+    // looked fine) but is not the canonical spelling stored in Settings.
     const zone = parseZoneInput('GMT-3')!;
+    expect(zone).toBe('Etc/GMT+3');
     expect(parseZoneInput(zone)).toBe('Etc/GMT+3');
-    expect(buildCron('08:00', zone, [1])).toBe('CRON_TZ=Etc/GMT+3 0 8 * * 1');
   });
 });

@@ -65,20 +65,6 @@ export function parseZoneInput(input: string): string | null {
   return canonicalizeZone(raw);
 }
 
-/**
- * Builds a QStash cron expression that fires at `localTime` in `zone`.
- * Days are local weekday numbers (0=Sun..6=Sat) and need no shifting, because
- * QStash resolves the whole expression within the declared zone.
- */
-export function buildCron(localTime: string, zone: string, days: number[]): string {
-  const [h, m] = localTime.split(':').map(Number);
-  if (!Number.isInteger(h) || !Number.isInteger(m)) {
-    throw new Error(`Invalid time: "${localTime}" (expected HH:MM)`);
-  }
-  const dayField = days.length ? [...days].sort((a, b) => a - b).join(',') : '*';
-  return `CRON_TZ=${zone} ${m} ${h} * * ${dayField}`;
-}
-
 /** Human-readable current offset for a zone, e.g. "GMT-3" — for display only. */
 export function describeZone(zone: string, at: Date = new Date()): string {
   const fmt = new Intl.DateTimeFormat('en-US', {

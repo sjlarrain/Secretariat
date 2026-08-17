@@ -131,3 +131,25 @@ export function addDaysToDateOnly(dateStr: string, days: number): string {
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
 }
+
+/**
+ * The wall-clock date, hour, and weekday of `instant` in `timezone` — the
+ * per-user "what time is it right now" the hourly sweeper (platform/sweeper.ts)
+ * needs to decide what's due. `weekday` is 0=Sun..6=Sat, matching the
+ * convention `Settings.morningDigest.days` / `.weeklySummary.day` already use.
+ * Never approximate this with the server's own local time.
+ */
+export function getZonedParts(instant: Date, timezone: string): { dateStr: string; hour: number; weekday: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  const year = get('year');
+  const month = get('month');
+  const day = get('day');
+  const hour = get('hour') % 24; // hour12:false can render midnight as "24"
+  const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return { dateStr, hour, weekday };
+}

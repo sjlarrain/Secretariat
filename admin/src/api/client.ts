@@ -1,23 +1,33 @@
-const BASE = '/api/admin';
+// Two panels share this file: the ops-only admin panel (username/password,
+// data scoped to the one legacy owner — /api/admin) and the per-user panel
+// (WhatsApp-link session, data scoped to whoever is signed in — /api/user).
+// Both expose the identical set of methods below, just against a different
+// base URL and a different "you're not signed in" destination.
+//
+// Every existing page imports the bare `api` export and calls `api.foo()`
+// without knowing which panel it's running in. `setActiveClient` — called
+// once per route by the app shell — swaps which backend those calls hit, so
+// the same Dashboard/Ideas/Links/… components are reused unchanged by both
+// panels instead of forking a second copy of every page.
+function buildClient(base: string, onUnauthorized: () => void) {
+  async function request<T>(path: string, options?: RequestInit): Promise<T> {
+    const res = await fetch(`${base}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      ...options,
+    });
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    ...options,
-  });
+    if (res.status === 401) {
+      onUnauthorized();
+      throw new Error('Unauthorized');
+    }
 
-  if (res.status === 401) {
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Request failed');
+    return data as T;
   }
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? 'Request failed');
-  return data as T;
-}
-
-export const api = {
+  return {
   login: (username: string, password: string) =>
     request('/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
 
@@ -125,7 +135,66 @@ export const api = {
     request(`/links/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   markLinkRead: (id: number) => request(`/links/${id}/read`, { method: 'POST' }),
   deleteLink: (id: number) => request(`/links/${id}`, { method: 'DELETE' }),
-};
+  };
+}
+
+type ApiClient = ReturnType<typeof buildClient>;
+
+// The admin panel: username/password login, redirects to /login when the
+// session lapses.
+export const adminClient = buildClient('/api/admin', () => {
+  window.location.href = '/login';
+});
+
+// The per-user panel: no password, session only exists via a WhatsApp-link
+// login, so there's nowhere to redirect back into except the splash page
+// telling the visitor how to get a new link.
+export const userClient = buildClient('/api/user', () => {
+  window.location.href = '/app/signin';
+});
+
+type PanelMode = 'admin' | 'user';
+
+let activeMode: PanelMode = 'admin';
+let active: ApiClient = adminClient;
+
+/** Selected once per route by the app shell, before any page under it renders. */
+export function setActiveClient(mode: PanelMode): void {
+  activeMode = mode;
+  active = mode === 'admin' ? adminClient : userClient;
+}
+
+/**
+ * Google's OAuth redirect is a full-page navigation, not a fetch through
+ * `request()`, so it can't go through the Proxy below — a page has to build
+ * the URL itself. This is the one place that has to happen, since the admin
+ * and per-user flows are genuinely different routes on the backend (see
+ * routes/auth.ts vs routes/user-auth.ts): getting this wrong would connect a
+ * user's Google account to the admin owner's namespace instead of their own.
+ */
+export function googleAuthStartUrl(alias: string, type: 'calendar' | 'tasks'): string {
+  const query = `alias=${encodeURIComponent(alias)}&type=${encodeURIComponent(type)}`;
+  return activeMode === 'admin' ? `/auth/google/start?${query}` : `/auth/user/google/start?${query}`;
+}
+
+/**
+ * A handful of pages call an ops-only endpoint (getWhitelist) that has no
+ * per-user equivalent — this lets them skip that call under the user panel
+ * instead of the whole page failing when it 404s.
+ */
+export function isAdminMode(): boolean {
+  return activeMode === 'admin';
+}
+
+// Every page imports this and calls api.foo() without knowing which panel
+// it's running in — the Proxy forwards to whichever client
+// `setActiveClient` last selected, so the same page components serve both
+// panels instead of a second copy of each existing for the user panel.
+export const api: ApiClient = new Proxy({} as ApiClient, {
+  get(_target, prop: keyof ApiClient) {
+    return active[prop];
+  },
+});
 
 export interface ThirdPartyContact {
   number: string;

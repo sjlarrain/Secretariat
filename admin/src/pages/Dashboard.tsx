@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Account, Settings, DashboardData } from '../api/client';
+import { api, isAdminMode, Account, Settings, DashboardData } from '../api/client';
 
 interface StatCardProps {
   label: string;
@@ -46,6 +46,7 @@ function formatTaskDue(iso: string | null) {
 }
 
 export default function Dashboard() {
+  const admin = isAdminMode();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [whitelist, setWhitelist] = useState<string[]>([]);
@@ -53,7 +54,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.getAccounts(), api.getSettings(), api.getWhitelist(), api.getDashboard()])
+    // Whitelisted numbers is ops-only config with no per-user equivalent —
+    // /api/user has no such endpoint, so skip the call there rather than
+    // let one 404 fail the whole Promise.all and blank the dashboard.
+    Promise.all([
+      api.getAccounts(),
+      api.getSettings(),
+      admin ? api.getWhitelist() : Promise.resolve({ numbers: [] as string[] }),
+      api.getDashboard(),
+    ])
       .then(([a, s, w, d]) => {
         setAccounts(a.accounts);
         setSettings(s);
@@ -61,7 +70,7 @@ export default function Dashboard() {
         setDashboard(d);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [admin]);
 
   if (loading) {
     return (
@@ -104,7 +113,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${admin ? 3 : 2}, 1fr)`, gap: 14, marginBottom: 28 }}>
         <StatCard
           icon="🔗"
           accent="var(--blue-bright)"
@@ -121,14 +130,16 @@ export default function Dashboard() {
           value={digestActive ? 'Active' : 'Off'}
           sub={digestSub}
         />
-        <StatCard
-          icon="📱"
-          accent="var(--purple)"
-          accentDim="var(--purple-dim)"
-          label="Whitelisted Numbers"
-          value={whitelist.length}
-          sub={whitelist[0] ?? 'None configured'}
-        />
+        {admin && (
+          <StatCard
+            icon="📱"
+            accent="var(--purple)"
+            accentDim="var(--purple-dim)"
+            label="Whitelisted Numbers"
+            value={whitelist.length}
+            sub={whitelist[0] ?? 'None configured'}
+          />
+        )}
       </div>
 
       {/* Bottom sections */}

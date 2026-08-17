@@ -14,14 +14,16 @@ export default function HealthBanner() {
   const [dismissed, setDismissed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const onLoginPage = location.pathname === '/login';
+  // Never fetch from the login page — api.request() redirects to /login on a
+  // 401, so an unauthenticated fetch here would reload the login page, remount
+  // this banner, and loop forever. The .catch() below cannot prevent that,
+  // because the redirect is a side effect inside request() that fires before
+  // the promise rejects. Also skipped under the per-user panel: health alerts
+  // are ops-only system state (Kapso/Google/QStash/Redis), there's no
+  // /api/user equivalent, and a user session can't act on any of it anyway.
+  const onLoginPage = location.pathname === '/login' || location.pathname.startsWith('/app');
 
   useEffect(() => {
-    // Never fetch from the login page. api.request() redirects to /login on a
-    // 401, so an unauthenticated fetch here would reload the login page, remount
-    // this banner, and loop forever — locking the user out. The .catch() below
-    // cannot prevent that, because the redirect is a side effect inside
-    // request() that fires before the promise rejects.
     if (onLoginPage) return;
 
     let cancelled = false;

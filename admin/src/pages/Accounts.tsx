@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, Account, GoogleCalendar } from '../api/client';
+import { api, googleAuthStartUrl, Account, GoogleCalendar } from '../api/client';
 
 const TYPE_ACCENT: Record<string, string> = {
   calendar: 'var(--green)',
@@ -91,11 +91,11 @@ export default function Accounts() {
   function connectGoogle(type: 'calendar' | 'tasks') {
     const alias = prompt(`Alias for this ${type} account (e.g. "personal", "work"):`);
     if (!alias) return;
-    window.location.href = `/api/admin/auth/google/start?alias=${encodeURIComponent(alias)}&type=${type}`;
+    window.location.href = googleAuthStartUrl(alias, type);
   }
 
   function reconnectGoogle(acc: Account) {
-    window.location.href = `/api/admin/auth/google/start?alias=${encodeURIComponent(acc.alias)}&type=${acc.type}`;
+    window.location.href = googleAuthStartUrl(acc.alias, acc.type);
   }
 
   if (loading) {

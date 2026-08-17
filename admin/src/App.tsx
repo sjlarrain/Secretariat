@@ -1,23 +1,33 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import Login from './pages/Login';
+import SignIn from './pages/SignIn';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Whitelist from './pages/Whitelist';
+import ThirdPartyContacts from './pages/ThirdPartyContacts';
 import CronManager from './pages/CronManager';
 import Ideas from './pages/Ideas';
 import Links from './pages/Links';
 import Commands from './pages/Commands';
 import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
+import UserSettings from './pages/UserSettings';
 import TimeConfig from './pages/TimeConfig';
 import UclaPage from './pages/Ucla';
 import RemindersPage from './pages/Reminders';
 import TasksPage from './pages/Tasks';
 import HealthBanner from './components/HealthBanner';
-import { api } from './api/client';
+import { api, setActiveClient } from './api/client';
 import { useIsMobile } from './hooks/useIsMobile';
 
-const NAV_LINKS = [
+interface NavLinkItem {
+  to: string;
+  label: string;
+  icon: string;
+  end?: boolean;
+}
+
+const NAV_LINKS: NavLinkItem[] = [
   { to: '/', label: 'Dashboard', icon: '🏠', end: true },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
@@ -27,7 +37,7 @@ const NAV_LINKS = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
-const MOBILE_NAV = [
+const MOBILE_NAV: NavLinkItem[] = [
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
   { to: '/reminders', label: 'Reminders', icon: '⏰' },
@@ -36,13 +46,26 @@ const MOBILE_NAV = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
+// Same shape, pointed at the per-user panel's routes under /app.
+const USER_NAV_LINKS: NavLinkItem[] = NAV_LINKS.map((l) => ({ ...l, to: l.to === '/' ? '/app' : `/app${l.to}` }));
+const USER_MOBILE_NAV: NavLinkItem[] = MOBILE_NAV.map((l) => ({ ...l, to: `/app${l.to}` }));
+
 // ── Desktop layout ─────────────────────────────────────────
-function Layout({ children }: { children: React.ReactNode }) {
+// Shared by both panels — admin (username/password, brand "Secretariat" /
+// v1.8) and the per-user panel (WhatsApp-link session, brand "Secretariat" /
+// "Your Panel"). Which nav links, tagline, and sign-out destination it uses
+// is passed in rather than forked into a second copy of this component.
+function Layout({ children, navLinks, tagline, signOutTo }: {
+  children: React.ReactNode;
+  navLinks: NavLinkItem[];
+  tagline: string;
+  signOutTo: string;
+}) {
   const navigate = useNavigate();
 
   async function handleLogout() {
     await api.logout();
-    navigate('/login');
+    navigate(signOutTo);
   }
 
   return (
@@ -76,7 +99,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.2px' }}>
               Secretariat
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>v1.8</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{tagline}</div>
           </div>
         </div>
 
@@ -89,7 +112,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           }}>
             Menu
           </div>
-          {NAV_LINKS.map((link) => (
+          {navLinks.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
@@ -141,7 +164,11 @@ function Layout({ children }: { children: React.ReactNode }) {
 }
 
 // ── Mobile home (root nav screen) ─────────────────────────
-function MobileHome({ onLogout }: { onLogout: () => void }) {
+function MobileHome({ onLogout, navLinks, tagline }: {
+  onLogout: () => void;
+  navLinks: NavLinkItem[];
+  tagline: string;
+}) {
   const navigate = useNavigate();
 
   return (
@@ -158,13 +185,13 @@ function MobileHome({ onLogout }: { onLogout: () => void }) {
           }}>🤖</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 20, letterSpacing: '-0.3px' }}>Secretariat</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>v1.8</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{tagline}</div>
           </div>
         </div>
       </div>
 
       <div style={{ flex: 1 }}>
-        {MOBILE_NAV.map((item) => (
+        {navLinks.map((item) => (
           <button
             key={item.to}
             onClick={() => navigate(item.to)}
@@ -232,17 +259,33 @@ function MobileLayout({ children, title }: { children: React.ReactNode; title: s
 function AppInner() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Every page below calls the bare `api` export without knowing which panel
+  // it's running in — this is what decides, once per navigation, which
+  // backend (and which "not signed in" destination) those calls resolve to.
+  // A plain synchronous assignment rather than state/context because it has
+  // to take effect before this render's children mount their data-fetching
+  // effects, and it's idempotent so React re-invoking this body (StrictMode,
+  // concurrent rendering) is harmless.
+  const inUserPanel = location.pathname.startsWith('/app');
+  setActiveClient(inUserPanel ? 'user' : 'admin');
 
   async function handleLogout() {
     await api.logout();
     navigate('/login');
   }
 
+  async function handleUserLogout() {
+    await api.logout();
+    navigate('/app/signin');
+  }
+
   if (isMobile) {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<MobileHome onLogout={handleLogout} />} />
+        <Route path="/" element={<MobileHome onLogout={handleLogout} navLinks={MOBILE_NAV} tagline="v1.8" />} />
         <Route path="/ideas" element={<MobileLayout title="Ideas"><Ideas /></MobileLayout>} />
         <Route path="/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
         <Route path="/reminders" element={<MobileLayout title="Reminders"><RemindersPage /></MobileLayout>} />
@@ -258,6 +301,24 @@ function AppInner() {
         {/* Pre-v1.14 paths */}
         <Route path="/cron" element={<Navigate to="/reminders" replace />} />
         <Route path="/work" element={<Navigate to="/ucla" replace />} />
+
+        {/* Per-user panel */}
+        <Route path="/app/signin" element={<SignIn />} />
+        <Route path="/app" element={<MobileHome onLogout={handleUserLogout} navLinks={USER_MOBILE_NAV} tagline="Your Panel" />} />
+        <Route path="/app/ideas" element={<MobileLayout title="Ideas"><Ideas /></MobileLayout>} />
+        <Route path="/app/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
+        <Route path="/app/reminders" element={<MobileLayout title="Reminders"><RemindersPage /></MobileLayout>} />
+        <Route path="/app/tasks" element={<MobileLayout title="Tasks"><TasksPage /></MobileLayout>} />
+        <Route path="/app/ucla" element={<MobileLayout title="UCLA"><UclaPage /></MobileLayout>} />
+        <Route path="/app/settings" element={<MobileLayout title="Settings"><UserSettings /></MobileLayout>} />
+        <Route path="/app/settings/accounts" element={<MobileLayout title="Accounts"><Accounts /></MobileLayout>} />
+        <Route path="/app/settings/contacts" element={<MobileLayout title="Contacts"><ThirdPartyContacts /></MobileLayout>} />
+        <Route path="/app/settings/plans" element={<MobileLayout title="Plans"><Plans /></MobileLayout>} />
+        <Route path="/app/settings/commands" element={<MobileLayout title="Commands"><Commands /></MobileLayout>} />
+        <Route path="/app/settings/time" element={<MobileLayout title="Time Config"><TimeConfig /></MobileLayout>} />
+        <Route path="/app/settings/cron" element={<MobileLayout title="Digests"><CronManager /></MobileLayout>} />
+        <Route path="/app/*" element={<Navigate to="/app" replace />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -266,20 +327,20 @@ function AppInner() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Layout><Dashboard /></Layout>} />
-      <Route path="/ideas" element={<Layout><Ideas /></Layout>} />
-      <Route path="/links" element={<Layout><Links /></Layout>} />
-      <Route path="/reminders" element={<Layout><RemindersPage /></Layout>} />
-      <Route path="/tasks" element={<Layout><TasksPage /></Layout>} />
-      <Route path="/ucla" element={<Layout><UclaPage /></Layout>} />
+      <Route path="/" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Dashboard /></Layout>} />
+      <Route path="/ideas" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Ideas /></Layout>} />
+      <Route path="/links" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Links /></Layout>} />
+      <Route path="/reminders" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><RemindersPage /></Layout>} />
+      <Route path="/tasks" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><TasksPage /></Layout>} />
+      <Route path="/ucla" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><UclaPage /></Layout>} />
 
-      <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-      <Route path="/settings/accounts" element={<Layout><Accounts /></Layout>} />
-      <Route path="/settings/whitelist" element={<Layout><Whitelist /></Layout>} />
-      <Route path="/settings/plans" element={<Layout><Plans /></Layout>} />
-      <Route path="/settings/commands" element={<Layout><Commands /></Layout>} />
-      <Route path="/settings/time" element={<Layout><TimeConfig /></Layout>} />
-      <Route path="/settings/cron" element={<Layout><CronManager /></Layout>} />
+      <Route path="/settings" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><SettingsPage /></Layout>} />
+      <Route path="/settings/accounts" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Accounts /></Layout>} />
+      <Route path="/settings/whitelist" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Whitelist /></Layout>} />
+      <Route path="/settings/plans" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Plans /></Layout>} />
+      <Route path="/settings/commands" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Commands /></Layout>} />
+      <Route path="/settings/time" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><TimeConfig /></Layout>} />
+      <Route path="/settings/cron" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><CronManager /></Layout>} />
 
       <Route path="/accounts" element={<Navigate to="/settings/accounts" replace />} />
       <Route path="/whitelist" element={<Navigate to="/settings/whitelist" replace />} />
@@ -289,6 +350,24 @@ function AppInner() {
       {/* Pre-v1.14 paths: /cron split into /reminders + /settings/cron; /work became /ucla */}
       <Route path="/cron" element={<Navigate to="/reminders" replace />} />
       <Route path="/work" element={<Navigate to="/ucla" replace />} />
+
+      {/* Per-user panel — same pages, /api/user instead of /api/admin (see api/client.ts) */}
+      <Route path="/app/signin" element={<SignIn />} />
+      <Route path="/app" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Dashboard /></Layout>} />
+      <Route path="/app/ideas" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Ideas /></Layout>} />
+      <Route path="/app/links" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Links /></Layout>} />
+      <Route path="/app/reminders" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><RemindersPage /></Layout>} />
+      <Route path="/app/tasks" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><TasksPage /></Layout>} />
+      <Route path="/app/ucla" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><UclaPage /></Layout>} />
+
+      <Route path="/app/settings" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><UserSettings /></Layout>} />
+      <Route path="/app/settings/accounts" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Accounts /></Layout>} />
+      <Route path="/app/settings/contacts" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><ThirdPartyContacts /></Layout>} />
+      <Route path="/app/settings/plans" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Plans /></Layout>} />
+      <Route path="/app/settings/commands" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Commands /></Layout>} />
+      <Route path="/app/settings/time" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><TimeConfig /></Layout>} />
+      <Route path="/app/settings/cron" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><CronManager /></Layout>} />
+      <Route path="/app/*" element={<Navigate to="/app" replace />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

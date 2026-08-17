@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Redis } from '@upstash/redis';
-import { HashCollection, byId, byDateField } from '../redis/hash-collection';
+import { HashCollection, byId, byDateField } from '../shared/redis/hash-collection';
 import { FakeRedis, resetFakeRedis } from './helpers/fake-redis';
 
 interface Item {

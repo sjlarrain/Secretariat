@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../env', () => ({
+vi.mock('../shared/env', () => ({
   env: {
     UPSTASH_REDIS_REST_URL: 'https://fake.upstash.io',
     UPSTASH_REDIS_REST_TOKEN: 'fake-token',
@@ -15,7 +15,7 @@ vi.mock('@upstash/redis', async () => {
 });
 
 import { resetFakeRedis } from './helpers/fake-redis';
-import { createPanelLoginToken, consumePanelLoginToken } from '../integrations/local/panel-sessions';
+import { createPanelLoginToken, consumePanelLoginToken } from '../auth/panel-sessions';
 
 const ALICE = '+56922222222';
 const BOB = '+56933333333';

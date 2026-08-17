@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../env', () => ({
+vi.mock('../shared/env', () => ({
   env: {
     UPSTASH_REDIS_REST_URL: 'https://fake.upstash.io',
     UPSTASH_REDIS_REST_TOKEN: 'fake-token',
@@ -21,7 +21,7 @@ import {
   listInvites,
   revokeInvite,
   redeemInvite,
-} from '../integrations/local/invites';
+} from '../auth/invites';
 
 const CARLA = '+56922222222';
 const DIEGO = '+56933333333';

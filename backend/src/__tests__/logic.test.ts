@@ -480,7 +480,7 @@ describe('parseButtonId', () => {
 });
 
 // ─── localTimeToCron UTC offset logic ────────────────────────────────────────
-// Mirrors the localTimeToCron helper in admin/api.ts — tests the pure math only.
+// Mirrors the localTimeToCron helper in ops/api.ts — tests the pure math only.
 
 function applyUtcOffset(localTime: string, offsetMin: number, localDays: number[]): { cron: string } {
   const [lh, lm] = localTime.split(':').map(Number);

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // `process.exit(1)` when credentials are absent, and the Upstash client, which
 // each integration constructs at module load.
 
-vi.mock('../env', () => ({
+vi.mock('../shared/env', () => ({
   env: {
     UPSTASH_REDIS_REST_URL: 'https://fake.upstash.io',
     UPSTASH_REDIS_REST_TOKEN: 'fake-token',
@@ -21,8 +21,8 @@ vi.mock('@upstash/redis', async () => {
 });
 
 import { resetFakeRedis, fakeRedisKeys } from './helpers/fake-redis';
-import { addIdea, getIdeas, deleteIdea, getDefaultProject } from '../integrations/local/ideas';
-import { getSettings, saveSettings } from '../integrations/token-store';
+import { addIdea, getIdeas, deleteIdea, getDefaultProject } from '../core/integrations/local/ideas';
+import { getSettings, saveSettings } from '../core/integrations/token-store';
 
 const ALICE = '56911111111';
 const BOB = '56922222222';

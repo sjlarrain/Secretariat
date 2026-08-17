@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCommand } from '../parser/command.parser';
+import { parseCommand } from '../core/parser/command.parser';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

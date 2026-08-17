@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Settings } from '../integrations/token-store';
-import { reconcileSchedules } from '../qstash/schedules';
+import type { Settings } from '../core/integrations/token-store';
+import { reconcileSchedules } from '../core/qstash/schedules';
 
 // Stub QStash so reconcileSchedules can be driven without network access.
 // vi.mock is hoisted above the import above, so the real client (and its env
@@ -8,7 +8,7 @@ import { reconcileSchedules } from '../qstash/schedules';
 const scheduleCron = vi.fn(async (path: string, _cron: string, _body: object) => `sched_${path}`);
 const deleteSchedule = vi.fn(async (_id: string) => {});
 
-vi.mock('../qstash/client', () => ({
+vi.mock('../shared/qstash/client', () => ({
   scheduleCron: (p: string, c: string, b: object) => scheduleCron(p, c, b),
   deleteSchedule: (id: string) => deleteSchedule(id),
 }));

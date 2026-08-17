@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { FLAGS } from '../registries/flags.registry';
-import { COMMANDS } from '../registries/commands.registry';
+import { FLAGS } from '../core/registries/flags.registry';
+import { COMMANDS } from '../core/registries/commands.registry';
 
 // ─── Flag registry integrity ──────────────────────────────────────────────────
 

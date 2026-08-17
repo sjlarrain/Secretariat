@@ -10,7 +10,7 @@ import {
   parseDurationDays,
   formatDateOnly,
   addDaysToDateOnly,
-} from '../utils/date';
+} from '../shared/utils/date';
 
 const TZ = 'America/Santiago';
 

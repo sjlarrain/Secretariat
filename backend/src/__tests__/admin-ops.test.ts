@@ -7,7 +7,7 @@ import type { AddressInfo } from 'net';
 // ADMIN_USERNAME/ADMIN_PASSWORD are mocked here, not read from a real .env,
 // so the admin login flow can be exercised without any live credential.
 
-vi.mock('../env', () => ({
+vi.mock('../shared/env', () => ({
   env: {
     UPSTASH_REDIS_REST_URL: 'https://fake.upstash.io',
     UPSTASH_REDIS_REST_TOKEN: 'fake-token',
@@ -24,7 +24,7 @@ vi.mock('@upstash/redis', async () => {
   return { Redis: FakeRedis };
 });
 
-vi.mock('../qstash/client', () => ({
+vi.mock('../shared/qstash/client', () => ({
   scheduleCron: vi.fn(async (path: string) => `sched_${path}`),
   deleteSchedule: vi.fn(async () => undefined),
   scheduleOnce: vi.fn(async () => 'msg_test'),
@@ -32,13 +32,13 @@ vi.mock('../qstash/client', () => ({
 }));
 
 const sendMessageMock = vi.fn(async () => undefined);
-vi.mock('../kapso/client', () => ({
+vi.mock('../shared/kapso/client', () => ({
   sendMessage: sendMessageMock,
   sendMessageWithId: vi.fn(async () => 'wamid_test'),
 }));
 
 import { resetFakeRedis } from './helpers/fake-redis';
-import { recordUnrecognizedSender } from '../integrations/local/users';
+import { recordUnrecognizedSender } from '../auth/users';
 
 const CARLA = '+56922222222';
 
@@ -48,8 +48,8 @@ let server: import('http').Server;
 beforeAll(async () => {
   const express = (await import('express')).default;
   const session = (await import('express-session')).default;
-  const adminRouter = (await import('../admin/api')).default;
-  const registerRouter = (await import('../routes/register')).default;
+  const adminRouter = (await import('../ops/api')).default;
+  const registerRouter = (await import('../platform/routes/register')).default;
 
   const app = express();
   app.use(express.json());

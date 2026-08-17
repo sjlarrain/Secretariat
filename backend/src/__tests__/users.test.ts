@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // WHITELISTED_NUMBERS still matters: it is the legacy fallback that keeps the
 // bot answering its existing owner while the registry is empty. ALICE below is
 // deliberately the whitelisted number so both paths can be exercised.
-vi.mock('../env', () => ({
+vi.mock('../shared/env', () => ({
   env: {
     UPSTASH_REDIS_REST_URL: 'https://fake.upstash.io',
     UPSTASH_REDIS_REST_TOKEN: 'fake-token',
@@ -28,7 +28,7 @@ import {
   recordUnrecognizedSender,
   removeUnrecognizedSender,
   getUnrecognizedSenders,
-} from '../integrations/local/users';
+} from '../auth/users';
 
 const OWNER = '+56911111111'; // in WHITELISTED_NUMBERS
 const CARLA = '+56922222222';

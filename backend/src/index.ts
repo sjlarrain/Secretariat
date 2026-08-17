@@ -1,16 +1,16 @@
-import './env'; // validate env vars first — crashes on missing
+import './shared/env'; // validate env vars first — crashes on missing
 import express from 'express';
 import session from 'express-session';
 import path from 'path';
-import { env } from './env';
-import webhookRouter from './routes/webhook';
-import internalRouter from './routes/internal';
-import authRouter from './routes/auth';
-import userAuthRouter from './routes/user-auth';
-import adminRouter from './admin/api';
-import registerRouter from './routes/register';
-import panelRouter from './routes/panel';
-import userApiRouter from './routes/user-api';
+import { env } from './shared/env';
+import webhookRouter from './platform/routes/webhook';
+import internalRouter from './platform/routes/internal';
+import authRouter from './ops/routes/google-oauth';
+import userAuthRouter from './platform/routes/user-google-oauth';
+import adminRouter from './ops/api';
+import registerRouter from './platform/routes/register';
+import panelRouter from './platform/routes/panel';
+import userApiRouter from './platform/routes/user-api';
 
 const app = express();
 

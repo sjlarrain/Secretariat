@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseZoneInput, buildCron, isValidZone, describeZone } from '../utils/timezone';
+import { parseZoneInput, buildCron, isValidZone, describeZone } from '../shared/utils/timezone';
 
 // ─── parseZoneInput — IANA names ──────────────────────────────────────────────
 

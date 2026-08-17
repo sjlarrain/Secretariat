@@ -10,7 +10,7 @@ import type { AddressInfo } from 'net';
 // No new dependency is added to get there — express, express-session and
 // Node's built-in http/fetch are already in package.json.
 
-vi.mock('../env', () => ({
+vi.mock('../shared/env', () => ({
   env: {
     UPSTASH_REDIS_REST_URL: 'https://fake.upstash.io',
     UPSTASH_REDIS_REST_TOKEN: 'fake-token',
@@ -27,14 +27,14 @@ vi.mock('@upstash/redis', async () => {
 
 // reconcileSchedules (hit by PUT /settings) calls out to QStash. Stubbed the
 // same way schedules.test.ts does, so this test never touches the network.
-vi.mock('../qstash/client', () => ({
+vi.mock('../shared/qstash/client', () => ({
   scheduleCron: vi.fn(async (path: string) => `sched_${path}`),
   deleteSchedule: vi.fn(async () => undefined),
 }));
 
 import { resetFakeRedis } from './helpers/fake-redis';
-import { registerUser } from '../integrations/local/users';
-import { createPanelLoginToken } from '../integrations/local/panel-sessions';
+import { registerUser } from '../auth/users';
+import { createPanelLoginToken } from '../auth/panel-sessions';
 
 const ALICE = '+56922222222';
 const BOB = '+56933333333';
@@ -47,8 +47,8 @@ beforeAll(async () => {
   // modules build their Redis/QStash clients at import time.
   const express = (await import('express')).default;
   const session = (await import('express-session')).default;
-  const panelRouter = (await import('../routes/panel')).default;
-  const userApiRouter = (await import('../routes/user-api')).default;
+  const panelRouter = (await import('../platform/routes/panel')).default;
+  const userApiRouter = (await import('../platform/routes/user-api')).default;
 
   const app = express();
   app.use(express.json());

@@ -6,7 +6,7 @@ import {
   pointKey,
   legacyWorkKey,
   type UserCollection,
-} from '../redis/keys';
+} from '../shared/redis/keys';
 
 // Every user-owned collection. Kept as an explicit list rather than derived
 // from the type so that adding a collection to `UserCollection` without

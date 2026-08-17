@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import Login from './pages/Login';
 import SignIn from './pages/SignIn';
+import Register from './pages/Register';
+import Welcome from './pages/Welcome';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Whitelist from './pages/Whitelist';
@@ -12,6 +14,9 @@ import Commands from './pages/Commands';
 import Plans from './pages/Plans';
 import SettingsPage from './pages/Settings';
 import UserSettings from './pages/UserSettings';
+import Invites from './pages/Invites';
+import Users from './pages/Users';
+import UnrecognizedSenders from './pages/UnrecognizedSenders';
 import TimeConfig from './pages/TimeConfig';
 import UclaPage from './pages/Ucla';
 import RemindersPage from './pages/Reminders';
@@ -285,6 +290,8 @@ function AppInner() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/register/:token" element={<Register />} />
         <Route path="/" element={<MobileHome onLogout={handleLogout} navLinks={MOBILE_NAV} tagline="v1.8" />} />
         <Route path="/ideas" element={<MobileLayout title="Ideas"><Ideas /></MobileLayout>} />
         <Route path="/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
@@ -296,6 +303,9 @@ function AppInner() {
         <Route path="/settings/plans" element={<MobileLayout title="Plans"><Plans /></MobileLayout>} />
         <Route path="/settings/time" element={<MobileLayout title="Time Config"><TimeConfig /></MobileLayout>} />
         <Route path="/settings/cron" element={<MobileLayout title="Cron Manager"><CronManager /></MobileLayout>} />
+        <Route path="/settings/invites" element={<MobileLayout title="Invites"><Invites /></MobileLayout>} />
+        <Route path="/settings/users" element={<MobileLayout title="Users"><Users /></MobileLayout>} />
+        <Route path="/settings/unrecognized" element={<MobileLayout title="Unrecognized"><UnrecognizedSenders /></MobileLayout>} />
         <Route path="/settings/whitelist" element={<Navigate to="/settings" replace />} />
         <Route path="/settings/commands" element={<Navigate to="/settings" replace />} />
         {/* Pre-v1.14 paths */}
@@ -327,6 +337,8 @@ function AppInner() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/welcome" element={<Welcome />} />
+      <Route path="/register/:token" element={<Register />} />
       <Route path="/" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Dashboard /></Layout>} />
       <Route path="/ideas" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Ideas /></Layout>} />
       <Route path="/links" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Links /></Layout>} />
@@ -341,6 +353,9 @@ function AppInner() {
       <Route path="/settings/commands" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Commands /></Layout>} />
       <Route path="/settings/time" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><TimeConfig /></Layout>} />
       <Route path="/settings/cron" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><CronManager /></Layout>} />
+      <Route path="/settings/invites" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Invites /></Layout>} />
+      <Route path="/settings/users" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Users /></Layout>} />
+      <Route path="/settings/unrecognized" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><UnrecognizedSenders /></Layout>} />
 
       <Route path="/accounts" element={<Navigate to="/settings/accounts" replace />} />
       <Route path="/whitelist" element={<Navigate to="/settings/whitelist" replace />} />

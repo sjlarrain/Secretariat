@@ -14,26 +14,32 @@ export default function HealthBanner() {
   const [dismissed, setDismissed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  // Never fetch from the login page — api.request() redirects to /login on a
-  // 401, so an unauthenticated fetch here would reload the login page, remount
-  // this banner, and loop forever. The .catch() below cannot prevent that,
-  // because the redirect is a side effect inside request() that fires before
-  // the promise rejects. Also skipped under the per-user panel: health alerts
-  // are ops-only system state (Kapso/Google/QStash/Redis), there's no
-  // /api/user equivalent, and a user session can't act on any of it anyway.
-  const onLoginPage = location.pathname === '/login' || location.pathname.startsWith('/app');
+  // Skip every route that isn't inside the authenticated admin section.
+  // api.request() redirects to /login on a 401, so an unauthenticated fetch
+  // here would reload whatever public page the visitor is actually on,
+  // remount this banner, and loop forever — the .catch() below can't prevent
+  // that, because the redirect is a side effect inside request() that fires
+  // before the promise rejects. That's not just /login: /welcome and
+  // /register/:token are public too, and /app/* is the per-user panel, where
+  // health alerts (ops-only system state — Kapso/Google/QStash/Redis) have no
+  // /api/user equivalent and no session there could act on them anyway.
+  const skipFetch =
+    location.pathname === '/login' ||
+    location.pathname === '/welcome' ||
+    location.pathname.startsWith('/register/') ||
+    location.pathname.startsWith('/app');
 
   useEffect(() => {
-    if (onLoginPage) return;
+    if (skipFetch) return;
 
     let cancelled = false;
     api.getHealthAlerts()
       .then((res) => { if (!cancelled) setAlerts(res.alerts); })
       .catch(() => { if (!cancelled) setAlerts([]); });
     return () => { cancelled = true; };
-  }, [onLoginPage]);
+  }, [skipFetch]);
 
-  if (dismissed || alerts.length === 0 || onLoginPage) return null;
+  if (dismissed || alerts.length === 0 || skipFetch) return null;
 
   const hasError = alerts.some((a) => a.severity === 'error');
 

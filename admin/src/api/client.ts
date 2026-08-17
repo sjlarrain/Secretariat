@@ -40,6 +40,22 @@ function buildClient(base: string, onUnauthorized: () => void) {
 
   getWhitelist: () => request<{ numbers: string[] }>('/whitelist'),
 
+  getInvites: () => request<Invite[]>('/invites'),
+  createInvite: (note?: string) => request<Invite>('/invites', { method: 'POST', body: JSON.stringify({ note }) }),
+  revokeInvite: (token: string) => request(`/invites/${token}`, { method: 'DELETE' }),
+
+  getRegisteredUsers: () => request<RegisteredUser[]>('/users'),
+  setRegisteredUserStatus: (phone: string, status: 'active' | 'disabled') =>
+    request(`/users/${encodeURIComponent(phone)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  markCalendarReady: (phone: string) =>
+    request<{ ok: boolean; user: RegisteredUser }>(`/users/${encodeURIComponent(phone)}/calendar-ready`, { method: 'PATCH' }),
+
+  getUnrecognizedSenders: () => request<UnrecognizedSender[]>('/unrecognized'),
+  blockSender: (phone: string) =>
+    request<BlockedSender>(`/unrecognized/${encodeURIComponent(phone)}/block`, { method: 'POST' }),
+  getBlockedSenders: () => request<BlockedSender[]>('/blocked'),
+  unblockSender: (phone: string) => request(`/blocked/${encodeURIComponent(phone)}`, { method: 'DELETE' }),
+
   getThirdPartyContacts: () => request<{ contacts: ThirdPartyContact[] }>('/third-party-contacts'),
   addThirdPartyContact: (number: string, alias: string) =>
     request('/third-party-contacts', { method: 'POST', body: JSON.stringify({ number, alias }) }),
@@ -199,6 +215,41 @@ export const api: ApiClient = new Proxy({} as ApiClient, {
 export interface ThirdPartyContact {
   number: string;
   alias: string;
+}
+
+export type InviteStatus = 'pending' | 'redeemed' | 'revoked';
+
+export interface Invite {
+  id: string;
+  note?: string;
+  status: InviteStatus;
+  createdAt: string;
+  redeemedAt?: string;
+  redeemedBy?: string;
+}
+
+export type UserStatus = 'active' | 'disabled';
+
+export interface RegisteredUser {
+  id: string;
+  name: string;
+  timezone: string;
+  email?: string;
+  calendarAccess?: 'pending' | 'ready';
+  status: UserStatus;
+  createdAt: string;
+}
+
+export interface UnrecognizedSender {
+  id: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  messageCount: number;
+}
+
+export interface BlockedSender {
+  id: string;
+  blockedAt: string;
 }
 
 export interface GoogleCalendar {

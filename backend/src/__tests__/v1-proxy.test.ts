@@ -193,8 +193,8 @@ describe('v1 proxy shim', () => {
       res as never,
       vi.fn()
     );
-    // Clear the inter-attempt backoff.
-    await vi.advanceTimersByTimeAsync(6_000);
+    // Clear the first inter-attempt delay (10s).
+    await vi.advanceTimersByTimeAsync(11_000);
     await settleForwards();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -309,7 +309,9 @@ describe('v1 proxy shim, cold-start delivery', () => {
     let calls = 0;
     fetchMock.mockImplementation(async () => {
       calls++;
-      if (calls <= 3) return new Response('service unavailable', { status: 502 });
+      // Boots after roughly 50s: the attempts at 0s and 10s are refused, the
+      // one at 50s lands.
+      if (calls <= 2) return new Response('service unavailable', { status: 502 });
       return new Response('{}', { status: 200 });
     });
 
@@ -327,7 +329,7 @@ describe('v1 proxy shim, cold-start delivery', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     await settleForwards();
 
-    expect(calls).toBe(4);
+    expect(calls).toBe(3);
     // v1 came up and accepted it, so nothing is owed.
     expect(await readPending()).toBeNull();
   });

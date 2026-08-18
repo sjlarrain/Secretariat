@@ -16,20 +16,19 @@ import type { WebhookRequest } from '../auth/middleware/resolve-sender';
 // and v2 starts handling those senders too. No deploy, and the same switch
 // rolls back.
 //
-// Delivery model — the part that is easy to get wrong, and was:
+// Delivery model — the part that is easy to get wrong, and was, twice:
 //
 // Kapso requires a 200 within 10 seconds and retries three times (+10s, +40s,
 // +90s) otherwise. Render's free tier spins v1 down after 15 minutes idle and
-// takes 30-60s to spin back up, during which Render's router *holds* the
-// inbound request rather than rejecting it or retrying it. Nothing in that
-// chain retries the v2 -> v1 hop: whether a forward survives a cold start is
-// decided entirely by how long this client is willing to wait.
+// takes 30-60s to spin back up. Nothing in that chain retries the v2 -> v1 hop,
+// so this module is solely responsible for getting the message across.
 //
-// So the forward cannot happen inside Kapso's 10s window, and it must not be
-// abandoned early. v2 therefore acks Kapso immediately and owns the delivery
-// from there: claim, record, ack, then forward in the background with a budget
-// long enough to ride out the spin-up. Because the ack is unconditional, no
-// upstream retry exists as a safety net — the pending record below is it.
+// The forward therefore cannot happen inside Kapso's 10s window. v2 acks Kapso
+// immediately and owns delivery from there: claim, record, ack, then forward in
+// the background, waiting out the spin-up *and* retrying through it — see the
+// two cold-start shapes documented on the constants below. Because the ack is
+// unconditional, no upstream retry exists as a safety net; the pending record
+// is it.
 
 // A Render free-tier cold start can present in two completely different ways,
 // and a forward has to survive both. Fixing only one is why this took two goes:
@@ -45,10 +44,15 @@ import type { WebhookRequest } from '../auth/middleware/resolve-sender';
 //
 // Nothing upstream retries the v2 -> v1 hop, so this ladder is the retry.
 const FORWARD_TIMEOUT_MS = 75_000;
-// Six retries spread across ~108s, comfortably past a cold start that fails fast.
-const RETRY_DELAYS_MS = [5_000, 8_000, 13_000, 20_000, 27_000, 35_000];
+// Three retries at 10s / 40s / 90s — the same ladder Kapso uses on its own
+// webhook deliveries, so the two layers behave alike and there is one schedule
+// to reason about. Four attempts spanning 140s, which still clears a 30-60s
+// spin-up twice over.
+const RETRY_DELAYS_MS = [10_000, 40_000, 90_000];
 // Overall ceiling, so a hold-then-timeout v1 can't stack 75s attempts for ten
-// minutes. Past this the message stays in sys:v1-pending for the sweeper.
+// minutes. Past this the message stays in sys:v1-pending for the sweeper. Set
+// above the 140s the ladder spans, so it only ever truncates the slow-timeout
+// case and never cuts the retry schedule short when v1 is failing fast.
 const FORWARD_DEADLINE_MS = 180_000;
 // Duplicate guard on the message id. Held across the background forward: once
 // the ack is sent, a second delivery of the same id genuinely is a duplicate.

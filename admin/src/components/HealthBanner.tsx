@@ -19,13 +19,13 @@ export default function HealthBanner() {
   // here would reload whatever public page the visitor is actually on,
   // remount this banner, and loop forever — the .catch() below can't prevent
   // that, because the redirect is a side effect inside request() that fires
-  // before the promise rejects. That's not just /login: /welcome and
-  // /register/:token are public too, and /app/* is the per-user panel, where
+  // before the promise rejects. That's not just /login: the landing page at /
+  // and /register/:token are public too, and /app/* is the per-user panel, where
   // health alerts (ops-only system state — Kapso/Google/QStash/Redis) have no
   // /api/user equivalent and no session there could act on them anyway.
   const skipFetch =
     location.pathname === '/login' ||
-    location.pathname === '/welcome' ||
+    location.pathname === '/' ||
     location.pathname.startsWith('/register/') ||
     location.pathname.startsWith('/app');
 

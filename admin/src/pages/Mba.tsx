@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, UclaItem, SnoozeOption } from '../api/client';
+import { api, MbaItem, SnoozeOption } from '../api/client';
 import SnoozeModal from '../components/SnoozeModal';
 
 function formatDue(iso: string): string {
@@ -13,9 +13,9 @@ function isDueSoon(iso: string): boolean {
   return new Date(iso).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 }
 
-export default function UclaPage() {
-  const [items, setItems] = useState<UclaItem[]>([]);
-  const [done, setDone] = useState<UclaItem[]>([]);
+export default function MbaPage() {
+  const [items, setItems] = useState<MbaItem[]>([]);
+  const [done, setDone] = useState<MbaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newText, setNewText] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
@@ -24,7 +24,7 @@ export default function UclaPage() {
   const [showDone, setShowDone] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-  const [snoozeTarget, setSnoozeTarget] = useState<{ item: UclaItem; mode: 'snooze' | 'remind' } | null>(null);
+  const [snoozeTarget, setSnoozeTarget] = useState<{ item: MbaItem; mode: 'snooze' | 'remind' } | null>(null);
   const [snoozing, setSnoozing] = useState(false);
   const [editingReminderId, setEditingReminderId] = useState<number | null>(null);
   const [editDate, setEditDate] = useState('');
@@ -33,7 +33,7 @@ export default function UclaPage() {
 
   async function load() {
     setLoading(true);
-    const [activeRes, doneRes] = await Promise.all([api.getUclaItems(), api.getDoneUclaItems()]);
+    const [activeRes, doneRes] = await Promise.all([api.getMbaItems(), api.getDoneMbaItems()]);
     setItems(activeRes.items);
     setDone(doneRes.items);
     setLoading(false);
@@ -56,12 +56,12 @@ export default function UclaPage() {
       const dueDate = newDueDate
         ? new Date(`${newDueDate}T${newDueTime || '23:59'}:00`).toISOString()
         : undefined;
-      const res = await api.createUclaItem(newText.trim(), dueDate);
+      const res = await api.createMbaItem(newText.trim(), dueDate);
       setItems((prev) => [...prev, res.item]);
       setNewText('');
       setNewDueDate('');
       setNewDueTime('');
-      flash(dueDate ? 'Added — reminder set for 24h before it is due.' : 'Added to UCLA list.');
+      flash(dueDate ? 'Added — reminder set for 24h before it is due.' : 'Added to MBA list.');
     } catch {
       flash('Failed to add item.', true);
     } finally {
@@ -72,7 +72,7 @@ export default function UclaPage() {
   async function handleDone(id: number) {
     try {
       const item = items.find((w) => w.id === id);
-      await api.markUclaItemDone(id);
+      await api.markMbaItemDone(id);
       setItems((prev) => prev.filter((w) => w.id !== id));
       if (item) setDone((prev) => [...prev, { ...item, doneAt: new Date().toISOString() }]);
       flash('Marked as done!');
@@ -87,8 +87,8 @@ export default function UclaPage() {
     try {
       const { item, mode } = snoozeTarget;
       const res = mode === 'snooze'
-        ? await api.snoozeUcla(item.id, option) as { ok: boolean; fireAt: string }
-        : await api.remindUcla(item.id, option) as { ok: boolean; fireAt: string };
+        ? await api.snoozeMba(item.id, option) as { ok: boolean; fireAt: string }
+        : await api.remindMba(item.id, option) as { ok: boolean; fireAt: string };
       setItems((prev) => prev.map((w) => w.id === item.id
         ? { ...w, reminderFor: res.fireAt, qstashMessageId: 'scheduled' }
         : w));
@@ -101,7 +101,7 @@ export default function UclaPage() {
     }
   }
 
-  function openEditReminder(item: UclaItem) {
+  function openEditReminder(item: MbaItem) {
     const d = item.reminderFor ? new Date(item.reminderFor) : new Date();
     setEditDate(d.toLocaleDateString('en-CA'));
     setEditTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
@@ -115,7 +115,7 @@ export default function UclaPage() {
     setErr('');
     try {
       const fireAt = new Date(`${editDate}T${editTime}:00`).toISOString();
-      await api.updateUclaReminder(id, fireAt);
+      await api.updateMbaReminder(id, fireAt);
       setItems((prev) => prev.map((w) => w.id === id
         ? { ...w, reminderFor: fireAt, qstashMessageId: w.qstashMessageId ?? 'scheduled' }
         : w));
@@ -129,9 +129,9 @@ export default function UclaPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this UCLA item?')) return;
+    if (!confirm('Delete this MBA item?')) return;
     try {
-      await api.deleteUclaItem(id);
+      await api.deleteMbaItem(id);
       setItems((prev) => prev.filter((w) => w.id !== id));
     } catch {
       flash('Failed to delete item.', true);
@@ -152,7 +152,7 @@ export default function UclaPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>UCLA List</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>MBA List</h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
             {items.length} pending · due items remind 24h ahead · Monday reminder auto-sends to WhatsApp
           </p>
@@ -172,7 +172,7 @@ export default function UclaPage() {
         }}
       >
         <div style={{ flex: 1, minWidth: 200 }}>
-          <label className="field-label">New UCLA item</label>
+          <label className="field-label">New MBA item</label>
           <input
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
@@ -206,9 +206,9 @@ export default function UclaPage() {
       {items.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
           <div style={{ fontSize: 32, marginBottom: 14 }}>✅</div>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>UCLA list is clear!</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>MBA list is clear!</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Add items above or send <code>/ucla your task</code> from WhatsApp.
+            Add items above or send <code>/mba your task</code> from WhatsApp.
           </div>
         </div>
       ) : (

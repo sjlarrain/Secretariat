@@ -39,7 +39,7 @@ const SECTIONS = [
     to: '/app/settings/cron',
     icon: '⏰',
     title: 'Digests',
-    description: 'Digests, UCLA reminder, and task sync schedules',
+    description: 'Digests, MBA reminder, and task sync schedules',
   },
 ];
 

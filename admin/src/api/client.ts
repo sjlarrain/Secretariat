@@ -109,12 +109,12 @@ function buildClient(base: string, onUnauthorized: () => void) {
   markIdeaDone: (id: number) => request(`/ideas/${id}/done`, { method: 'PATCH' }),
   getDoneIdeas: () => request<{ ideas: Idea[] }>('/ideas/done'),
 
-  getUclaItems: () => request<{ items: UclaItem[] }>('/ucla'),
-  getDoneUclaItems: () => request<{ items: UclaItem[] }>('/ucla/done'),
-  createUclaItem: (text: string, dueDate?: string) =>
-    request<{ item: UclaItem }>('/ucla', { method: 'POST', body: JSON.stringify({ text, dueDate }) }),
-  markUclaItemDone: (id: number) => request(`/ucla/${id}/done`, { method: 'PATCH' }),
-  deleteUclaItem: (id: number) => request(`/ucla/${id}`, { method: 'DELETE' }),
+  getMbaItems: () => request<{ items: MbaItem[] }>('/mba'),
+  getDoneMbaItems: () => request<{ items: MbaItem[] }>('/mba/done'),
+  createMbaItem: (text: string, dueDate?: string) =>
+    request<{ item: MbaItem }>('/mba', { method: 'POST', body: JSON.stringify({ text, dueDate }) }),
+  markMbaItemDone: (id: number) => request(`/mba/${id}/done`, { method: 'PATCH' }),
+  deleteMbaItem: (id: number) => request(`/mba/${id}`, { method: 'DELETE' }),
 
   getTasks: () => request<{ items: LocalTask[] }>('/tasks'),
   getDoneTasks: () => request<{ items: LocalTask[] }>('/tasks/done'),
@@ -132,13 +132,13 @@ function buildClient(base: string, onUnauthorized: () => void) {
 
   updateTaskReminder: (id: number, fireAt: string) =>
     request(`/tasks/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
-  updateUclaReminder: (id: number, fireAt: string) =>
-    request(`/ucla/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
+  updateMbaReminder: (id: number, fireAt: string) =>
+    request(`/mba/${id}/reminder`, { method: 'PUT', body: JSON.stringify({ fireAt }) }),
 
-  snoozeUcla: (id: number, option: SnoozeOption) =>
-    request(`/ucla/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
-  remindUcla: (id: number, option: SnoozeOption) =>
-    request(`/ucla/${id}/remind`, { method: 'POST', body: JSON.stringify({ option }) }),
+  snoozeMba: (id: number, option: SnoozeOption) =>
+    request(`/mba/${id}/snooze`, { method: 'POST', body: JSON.stringify({ option }) }),
+  remindMba: (id: number, option: SnoozeOption) =>
+    request(`/mba/${id}/remind`, { method: 'POST', body: JSON.stringify({ option }) }),
 
   getHealthAlerts: () =>
     request<{ alerts: HealthAlert[]; lastRunAt: string | null }>('/health-alerts'),
@@ -347,7 +347,7 @@ export interface Link {
   name?: string;
 }
 
-export interface UclaItem {
+export interface MbaItem {
   id: number;
   text: string;
   createdAt: string;
@@ -379,7 +379,7 @@ export interface DigestConfig {
 
 export interface Settings {
   timezone: string;
-  uclaReminder: DigestConfig;  // every Monday, enabled by default
+  mbaReminder: DigestConfig;  // every Monday, enabled by default
   morningDigest: DigestConfig & { days: number[] };
   weeklySummary: DigestConfig & { day: number };
   defaultTaskTime: string; // HH:MM — default reminder time for tasks with --for but no --at

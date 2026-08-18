@@ -35,7 +35,7 @@ const SECTIONS = [
     to: '/settings/cron',
     icon: '⏰',
     title: 'Cron Manager',
-    description: 'Digests, UCLA reminder, task sync, and nightly health check schedules',
+    description: 'Digests, MBA reminder, task sync, and nightly health check schedules',
   },
 ];
 

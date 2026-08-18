@@ -18,7 +18,7 @@ import Invites from './pages/Invites';
 import Users from './pages/Users';
 import UnrecognizedSenders from './pages/UnrecognizedSenders';
 import TimeConfig from './pages/TimeConfig';
-import UclaPage from './pages/Ucla';
+import MbaPage from './pages/Mba';
 import RemindersPage from './pages/Reminders';
 import TasksPage from './pages/Tasks';
 import HealthBanner from './components/HealthBanner';
@@ -33,12 +33,12 @@ interface NavLinkItem {
 }
 
 const NAV_LINKS: NavLinkItem[] = [
-  { to: '/', label: 'Dashboard', icon: '🏠', end: true },
+  { to: '/dashboard', label: 'Dashboard', icon: '🏠', end: true },
   { to: '/ideas', label: 'Ideas', icon: '💡' },
   { to: '/links', label: 'Links', icon: '🌐' },
   { to: '/reminders', label: 'Reminders', icon: '⏰' },
   { to: '/tasks', label: 'Tasks', icon: '📋' },
-  { to: '/ucla', label: 'UCLA', icon: '🎓' },
+  { to: '/mba', label: 'MBA', icon: '🎓' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -47,12 +47,12 @@ const MOBILE_NAV: NavLinkItem[] = [
   { to: '/links', label: 'Links', icon: '🌐' },
   { to: '/reminders', label: 'Reminders', icon: '⏰' },
   { to: '/tasks', label: 'Tasks', icon: '📋' },
-  { to: '/ucla', label: 'UCLA', icon: '🎓' },
+  { to: '/mba', label: 'MBA', icon: '🎓' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 // Same shape, pointed at the per-user panel's routes under /app.
-const USER_NAV_LINKS: NavLinkItem[] = NAV_LINKS.map((l) => ({ ...l, to: l.to === '/' ? '/app' : `/app${l.to}` }));
+const USER_NAV_LINKS: NavLinkItem[] = NAV_LINKS.map((l) => ({ ...l, to: l.to === '/dashboard' ? '/app' : `/app${l.to}` }));
 const USER_MOBILE_NAV: NavLinkItem[] = MOBILE_NAV.map((l) => ({ ...l, to: `/app${l.to}` }));
 
 // ── Desktop layout ─────────────────────────────────────────
@@ -290,14 +290,15 @@ function AppInner() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/" element={<Welcome />} />
+        <Route path="/welcome" element={<Navigate to="/" replace />} />
         <Route path="/register/:token" element={<Register />} />
-        <Route path="/" element={<MobileHome onLogout={handleLogout} navLinks={MOBILE_NAV} tagline="v1.8" />} />
+        <Route path="/dashboard" element={<MobileHome onLogout={handleLogout} navLinks={MOBILE_NAV} tagline="v1.8" />} />
         <Route path="/ideas" element={<MobileLayout title="Ideas"><Ideas /></MobileLayout>} />
         <Route path="/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
         <Route path="/reminders" element={<MobileLayout title="Reminders"><RemindersPage /></MobileLayout>} />
         <Route path="/tasks" element={<MobileLayout title="Tasks"><TasksPage /></MobileLayout>} />
-        <Route path="/ucla" element={<MobileLayout title="UCLA"><UclaPage /></MobileLayout>} />
+        <Route path="/mba" element={<MobileLayout title="MBA"><MbaPage /></MobileLayout>} />
         <Route path="/settings" element={<MobileLayout title="Settings"><SettingsPage /></MobileLayout>} />
         <Route path="/settings/accounts" element={<MobileLayout title="Accounts"><Accounts /></MobileLayout>} />
         <Route path="/settings/plans" element={<MobileLayout title="Plans"><Plans /></MobileLayout>} />
@@ -308,9 +309,8 @@ function AppInner() {
         <Route path="/settings/unrecognized" element={<MobileLayout title="Unrecognized"><UnrecognizedSenders /></MobileLayout>} />
         <Route path="/settings/whitelist" element={<Navigate to="/settings" replace />} />
         <Route path="/settings/commands" element={<Navigate to="/settings" replace />} />
-        {/* Pre-v1.14 paths */}
+        {/* Pre-v1.14 path: /cron split into /reminders + /settings/cron */}
         <Route path="/cron" element={<Navigate to="/reminders" replace />} />
-        <Route path="/work" element={<Navigate to="/ucla" replace />} />
 
         {/* Per-user panel */}
         <Route path="/app/signin" element={<SignIn />} />
@@ -319,7 +319,7 @@ function AppInner() {
         <Route path="/app/links" element={<MobileLayout title="Links"><Links /></MobileLayout>} />
         <Route path="/app/reminders" element={<MobileLayout title="Reminders"><RemindersPage /></MobileLayout>} />
         <Route path="/app/tasks" element={<MobileLayout title="Tasks"><TasksPage /></MobileLayout>} />
-        <Route path="/app/ucla" element={<MobileLayout title="UCLA"><UclaPage /></MobileLayout>} />
+        <Route path="/app/mba" element={<MobileLayout title="MBA"><MbaPage /></MobileLayout>} />
         <Route path="/app/settings" element={<MobileLayout title="Settings"><UserSettings /></MobileLayout>} />
         <Route path="/app/settings/accounts" element={<MobileLayout title="Accounts"><Accounts /></MobileLayout>} />
         <Route path="/app/settings/contacts" element={<MobileLayout title="Contacts"><ThirdPartyContacts /></MobileLayout>} />
@@ -337,14 +337,15 @@ function AppInner() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/welcome" element={<Welcome />} />
+      <Route path="/" element={<Welcome />} />
+      <Route path="/welcome" element={<Navigate to="/" replace />} />
       <Route path="/register/:token" element={<Register />} />
-      <Route path="/" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Dashboard /></Layout>} />
+      <Route path="/dashboard" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Dashboard /></Layout>} />
       <Route path="/ideas" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Ideas /></Layout>} />
       <Route path="/links" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Links /></Layout>} />
       <Route path="/reminders" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><RemindersPage /></Layout>} />
       <Route path="/tasks" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><TasksPage /></Layout>} />
-      <Route path="/ucla" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><UclaPage /></Layout>} />
+      <Route path="/mba" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><MbaPage /></Layout>} />
 
       <Route path="/settings" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><SettingsPage /></Layout>} />
       <Route path="/settings/accounts" element={<Layout navLinks={NAV_LINKS} tagline="v1.8" signOutTo="/login"><Accounts /></Layout>} />
@@ -362,9 +363,8 @@ function AppInner() {
       <Route path="/plans" element={<Navigate to="/settings/plans" replace />} />
       <Route path="/commands" element={<Navigate to="/settings/commands" replace />} />
 
-      {/* Pre-v1.14 paths: /cron split into /reminders + /settings/cron; /work became /ucla */}
+      {/* Pre-v1.14 path: /cron split into /reminders + /settings/cron */}
       <Route path="/cron" element={<Navigate to="/reminders" replace />} />
-      <Route path="/work" element={<Navigate to="/ucla" replace />} />
 
       {/* Per-user panel — same pages, /api/user instead of /api/admin (see api/client.ts) */}
       <Route path="/app/signin" element={<SignIn />} />
@@ -373,7 +373,7 @@ function AppInner() {
       <Route path="/app/links" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Links /></Layout>} />
       <Route path="/app/reminders" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><RemindersPage /></Layout>} />
       <Route path="/app/tasks" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><TasksPage /></Layout>} />
-      <Route path="/app/ucla" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><UclaPage /></Layout>} />
+      <Route path="/app/mba" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><MbaPage /></Layout>} />
 
       <Route path="/app/settings" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><UserSettings /></Layout>} />
       <Route path="/app/settings/accounts" element={<Layout navLinks={USER_NAV_LINKS} tagline="Your Panel" signOutTo="/app/signin"><Accounts /></Layout>} />

@@ -331,39 +331,39 @@ export default function CronManager() {
             ) : null}
           </div>
 
-          {/* UCLA Reminder */}
+          {/* MBA Reminder */}
           <div className="card" style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 16 }}>🎓</span>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>UCLA List — Monday Reminder</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>MBA List — Monday Reminder</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Sends pending UCLA items every Monday morning
+                    Sends pending MBA items every Monday morning
                   </div>
                 </div>
               </div>
               <label className="toggle">
                 <input
                   type="checkbox"
-                  checked={settings.uclaReminder?.enabled ?? true}
+                  checked={settings.mbaReminder?.enabled ?? true}
                   onChange={(e) => setSettings((prev) => prev ? {
                     ...prev,
-                    uclaReminder: { ...(prev.uclaReminder ?? { enabled: true, time: '09:00' }), enabled: e.target.checked },
+                    mbaReminder: { ...(prev.mbaReminder ?? { enabled: true, time: '09:00' }), enabled: e.target.checked },
                   } : prev)}
                 />
                 <span className="toggle-track" />
               </label>
             </div>
-            {(settings.uclaReminder?.enabled ?? true) && (
+            {(settings.mbaReminder?.enabled ?? true) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                 <label className="field-label" style={{ margin: 0 }}>Time</label>
                 <input
                   type="time"
-                  value={settings.uclaReminder?.time ?? '09:00'}
+                  value={settings.mbaReminder?.time ?? '09:00'}
                   onChange={(e) => setSettings((prev) => prev ? {
                     ...prev,
-                    uclaReminder: { ...(prev.uclaReminder ?? { enabled: true, time: '09:00' }), time: e.target.value },
+                    mbaReminder: { ...(prev.mbaReminder ?? { enabled: true, time: '09:00' }), time: e.target.value },
                   } : prev)}
                   style={{ width: 110 }}
                 />

@@ -15,7 +15,7 @@ export default function Login() {
     setLoading(true);
     try {
       await api.login(username, password);
-      navigate('/');
+      navigate('/dashboard');
     } catch {
       setError('Invalid username or password.');
     } finally {

@@ -77,6 +77,13 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
   WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // v1 proxy shim (docs/v2-plan.md §C.8) — deleted at cutover.
+  // Both optional: with V1_WEBHOOK_URL unset the shim is inert and v2 handles
+  // every sender itself. That makes cutover (and rollback) an env-var change on
+  // Render rather than a deploy.
+  V1_WEBHOOK_URL: z.string().url('V1_WEBHOOK_URL must be a valid URL').optional(),
+  V1_PROXY_NUMBERS: z.string().optional(),
+
   // App
   BASE_URL: z.string().url('BASE_URL must be a valid URL'),
   PORT: z.coerce.number().default(3000),
@@ -121,3 +128,14 @@ console.log(
 );
 
 export const whitelistedNumbers = env.WHITELISTED_NUMBERS.split(',').map((n) => n.trim());
+
+/**
+ * Senders whose inbound messages v2 forwards to v1 instead of handling itself
+ * (see `platform/v1-proxy.ts`). Defaults to the v1 whitelist — the numbers v1
+ * already answers — so the common case needs no extra configuration.
+ */
+export const v1ProxyNumbers = (
+  env.V1_PROXY_NUMBERS ? env.V1_PROXY_NUMBERS.split(',') : whitelistedNumbers
+)
+  .map((n) => n.trim())
+  .filter(Boolean);

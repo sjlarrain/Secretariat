@@ -44,7 +44,12 @@ export type SystemCollection =
   | 'users'
   | 'unrecognized'
   | 'invites'
-  | 'blocked';
+  | 'blocked'
+  // Webhook payloads v2 acked to Kapso but has not yet got into v1 (see
+  // platform/v1-proxy.ts). A hash keyed by message id: acking forfeits Kapso's
+  // retries, so this is the only record that the delivery is still owed, and
+  // the sweeper re-drives it.
+  | 'v1-pending';
 
 /** Shared/system key, not owned by any single user. */
 export function systemKey(name: SystemCollection): string {

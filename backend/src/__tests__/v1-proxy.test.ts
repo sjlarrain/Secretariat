@@ -22,8 +22,17 @@ vi.mock('@upstash/redis', async () => {
 });
 
 import { resetFakeRedis } from './helpers/fake-redis';
-import { v1ProxyMiddleware, isProxiedToV1 } from '../platform/v1-proxy';
-import { pointKey } from '../shared/redis/keys';
+import {
+  v1ProxyMiddleware,
+  isProxiedToV1,
+  redriveV1Forwards,
+  settleForwards,
+} from '../platform/v1-proxy';
+import { pointKey, systemKey } from '../shared/redis/keys';
+
+// Kapso's own deadline. Nothing in the proxy may hold the response past this,
+// and — the bug this file now guards — nothing may abort the forward at it.
+const KAPSO_ACK_DEADLINE_MS = 10_000;
 
 // A Meta-native webhook envelope, the shape Kapso forwards and v1 parses.
 function metaPayload(from: string, messageId: string, body = '/menu') {
@@ -69,6 +78,35 @@ function mockRes() {
   return res;
 }
 
+/**
+ * A fetch that does not answer for `delayMs`, honouring the abort signal —
+ * i.e. what Render's router does while it spins a free-tier instance back up:
+ * it holds the request open instead of failing it, and only the caller's own
+ * timeout decides whether the message survives.
+ */
+function heldFetch(delayMs: number, status = 200) {
+  return (_url: string, init: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(new Response('{}', { status })), delayMs);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new Error('aborted'));
+      });
+    });
+}
+
+async function readPending(): Promise<Record<string, { firstSeenAt: number }> | null> {
+  const { Redis } = await import('@upstash/redis');
+  const redis = new Redis({ url: 'x', token: 'y' });
+  return redis.hgetall(systemKey('v1-pending'));
+}
+
+async function writePending(id: string, body: unknown, firstSeenAt: number): Promise<void> {
+  const { Redis } = await import('@upstash/redis');
+  const redis = new Redis({ url: 'x', token: 'y' });
+  await redis.hset(systemKey('v1-pending'), { [id]: { body, firstSeenAt } });
+}
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -77,7 +115,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('v1 proxy shim', () => {
   it('recognizes which senders belong to v1', () => {
@@ -92,6 +133,7 @@ describe('v1 proxy shim', () => {
     const next = vi.fn();
 
     await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.1', payload), res as never, next);
+    await settleForwards();
 
     // v2's handlers must never see it — next() is what would hand it onward.
     expect(next).not.toHaveBeenCalled();
@@ -126,8 +168,10 @@ describe('v1 proxy shim', () => {
 
     const first = mockRes();
     await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.dup', payload), first as never, next);
+    await settleForwards();
     const second = mockRes();
     await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.dup', payload), second as never, next);
+    await settleForwards();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(first.payload).toEqual({ ok: true, reason: 'proxied-v1' });
@@ -136,6 +180,7 @@ describe('v1 proxy shim', () => {
   });
 
   it('retries once, then succeeds, without forwarding twice on success', async () => {
+    vi.useFakeTimers();
     fetchMock
       .mockImplementationOnce(async () => {
         throw new Error('ECONNRESET');
@@ -148,13 +193,118 @@ describe('v1 proxy shim', () => {
       res as never,
       vi.fn()
     );
+    // Clear the inter-attempt backoff.
+    await vi.advanceTimersByTimeAsync(3_000);
+    await settleForwards();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(res.statusCode).toBe(200);
   });
 
-  it('releases the dedup claim and asks Kapso to retry when v1 is unreachable', async () => {
-    fetchMock.mockImplementation(async () => new Response('boom', { status: 503 }));
+  it('still forwards when the message carries no id', async () => {
+    const res = mockRes();
+    await v1ProxyMiddleware(mockReq(SANTIAGO, null, metaPayload(SANTIAGO, '')), res as never, vi.fn());
+    await settleForwards();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+// The regression this file exists for. v1 runs on Render's free tier: after 15
+// minutes idle it spins down, and the next request is *held* by Render's router
+// for 30-60s while the instance boots — never rejected, never retried. The
+// proxy used to abort that held request after 10s and answer 502, which meant
+// every first message after an idle period woke v1 up and was then discarded,
+// with no layer above retrying into it.
+describe('v1 proxy shim, cold-start delivery', () => {
+  it('acks Kapso before the forward has completed, with the message recorded', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(heldFetch(40_000));
+
+    const res = mockRes();
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.cold', metaPayload(SANTIAGO, 'wamid.cold')),
+      res as never,
+      vi.fn()
+    );
+
+    // Acked while v1 is still booting — Kapso's 10s deadline is met regardless
+    // of how long the forward ends up taking.
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({ ok: true, reason: 'proxied-v1' });
+    // ...and recorded *before* the ack, since the ack forfeits Kapso's retries.
+    expect(await readPending()).toHaveProperty('wamid.cold');
+
+    await vi.advanceTimersByTimeAsync(45_000);
+    await settleForwards();
+  });
+
+  it('does not abort the held request at Kapso\'s 10s deadline', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(heldFetch(40_000));
+
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.hold', metaPayload(SANTIAGO, 'wamid.hold')),
+      mockRes() as never,
+      vi.fn()
+    );
+
+    await vi.advanceTimersByTimeAsync(KAPSO_ACK_DEADLINE_MS + 1_000);
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    // The old budget aborted here, dropping the request Render was holding.
+    expect(init.signal?.aborted).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(45_000);
+    await settleForwards();
+  });
+
+  it('completes a forward that outlasts a full cold start, and clears it', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(heldFetch(40_000));
+
+    const res = mockRes();
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.slow', metaPayload(SANTIAGO, 'wamid.slow')),
+      res as never,
+      vi.fn()
+    );
+
+    await vi.advanceTimersByTimeAsync(40_000);
+    await settleForwards();
+
+    // One attempt, no abort, and v1 got it.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    // Delivered, so nothing is owed any more.
+    expect(await readPending()).toBeNull();
+  });
+
+  it('swallows a second delivery that arrives while the first forward is in flight', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(heldFetch(40_000));
+    const payload = metaPayload(SANTIAGO, 'wamid.inflight');
+
+    const first = mockRes();
+    await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.inflight', payload), first as never, vi.fn());
+
+    // A redelivery landing mid-forward must not start a second one.
+    await vi.advanceTimersByTimeAsync(KAPSO_ACK_DEADLINE_MS);
+    const second = mockRes();
+    await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.inflight', payload), second as never, vi.fn());
+
+    expect(second.payload).toEqual({ ok: true, reason: 'proxied-v1-duplicate' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(45_000);
+    await settleForwards();
+  });
+
+  it('keeps the message pending when v1 never answers, and still acks 200', async () => {
+    vi.useFakeTimers();
+    // Held forever: v1 is down, not merely cold.
+    fetchMock.mockImplementation(heldFetch(10 * 60_000));
 
     const res = mockRes();
     await v1ProxyMiddleware(
@@ -163,18 +313,64 @@ describe('v1 proxy shim', () => {
       vi.fn()
     );
 
-    expect(res.statusCode).toBe(502);
-    // Claim released, so Kapso's retry is not swallowed as a duplicate.
+    // Both attempts hit the 75s budget, with the backoff between them.
+    await vi.advanceTimersByTimeAsync(160_000);
+    await settleForwards();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Kapso was told 200 up front and will not retry — so the record has to
+    // survive for the sweeper.
+    expect(res.statusCode).toBe(200);
+    expect(await readPending()).toHaveProperty('wamid.down');
+    // The dedup claim stays put: a redelivery is a duplicate, not a rescue.
     const { Redis } = await import('@upstash/redis');
-    const redis = new Redis({ url: 'x', token: 'y' });
-    expect(await redis.get(pointKey('dedup', 'wamid.down'))).toBeNull();
+    expect(await new Redis({ url: 'x', token: 'y' }).get(pointKey('dedup', 'wamid.down'))).not.toBeNull();
+  });
+});
+
+describe('v1 forward redrive', () => {
+  it('delivers a stranded message and clears its record', async () => {
+    const payload = metaPayload(SANTIAGO, 'wamid.stranded');
+    await writePending('wamid.stranded', payload, Date.now() - 60_000);
+
+    const result = await redriveV1Forwards();
+
+    expect(result).toEqual({ delivered: 1, stillPending: 0, expired: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual(payload);
+    expect(await readPending()).toBeNull();
   });
 
-  it('still forwards when the message carries no id', async () => {
-    const res = mockRes();
-    await v1ProxyMiddleware(mockReq(SANTIAGO, null, metaPayload(SANTIAGO, '')), res as never, vi.fn());
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(res.statusCode).toBe(200);
+  it('leaves it pending when v1 is still unreachable', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async () => new Response('boom', { status: 503 }));
+    await writePending('wamid.again', metaPayload(SANTIAGO, 'wamid.again'), Date.now() - 60_000);
+
+    const run = redriveV1Forwards();
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await run;
+
+    expect(result).toEqual({ delivered: 0, stillPending: 1, expired: 0 });
+    expect(await readPending()).toHaveProperty('wamid.again');
+  });
+
+  it('drops a record older than 24h without forwarding it', async () => {
+    await writePending(
+      'wamid.ancient',
+      metaPayload(SANTIAGO, 'wamid.ancient'),
+      Date.now() - 25 * 60 * 60 * 1000
+    );
+
+    const result = await redriveV1Forwards();
+
+    expect(result).toEqual({ delivered: 0, stillPending: 0, expired: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await readPending()).toBeNull();
+  });
+
+  it('is a no-op with nothing pending', async () => {
+    expect(await redriveV1Forwards()).toEqual({ delivered: 0, stillPending: 0, expired: 0 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -201,6 +397,17 @@ describe('v1 proxy shim, disabled (post-cutover)', () => {
     );
     expect(next).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
+
+    // The redrive goes quiet too, rather than replaying a backlog into a
+    // service that is no longer the destination.
+    await writePending('wamid.leftover', metaPayload(SANTIAGO, 'wamid.leftover'), Date.now());
+    expect(await mod.redriveV1Forwards()).toEqual({
+      delivered: 0,
+      stillPending: 0,
+      expired: 0,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
     vi.doUnmock('../shared/env');
   });
 });

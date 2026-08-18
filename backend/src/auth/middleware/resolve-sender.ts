@@ -37,29 +37,75 @@ export interface WebhookExtras {
 
 export type WebhookRequest = Request & WebhookExtras;
 
-// Parses the Kapso webhook payload and attaches sender + message text + message ID to the request
+function normalizePhone(raw: string): string {
+  // Meta/Kapso send phone numbers without '+', normalize to E.164
+  return raw ? (raw.startsWith('+') ? raw : `+${raw}`) : '';
+}
+
+// Parses the Kapso webhook payload and attaches sender + message text + message ID to the request.
+//
+// Two payload shapes reach here depending on which Kapso webhook subscription
+// delivered it: Meta's native envelope (`entry[].changes[].value.messages[]`,
+// parsed via the SDK's normalizeWebhook()) or Kapso's own "events" envelope
+// (`{ message, conversation, phone_number_id }` at the top level — normalizeWebhook()
+// only understands the Meta shape and silently returns messages: [] for this one).
 export function extractWebhookData(req: Request, _res: Response, next: NextFunction) {
   try {
-    const events = normalizeWebhook(req.body);
-    const message = events.messages?.[0];
-    const raw = message?.from ?? '';
-    // Meta sends phone numbers without '+', normalize to E.164
-    const phone = raw ? (raw.startsWith('+') ? raw : `+${raw}`) : '';
-    (req as WebhookRequest).senderPhone = phone;
-    (req as WebhookRequest).webhookText =
-      message?.type === 'text' ? (message.text?.body ?? null) : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawMsg = message as any;
-    (req as WebhookRequest).buttonReplyId =
-      rawMsg?.type === 'interactive' && rawMsg?.interactive?.type === 'button_reply'
-        ? (rawMsg.interactive.buttonReply?.id ?? null)
-        : null;
-    // Read id + reply context off the normalized message. The SDK's
-    // UnifiedMessage carries both regardless of Kapso's envelope shape; a
-    // separate raw `entry[0].changes...` parse breaks whenever the delivered
-    // payload isn't Meta-native, silently nulling messageId and disabling dedup.
-    (req as WebhookRequest).messageId = message?.id ?? null;
-    (req as WebhookRequest).contextMessageId = message?.context?.id ?? null;
+    const body = req.body as { entry?: unknown; message?: Record<string, unknown> };
+    if (Array.isArray(body?.entry)) {
+      const events = normalizeWebhook(req.body);
+      const message = events.messages?.[0];
+      (req as WebhookRequest).senderPhone = normalizePhone(message?.from ?? '');
+      (req as WebhookRequest).webhookText =
+        message?.type === 'text' ? (message.text?.body ?? null) : null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawMsg = message as any;
+      (req as WebhookRequest).buttonReplyId =
+        rawMsg?.type === 'interactive' && rawMsg?.interactive?.type === 'button_reply'
+          ? (rawMsg.interactive.buttonReply?.id ?? null)
+          : null;
+      (req as WebhookRequest).messageId = message?.id ?? null;
+      (req as WebhookRequest).contextMessageId = message?.context?.id ?? null;
+    } else if (body?.message && typeof body.message === 'object') {
+      // Reaching here means a `Kapso (events)` subscription delivered this.
+      // Per docs/v2-plan.md §C.8 v2 is fed by the single `Meta` subscription
+      // and should only ever see the envelope above, so this is worth shouting
+      // about: if both subscriptions exist, every message arrives twice, and
+      // the two envelopes are only deduped as one if Kapso's `message.id` here
+      // is the same wamid Meta sends — which is unconfirmed. Delete the extra
+      // subscription rather than relying on that.
+      console.warn(
+        '[webhook] Kapso-events envelope received — expected Meta. A second webhook subscription is probably still configured.'
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const message = body.message as any;
+      (req as WebhookRequest).senderPhone = normalizePhone(
+        typeof message.from === 'string' ? message.from : ''
+      );
+      (req as WebhookRequest).webhookText =
+        message.type === 'text' ? (message.text?.body ?? null) : null;
+      (req as WebhookRequest).messageId = typeof message.id === 'string' ? message.id : null;
+      // FIELD NAMES UNCONFIRMED below — Kapso's "events" webhook docs only show
+      // a plain text message example, not an interactive/button-reply or a
+      // reply-context payload. Logged so the first real test message tells us
+      // the actual shape instead of us guessing wrong and silently breaking
+      // reminder/task button replies. Remove once confirmed and hardcoded.
+      if (message.type !== 'text') {
+        console.log('[webhook] non-text Kapso-events message, shape:', JSON.stringify(message));
+      }
+      (req as WebhookRequest).buttonReplyId =
+        message.type === 'interactive' && message.interactive?.type === 'button_reply'
+          ? (message.interactive.button_reply?.id ?? message.interactive.buttonReply?.id ?? null)
+          : null;
+      (req as WebhookRequest).contextMessageId =
+        typeof message.context?.id === 'string' ? message.context.id : null;
+    } else {
+      (req as WebhookRequest).senderPhone = '';
+      (req as WebhookRequest).webhookText = null;
+      (req as WebhookRequest).messageId = null;
+      (req as WebhookRequest).buttonReplyId = null;
+      (req as WebhookRequest).contextMessageId = null;
+    }
   } catch {
     (req as WebhookRequest).senderPhone = '';
     (req as WebhookRequest).webhookText = null;

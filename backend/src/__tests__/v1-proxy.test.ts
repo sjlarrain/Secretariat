@@ -194,7 +194,7 @@ describe('v1 proxy shim', () => {
       vi.fn()
     );
     // Clear the inter-attempt backoff.
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(6_000);
     await settleForwards();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -301,6 +301,37 @@ describe('v1 proxy shim, cold-start delivery', () => {
     await settleForwards();
   });
 
+  it('keeps retrying a cold start that answers 502 immediately instead of holding', async () => {
+    vi.useFakeTimers();
+    // Render's router can reject outright while the instance boots rather than
+    // holding the connection. These fail in milliseconds, so the forward budget
+    // never comes into play — only trying again later gets the message across.
+    let calls = 0;
+    fetchMock.mockImplementation(async () => {
+      calls++;
+      if (calls <= 3) return new Response('service unavailable', { status: 502 });
+      return new Response('{}', { status: 200 });
+    });
+
+    const res = mockRes();
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.fast502', metaPayload(SANTIAGO, 'wamid.fast502')),
+      res as never,
+      vi.fn()
+    );
+
+    // Nothing has got through yet, but Kapso was already told 200.
+    expect(res.statusCode).toBe(200);
+
+    // Walk the retry ladder past a ~50s spin-up.
+    await vi.advanceTimersByTimeAsync(60_000);
+    await settleForwards();
+
+    expect(calls).toBe(4);
+    // v1 came up and accepted it, so nothing is owed.
+    expect(await readPending()).toBeNull();
+  });
+
   it('keeps the message pending when v1 never answers, and still acks 200', async () => {
     vi.useFakeTimers();
     // Held forever: v1 is down, not merely cold.
@@ -313,11 +344,13 @@ describe('v1 proxy shim, cold-start delivery', () => {
       vi.fn()
     );
 
-    // Both attempts hit the 75s budget, with the backoff between them.
-    await vi.advanceTimersByTimeAsync(160_000);
+    // Attempts stack up against the 75s budget until the overall deadline
+    // (~238s). Deliberately short of CLAIM_TTL_SEC so the claim assertion below
+    // tests the code rather than the clock.
+    await vi.advanceTimersByTimeAsync(250_000);
     await settleForwards();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
     // Kapso was told 200 up front and will not retry — so the record has to
     // survive for the sweeper.
     expect(res.statusCode).toBe(200);
@@ -347,7 +380,7 @@ describe('v1 forward redrive', () => {
     await writePending('wamid.again', metaPayload(SANTIAGO, 'wamid.again'), Date.now() - 60_000);
 
     const run = redriveV1Forwards();
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(200_000);
     const result = await run;
 
     expect(result).toEqual({ delivered: 0, stillPending: 1, expired: 0 });

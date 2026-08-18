@@ -31,14 +31,25 @@ import type { WebhookRequest } from '../auth/middleware/resolve-sender';
 // long enough to ride out the spin-up. Because the ack is unconditional, no
 // upstream retry exists as a safety net — the pending record below is it.
 
-const ATTEMPTS = 2;
-// Long enough to outlast a Render free-tier spin-up (30-60s documented) with
-// margin. The previous value was 10s, which aborted the held request before v1
-// finished booting: the spin-up was triggered and the payload discarded, so v1
-// came up with nothing to process. Node does not cap this — undici's default
-// headers timeout is 300s.
+// A Render free-tier cold start can present in two completely different ways,
+// and a forward has to survive both. Fixing only one is why this took two goes:
+//
+//   * The router HOLDS the request open for the 30-60s spin-up and answers once
+//     the instance is live. Nothing fails; the caller just has to wait. Covered
+//     by FORWARD_TIMEOUT_MS — the original 10s value aborted the held request,
+//     so the spin-up was triggered and the payload thrown away.
+//   * The router answers 502/503 IMMEDIATELY while the instance boots. No
+//     timeout is involved at all: the call fails in milliseconds and the only
+//     thing that helps is trying again later. Covered by RETRY_DELAYS_MS — the
+//     original 2-attempt/2s ladder gave up ~2s into a ~50s boot.
+//
+// Nothing upstream retries the v2 -> v1 hop, so this ladder is the retry.
 const FORWARD_TIMEOUT_MS = 75_000;
-const RETRY_BACKOFF_MS = 2_000;
+// Six retries spread across ~108s, comfortably past a cold start that fails fast.
+const RETRY_DELAYS_MS = [5_000, 8_000, 13_000, 20_000, 27_000, 35_000];
+// Overall ceiling, so a hold-then-timeout v1 can't stack 75s attempts for ten
+// minutes. Past this the message stays in sys:v1-pending for the sweeper.
+const FORWARD_DEADLINE_MS = 180_000;
 // Duplicate guard on the message id. Held across the background forward: once
 // the ack is sent, a second delivery of the same id genuinely is a duplicate.
 const CLAIM_TTL_SEC = 5 * 60;
@@ -88,21 +99,34 @@ async function postOnce(url: string, body: unknown): Promise<void> {
  * fields — v1 parses it with its own `normalizeWebhook()` and must see the same
  * envelope Kapso sent, message id included, or its dedup stops working.
  *
- * Resolves true if v1 accepted it. The second attempt is for a genuine
- * transport glitch (a reset connection, a DNS blip); a cold start is covered by
- * the first attempt's timeout, not by retrying.
+ * Resolves true if v1 accepted it. Keeps trying across the whole cold-start
+ * window: a fast 502 from Render's router means "still booting", not "no".
  */
 export async function forwardToV1(body: unknown): Promise<boolean> {
   const url = env.V1_WEBHOOK_URL;
   if (!url) return false;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+
+  const startedAt = Date.now();
+  const maxAttempts = RETRY_DELAYS_MS.length + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       await postOnce(url, body);
       return true;
     } catch (err) {
-      console.error(`[v1-proxy] forward attempt ${attempt}/${ATTEMPTS} failed:`, err);
-      if (attempt < ATTEMPTS) await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+      // The status is in the message ("v1 responded 404"), which is how a
+      // misconfigured V1_WEBHOOK_URL announces itself rather than looking like
+      // a cold start.
+      console.error(`[v1-proxy] forward attempt ${attempt}/${maxAttempts} failed:`, err);
     }
+    if (attempt === maxAttempts) break;
+
+    const delay = RETRY_DELAYS_MS[attempt - 1];
+    if (Date.now() - startedAt + delay > FORWARD_DEADLINE_MS) {
+      console.error(`[v1-proxy] forward deadline reached after ${attempt} attempts`);
+      break;
+    }
+    await new Promise((r) => setTimeout(r, delay));
   }
   return false;
 }

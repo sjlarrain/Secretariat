@@ -4,7 +4,6 @@ import {
   userSeqKey,
   systemKey,
   pointKey,
-  legacyWorkKey,
   type UserCollection,
 } from '../shared/redis/keys';
 
@@ -21,10 +20,9 @@ const COLLECTIONS: UserCollection[] = [
   'plans',
   'reminders',
   'tasks',
-  'ucla',
+  'mba',
   'third-party-contacts',
   'third-party-pending',
-  'mantis-pending',
 ];
 
 const ALICE = '56911111111';
@@ -81,13 +79,5 @@ describe('systemKey / pointKey', () => {
   it('namespaces point keys by flow', () => {
     expect(pointKey('dedup', 'wamid.ABC')).toBe('sys:dedup:wamid.ABC');
     expect(pointKey('oauth-state', 'abc')).not.toBe(pointKey('wa-reply', 'abc'));
-  });
-});
-
-describe('legacyWorkKey', () => {
-  // The one intentional survivor of the v1 layout. It is read-only, single-
-  // owner, and must never gain a per-user variant.
-  it('is the pre-v2 single-user key', () => {
-    expect(legacyWorkKey()).toBe('secretariat:work');
   });
 });

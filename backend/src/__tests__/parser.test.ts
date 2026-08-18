@@ -28,8 +28,8 @@ describe('em-dash normalization', () => {
     expect(r.flags['plan']).toBe('Lunch');
   });
 
-  it('handles em-dash for /ucla --done', () => {
-    const r = ok('/ucla —done 2');
+  it('handles em-dash for /mba --done', () => {
+    const r = ok('/mba —done 2');
     expect(r.flags['done']).toBe('2');
   });
 
@@ -512,82 +512,86 @@ describe('/links', () => {
   });
 });
 
-// ─── /ucla (replaced /work in v1.14) ─────────────────────────────────────────
+// ─── /mba (v1 /work → v1.14 /ucla → v2 /mba) ─────────────────────────────────
 
-describe('/ucla', () => {
+describe('/mba', () => {
   it('succeeds with no args (list pending)', () => {
-    const r = ok('/ucla');
-    expect(r.command).toBe('ucla');
+    const r = ok('/mba');
+    expect(r.command).toBe('mba');
     expect(r.extraArgs).toEqual([]);
     expect(r.flags).toEqual({});
   });
 
   it('captures item text in extraArgs', () => {
-    const r = ok('/ucla Finish problem set 3');
+    const r = ok('/mba Finish problem set 3');
     expect(r.extraArgs).toEqual(['Finish', 'problem', 'set', '3']);
   });
 
   it('accepts --done N', () => {
-    const r = ok('/ucla --done 2');
+    const r = ok('/mba --done 2');
     expect(r.flags['done']).toBe('2');
   });
 
   it('accepts -d shorthand for --done', () => {
-    const r = ok('/ucla -d 2');
+    const r = ok('/mba -d 2');
     expect(r.flags['done']).toBe('2');
   });
 
   it('accepts --due for a due date', () => {
-    const r = ok('/ucla Submit essay --due next friday');
+    const r = ok('/mba Submit essay --due next friday');
     expect(r.extraArgs).toEqual(['Submit', 'essay']);
     expect(r.flags['due']).toBe('next friday');
   });
 
   it('accepts --due alongside an explicit reminder', () => {
-    const r = ok('/ucla Submit essay --due friday --for thursday --at 18:00');
+    const r = ok('/mba Submit essay --due friday --for thursday --at 18:00');
     expect(r.flags['due']).toBe('friday');
     expect(r.flags['for']).toBe('thursday');
     expect(r.flags['at']).toBe('18:00');
   });
 
   it('accepts --for and --at for optional reminder', () => {
-    const r = ok('/ucla Read chapter --for saturday --at 10:00');
+    const r = ok('/mba Read chapter --for saturday --at 10:00');
     expect(r.extraArgs).toEqual(['Read', 'chapter']);
     expect(r.flags['for']).toBe('saturday');
     expect(r.flags['at']).toBe('10:00');
   });
 
   it('accepts -f and -a shorthand', () => {
-    const r = ok('/ucla Do report -f next monday -a 09:00');
+    const r = ok('/mba Do report -f next monday -a 09:00');
     expect(r.flags['for']).toBe('next monday');
     expect(r.flags['at']).toBe('09:00');
   });
 
   it('accepts @ shorthand for time', () => {
-    const r = ok('/ucla Review PR -f tomorrow @14:00');
+    const r = ok('/mba Review PR -f tomorrow @14:00');
     expect(r.flags['at']).toBe('14:00');
   });
 
   it('normalizes em-dash for --done', () => {
-    const r = ok('/ucla —done 3');
+    const r = ok('/mba —done 3');
     expect(r.flags['done']).toBe('3');
   });
 
   it('normalizes em-dash for --due', () => {
-    const r = ok('/ucla Submit essay —due friday');
+    const r = ok('/mba Submit essay —due friday');
     expect(r.flags['due']).toBe('friday');
   });
 
-  it('rejects --notes (not accepted by /ucla)', () => {
-    expect(fail('/ucla Buy stuff --notes extra context')).toMatch(/unknown flag/i);
+  it('rejects --notes (not accepted by /mba)', () => {
+    expect(fail('/mba Buy stuff --notes extra context')).toMatch(/unknown flag/i);
   });
 });
 
-// ─── /work is retired (v1.14) ────────────────────────────────────────────────
+// ─── /work and /ucla are retired ──────────────────────────────────────────────
 
-describe('/work (retired)', () => {
-  it('is no longer a known command', () => {
+describe('/work and /ucla (retired)', () => {
+  it('/work is no longer a known command', () => {
     expect(fail('/work Buy groceries')).toMatch(/unknown command/i);
+  });
+
+  it('/ucla is no longer a known command', () => {
+    expect(fail('/ucla Finish problem set')).toMatch(/unknown command/i);
   });
 });
 

@@ -1,10 +1,10 @@
 import { getAllAccounts, getSettings } from '../integrations/token-store';
 import { getTodayEvents } from '../integrations/google/calendar';
-import { getUpcomingUclaItems } from '../integrations/local/ucla';
+import { getUpcomingMbaItems } from '../integrations/local/mba';
 import { formatDate, formatTime } from '../../shared/utils/date';
 import { sendMessage } from '../../shared/kapso/client';
 
-const UCLA_LOOKAHEAD_HOURS = 48;
+const MBA_LOOKAHEAD_HOURS = 48;
 
 export async function fireMorningDigest(userId: string): Promise<void> {
   const settings = await getSettings(userId);
@@ -33,10 +33,10 @@ export async function fireMorningDigest(userId: string): Promise<void> {
     }
   }
 
-  const { upcoming, overdue } = await getUpcomingUclaItems(userId, UCLA_LOOKAHEAD_HOURS, today);
+  const { upcoming, overdue } = await getUpcomingMbaItems(userId, MBA_LOOKAHEAD_HOURS, today);
 
   if (overdue.length > 0) {
-    lines.push('\n🎓 *UCLA — overdue:*');
+    lines.push('\n🎓 *MBA — overdue:*');
     for (const item of overdue) {
       const due = new Date(item.dueDate!);
       lines.push(`• ${item.text} _(was due ${formatDate(due, true, tz)} at ${formatTime(due, tz)})_`);
@@ -44,7 +44,7 @@ export async function fireMorningDigest(userId: string): Promise<void> {
   }
 
   if (upcoming.length > 0) {
-    lines.push(`\n🎓 *UCLA — due in the next ${UCLA_LOOKAHEAD_HOURS}h:*`);
+    lines.push(`\n🎓 *MBA — due in the next ${MBA_LOOKAHEAD_HOURS}h:*`);
     for (const item of upcoming) {
       const due = new Date(item.dueDate!);
       lines.push(`• ${item.text} _(${formatDate(due, true, tz)} at ${formatTime(due, tz)})_`);

@@ -38,12 +38,12 @@ const MENU = `🤖 *Secretariat — Commands*
   --for (-f)     date *(required)*
   --at (-a) / @  HH:MM *(required)*
 
-🎓 *UCLA List*
-*/ucla* text               — Add item to UCLA list
-*/ucla* text --due date    — Add with due date (auto-reminds 24h before)
-*/ucla* text --for (-f) date --at (-a) time — Add with extra reminder
-*/ucla* —                  List pending items
-*/ucla* --done (-d) N      — Mark item #N as done
+🎓 *MBA List*
+*/mba* text               — Add item to MBA list
+*/mba* text --due date    — Add with due date (auto-reminds 24h before)
+*/mba* text --for (-f) date --at (-a) time — Add with extra reminder
+*/mba* —                  List pending items
+*/mba* --done (-d) N      — Mark item #N as done
 
 💡 *Ideas*
 */ideas* text                  — Save idea (default project)
@@ -60,9 +60,6 @@ const MENU = `🤖 *Secretariat — Commands*
 */links* #N --name (-n) text — Name link #N
 */links* #N               — Get the URL behind link #N
 Reply _--name text_ after saving to name it right away
-
-📇 *Networking*
-*/mantis* text             — Quick-capture a note to the Mantis inbox
 
 ⚙️ *System*
 */status*                 — Connections, Kapso health, usage

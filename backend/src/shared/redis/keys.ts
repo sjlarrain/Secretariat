@@ -15,10 +15,9 @@ export type UserCollection =
   | 'plans'
   | 'reminders'
   | 'tasks'
-  | 'ucla'
+  | 'mba'
   | 'third-party-contacts'
-  | 'third-party-pending'
-  | 'mantis-pending';
+  | 'third-party-pending';
 
 /** Per-user collection key: `u:<userId>:<name>`. */
 export function userKey(userId: string, name: UserCollection): string {
@@ -76,14 +75,3 @@ export function pointKey(namespace: PointNamespace, id: string): string {
   return `sys:${namespace}:${id}`;
 }
 
-/**
- * One-time migration read for pre-v1.14 UCLA items (`/work` -> `/ucla`
- * rename). This key only ever held Santiago's data from the v1 single-user
- * era — there is no per-user equivalent, so callers must only consult it
- * when resolving the one legacy owner (see `ucla.ts`'s use of
- * `whitelistedNumbers[0]`), never for any other userId. Kept out of
- * `UserCollection` so it's obviously not part of the ongoing per-user schema.
- */
-export function legacyWorkKey(): string {
-  return 'secretariat:work';
-}

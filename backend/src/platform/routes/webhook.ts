@@ -16,10 +16,9 @@ import { myscheduleHandler } from '../../core/handlers/myschedule.handler';
 import { ideasHandler } from '../../core/handlers/ideas.handler';
 import { linksHandler } from '../../core/handlers/links.handler';
 import { menuHandler } from '../../core/handlers/menu.handler';
-import { uclaHandler } from '../../core/handlers/ucla.handler';
+import { mbaHandler } from '../../core/handlers/mba.handler';
 import { statusHandler } from '../../core/handlers/status.handler';
 import { zoneHandler } from '../../core/handlers/zone.handler';
-import { mantisHandler } from '../../core/handlers/mantis.handler';
 import { panelHandler } from '../../core/handlers/panel.handler';
 import { buttonReplyHandler } from '../../core/handlers/button-reply.handler';
 import { replyRescheduleHandler } from '../../core/handlers/reply-reschedule.handler';
@@ -104,7 +103,7 @@ router.post('/', extractWebhookData, v1ProxyMiddleware, resolveSenderMiddleware,
 
   if (!text?.trim()) return;
 
-  // If this is a reply to a bot reminder/task/work message, attempt reschedule
+  // If this is a reply to a bot reminder/task/mba message, attempt reschedule
   if (contextMessageId) {
     try {
       const handled = await replyRescheduleHandler(contextMessageId, text.trim(), ctx);
@@ -173,17 +172,14 @@ router.post('/', extractWebhookData, v1ProxyMiddleware, resolveSenderMiddleware,
       case 'links':
         await linksHandler(data, ctx);
         break;
-      case 'ucla':
-        await uclaHandler(data, ctx);
+      case 'mba':
+        await mbaHandler(data, ctx);
         break;
       case 'status':
         await statusHandler(data, ctx);
         break;
       case 'zone':
         await zoneHandler(data, ctx);
-        break;
-      case 'mantis':
-        await mantisHandler(data, ctx, messageId);
         break;
       case 'panel':
         await panelHandler(data, ctx);

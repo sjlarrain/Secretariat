@@ -54,7 +54,7 @@ describe('COMMANDS registry', () => {
     }
   });
 
-  it('every command name matches its key (e.g. /work → "work")', () => {
+  it('every command name matches its key (e.g. /mba → "mba")', () => {
     for (const [key, def] of Object.entries(COMMANDS)) {
       expect(def.name, `COMMANDS.${key}.name`).toBe(`/${key}`);
     }
@@ -106,7 +106,7 @@ describe('short aliases do not collide within a command', () => {
 // ─── Cross-registry: expected commands exist ──────────────────────────────────
 
 describe('expected commands are registered', () => {
-  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'reminder', 'myschedule', 'ideas', 'links', 'ucla', 'status', 'zone'];
+  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'reminder', 'myschedule', 'ideas', 'links', 'mba', 'status', 'zone'];
 
   for (const cmd of requiredCommands) {
     it(`/${cmd} is in COMMANDS`, () => {
@@ -118,10 +118,11 @@ describe('expected commands are registered', () => {
 // ─── Retired commands stay retired ───────────────────────────────────────────
 
 describe('retired commands are absent', () => {
-  // /gtask merged into /task and /work became /ucla in v1.14. The webhook
-  // switch has no case for either, so re-adding one here without a handler
-  // would silently fall through to "unknown command".
-  for (const cmd of ['gtask', 'work']) {
+  // /gtask merged into /task; /work became /ucla in v1.14 and /ucla became
+  // /mba in v2.0. The webhook switch has no case for any of them, so re-adding
+  // one here without a handler would silently fall through to "unknown
+  // command".
+  for (const cmd of ['gtask', 'work', 'ucla']) {
     it(`/${cmd} is not in COMMANDS`, () => {
       expect(COMMANDS[cmd]).toBeUndefined();
     });
@@ -173,14 +174,14 @@ describe('short alias resolution (per-command scope)', () => {
     expect(nameFlag).toBe('name');
   });
 
-  it('/ucla: -d resolves to "done"', () => {
-    const accepted = COMMANDS['ucla'].acceptedFlags;
+  it('/mba: -d resolves to "done"', () => {
+    const accepted = COMMANDS['mba'].acceptedFlags;
     const doneFlag = accepted.find((k) => FLAGS[k]?.shortAlias === 'd');
     expect(doneFlag).toBe('done');
   });
 
-  it('/ucla: -u resolves to "due" and -d to "done" without colliding', () => {
-    const accepted = COMMANDS['ucla'].acceptedFlags;
+  it('/mba: -u resolves to "due" and -d to "done" without colliding', () => {
+    const accepted = COMMANDS['mba'].acceptedFlags;
     expect(accepted.find((k) => FLAGS[k]?.shortAlias === 'u')).toBe('due');
     expect(accepted.find((k) => FLAGS[k]?.shortAlias === 'd')).toBe('done');
   });
@@ -237,8 +238,8 @@ describe('required flags contract', () => {
     expect(COMMANDS['reminder'].requiredFlags).toContain('at');
   });
 
-  it('/ucla has no required flags', () => {
-    expect(COMMANDS['ucla'].requiredFlags).toHaveLength(0);
+  it('/mba has no required flags', () => {
+    expect(COMMANDS['mba'].requiredFlags).toHaveLength(0);
   });
 
   it('/zone has no required flags', () => {

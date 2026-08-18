@@ -47,7 +47,7 @@ import { COMMANDS } from '../core/registries/commands.registry';
 import { FLAGS } from '../core/registries/flags.registry';
 import { getPlans, getPlan, createPlan, updatePlan, deletePlan } from '../core/integrations/local/plans';
 import { getReminders, removeReminder, updateReminder } from '../core/integrations/local/reminders';
-import { getUclaItems, getDoneUclaItems, addUclaItem, markUclaItemDone, deleteUclaItem, getUclaItem, updateUclaItem, updateUclaItemReminder } from '../core/integrations/local/ucla';
+import { getMbaItems, getDoneMbaItems, addMbaItem, markMbaItemDone, deleteMbaItem, getMbaItem, updateMbaItem, updateMbaItemReminder } from '../core/integrations/local/mba';
 import { getHealthAlerts } from './health-alerts';
 import { getTasks, getDoneTasks, addTask, markTaskDone, deleteTask, updateTaskQStashId } from '../core/integrations/local/tasks';
 import { cancelMessage } from '../shared/qstash/client';
@@ -486,18 +486,18 @@ router.delete('/links/:id', requireAuth, async (req, res) => {
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
-// --- UCLA ---
-router.get('/ucla', requireAuth, async (_req, res) => {
-  const items = await getUclaItems(ownerId());
+// --- MBA ---
+router.get('/mba', requireAuth, async (_req, res) => {
+  const items = await getMbaItems(ownerId());
   res.json({ items });
 });
 
-router.get('/ucla/done', requireAuth, async (_req, res) => {
-  const items = await getDoneUclaItems(ownerId());
+router.get('/mba/done', requireAuth, async (_req, res) => {
+  const items = await getDoneMbaItems(ownerId());
   res.json({ items });
 });
 
-router.post('/ucla', requireAuth, async (req, res) => {
+router.post('/mba', requireAuth, async (req, res) => {
   const { text, dueDate } = req.body as { text?: string; dueDate?: string };
   if (!text?.trim()) { res.status(400).json({ error: 'text required' }); return; }
 
@@ -508,7 +508,7 @@ router.post('/ucla', requireAuth, async (req, res) => {
     due = parsedDue.toISOString();
   }
 
-  const item = await addUclaItem(ownerId(), text.trim(), { dueDate: due });
+  const item = await addMbaItem(ownerId(), text.trim(), { dueDate: due });
 
   // Mirror the WhatsApp flow: a due date schedules the automatic 24h reminder.
   if (due) {
@@ -516,14 +516,14 @@ router.post('/ucla', requireAuth, async (req, res) => {
     const fireAt = new Date(due).getTime() - 24 * 60 * 60 * 1000;
     const delaySeconds = Math.floor((fireAt - Date.now()) / 1000);
     if (owner && delaySeconds > 0) {
-      const dueReminderId = await scheduleOnce('/internal/ucla/due/fire', delaySeconds, {
-        uclaItemId: item.id,
+      const dueReminderId = await scheduleOnce('/internal/mba/due/fire', delaySeconds, {
+        mbaItemId: item.id,
         text: item.text,
         dueAt: due,
         phoneNumber: owner,
         userId: owner,
       });
-      await updateUclaItem(ownerId(), item.id, { dueReminderId });
+      await updateMbaItem(ownerId(), item.id, { dueReminderId });
       item.dueReminderId = dueReminderId;
     }
   }
@@ -531,23 +531,23 @@ router.post('/ucla', requireAuth, async (req, res) => {
   res.json({ item });
 });
 
-router.patch('/ucla/:id/done', requireAuth, async (req, res) => {
+router.patch('/mba/:id/done', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const item = await markUclaItemDone(ownerId(), id);
-  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
+  const item = await markMbaItemDone(ownerId(), id);
+  if (!item) { res.status(404).json({ error: 'MBA item not found' }); return; }
   for (const messageId of [item.qstashMessageId, item.dueReminderId]) {
     if (messageId) await cancelMessage(messageId).catch(() => {});
   }
   res.json({ ok: true });
 });
 
-router.delete('/ucla/:id', requireAuth, async (req, res) => {
+router.delete('/mba/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const item = await getUclaItem(ownerId(), id);
+  const item = await getMbaItem(ownerId(), id);
   for (const messageId of [item?.qstashMessageId, item?.dueReminderId]) {
     if (messageId) await cancelMessage(messageId).catch(() => {});
   }
-  const ok = await deleteUclaItem(ownerId(), id);
+  const ok = await deleteMbaItem(ownerId(), id);
   ok ? res.json({ ok }) : res.status(404).json({ error: 'not found' });
 });
 
@@ -658,26 +658,26 @@ router.post('/tasks/:id/remind', requireAuth, async (req, res) => {
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
-// UCLA — snooze existing reminder
-router.post('/ucla/:id/snooze', requireAuth, async (req, res) => {
+// MBA — snooze existing reminder
+router.post('/mba/:id/snooze', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const item = await getUclaItem(ownerId(), id);
-  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
+  const item = await getMbaItem(ownerId(), id);
+  if (!item) { res.status(404).json({ error: 'MBA item not found' }); return; }
 
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
 
   const settings = await getSettings(ownerId());
   const fireAt = getSnoozeDate(option, settings.timezone);
-  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
-    uclaItemId: id,
+  const newMessageId = await scheduleOnce('/internal/mba/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    mbaItemId: id,
     text: item.text,
     phoneNumber: ownerId(),
     userId: ownerId(),
   });
-  await updateUclaItemReminder(ownerId(), id, fireAt.toISOString(), newMessageId);
+  await updateMbaItemReminder(ownerId(), id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -704,24 +704,24 @@ router.put('/tasks/:id/reminder', requireAuth, async (req, res) => {
   res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 
-// UCLA — add reminder for items without one
-router.post('/ucla/:id/remind', requireAuth, async (req, res) => {
+// MBA — add reminder for items without one
+router.post('/mba/:id/remind', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const option = parseSnoozeOption(req.body);
   if (!option) { res.status(400).json({ error: 'Invalid snooze option' }); return; }
 
-  const item = await getUclaItem(ownerId(), id);
-  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
+  const item = await getMbaItem(ownerId(), id);
+  if (!item) { res.status(404).json({ error: 'MBA item not found' }); return; }
 
   const settings = await getSettings(ownerId());
   const fireAt = getSnoozeDate(option, settings.timezone);
-  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
-    uclaItemId: id,
+  const newMessageId = await scheduleOnce('/internal/mba/reminder/fire', Math.floor((fireAt.getTime() - Date.now()) / 1000), {
+    mbaItemId: id,
     text: item.text,
     phoneNumber: ownerId(),
     userId: ownerId(),
   });
-  await updateUclaItemReminder(ownerId(), id, fireAt.toISOString(), newMessageId);
+  await updateMbaItemReminder(ownerId(), id, fireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: fireAt.toISOString() });
 });
 
@@ -731,8 +731,8 @@ router.get('/health-alerts', requireAuth, async (_req, res) => {
   res.json({ alerts, lastRunAt: settings.healthCheck?.lastRunAt ?? null });
 });
 
-// UCLA — update reminder to a specific date/time
-router.put('/ucla/:id/reminder', requireAuth, async (req, res) => {
+// MBA — update reminder to a specific date/time
+router.put('/mba/:id/reminder', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { fireAt } = req.body as { fireAt?: string };
   if (!fireAt) { res.status(400).json({ error: 'Missing fireAt' }); return; }
@@ -740,16 +740,16 @@ router.put('/ucla/:id/reminder', requireAuth, async (req, res) => {
   if (isNaN(newFireAt.getTime()) || newFireAt.getTime() <= Date.now()) {
     res.status(400).json({ error: 'Invalid or past date' }); return;
   }
-  const item = await getUclaItem(ownerId(), id);
-  if (!item) { res.status(404).json({ error: 'UCLA item not found' }); return; }
+  const item = await getMbaItem(ownerId(), id);
+  if (!item) { res.status(404).json({ error: 'MBA item not found' }); return; }
   if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => {});
-  const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
-    uclaItemId: id,
+  const newMessageId = await scheduleOnce('/internal/mba/reminder/fire', Math.floor((newFireAt.getTime() - Date.now()) / 1000), {
+    mbaItemId: id,
     text: item.text,
     phoneNumber: ownerId(),
     userId: ownerId(),
   });
-  await updateUclaItemReminder(ownerId(), id, newFireAt.toISOString(), newMessageId);
+  await updateMbaItemReminder(ownerId(), id, newFireAt.toISOString(), newMessageId);
   res.json({ ok: true, fireAt: newFireAt.toISOString() });
 });
 

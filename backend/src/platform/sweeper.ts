@@ -6,12 +6,12 @@ import { getRegisteredUsers } from '../auth/users';
 import { getSettings } from '../core/integrations/token-store';
 import { fireMorningDigest } from '../core/cron/morning-digest';
 import { fireWeeklySummary } from '../core/cron/weekly-summary';
-import { fireUclaReminder } from '../core/cron/ucla-reminder';
+import { fireMbaReminder } from '../core/cron/mba-reminder';
 import { promoteDeferred } from '../core/cron/reminder-promoter';
 import { syncGoogleTasks } from '../core/cron/google-tasks-sync';
 import { runHealthCheck } from '../ops/cron/health-check';
 
-// Replaces the five (six, counting the UCLA Monday reminder) per-user QStash
+// Replaces the five (six, counting the MBA Monday reminder) per-user QStash
 // cron schedules v1/early-v2 created via reconcileSchedules — see
 // docs/v2-plan.md §C.5. QStash's free tier caps at 3 cron schedules total, so
 // N users x 6 jobs each with their own schedule was never going to scale.
@@ -89,9 +89,9 @@ async function sweepUser(userId: string, now: Date, counters: SweepCounters): Pr
     tasks.push(maybeFire(userId, 'weekly-summary', dateStr, () => fireWeeklySummary(userId), counters));
   }
 
-  // UCLA Monday reminder — weekday 1 = Monday.
-  if (settings.uclaReminder?.enabled && weekday === 1 && hour === hourOf(settings.uclaReminder.time)) {
-    tasks.push(maybeFire(userId, 'ucla-reminder', dateStr, () => fireUclaReminder(userId), counters));
+  // MBA Monday reminder — weekday 1 = Monday.
+  if (settings.mbaReminder?.enabled && weekday === 1 && hour === hourOf(settings.mbaReminder.time)) {
+    tasks.push(maybeFire(userId, 'mba-reminder', dateStr, () => fireMbaReminder(userId), counters));
   }
 
   // Reminder promoter — weekday 0 = Sunday. Always enabled (Settings.reminderPromoter.enabled is the literal `true`).

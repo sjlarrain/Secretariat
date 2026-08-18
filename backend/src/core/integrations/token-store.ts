@@ -28,7 +28,7 @@ export interface Settings {
     day: number;
     time: string;
   };
-  uclaReminder: {
+  mbaReminder: {
     enabled: boolean;
     time: string;    // HH:MM — fires every Monday
   };
@@ -65,7 +65,7 @@ const DEFAULT_SETTINGS: Settings = {
   timezone: 'UTC',
   morningDigest: { enabled: false, time: '08:00', days: [1, 2, 3, 4, 5] },
   weeklySummary: { enabled: false, day: 0, time: '09:00' },
-  uclaReminder: { enabled: true, time: '09:00' },
+  mbaReminder: { enabled: true, time: '09:00' },
   defaultTaskTime: '09:00',
   reminderPromoter: { enabled: true, time: '08:00' },
   googleTasksSync: { enabled: false },

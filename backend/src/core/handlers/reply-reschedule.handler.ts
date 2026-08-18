@@ -4,7 +4,7 @@ import { sendMessage } from '../../shared/kapso/client';
 import { scheduleOnce, cancelMessage } from '../../shared/qstash/client';
 import { getReminders, updateReminder, saveReminder } from '../integrations/local/reminders';
 import { getTasks, updateTaskQStashId } from '../integrations/local/tasks';
-import { getUclaItem, updateUclaItemReminder } from '../integrations/local/ucla';
+import { getMbaItem, updateMbaItemReminder } from '../integrations/local/mba';
 import { getSettings } from '../integrations/token-store';
 import { Ctx } from '../../shared/ctx';
 
@@ -19,7 +19,7 @@ function extractRescheduleFlags(text: string): { forStr: string | null; atStr: s
   };
 }
 
-// Returns true if the reply was handled (matched a known reminder/task/ucla message).
+// Returns true if the reply was handled (matched a known reminder/task/mba message).
 export async function replyRescheduleHandler(contextMessageId: string, text: string, ctx: Ctx): Promise<boolean> {
   const from = ctx.userId;
   const target = await getReplyTarget(contextMessageId);
@@ -94,21 +94,21 @@ export async function replyRescheduleHandler(contextMessageId: string, text: str
       await sendMessage(from, `📌 Task rescheduled: _"${task.title}"_\nNew time: ${label}`);
 
     } else {
-      const uclaId = Number(target.id);
-      const item = await getUclaItem(ownerId, uclaId);
+      const mbaId = Number(target.id);
+      const item = await getMbaItem(ownerId, mbaId);
       if (!item) {
-        await sendMessage(from, '❌ UCLA item not found.');
+        await sendMessage(from, '❌ MBA item not found.');
         return true;
       }
       if (item.qstashMessageId) await cancelMessage(item.qstashMessageId).catch(() => null);
-      const newMessageId = await scheduleOnce('/internal/ucla/reminder/fire', delaySeconds, {
-        uclaItemId: uclaId,
+      const newMessageId = await scheduleOnce('/internal/mba/reminder/fire', delaySeconds, {
+        mbaItemId: mbaId,
         text: item.text,
         phoneNumber: from,
         userId: ownerId,
       });
-      await updateUclaItemReminder(ownerId, uclaId, fireAt.toISOString(), newMessageId);
-      await sendMessage(from, `🎓 UCLA item rescheduled: _"${item.text}"_\nNew time: ${label}`);
+      await updateMbaItemReminder(ownerId, mbaId, fireAt.toISOString(), newMessageId);
+      await sendMessage(from, `🎓 MBA item rescheduled: _"${item.text}"_\nNew time: ${label}`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

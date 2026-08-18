@@ -54,9 +54,9 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: ['tags', 'read', 'name'],
     requiredFlags: [],
   },
-  ucla: {
-    name: '/ucla',
-    description: 'UCLA to-do list. `/ucla <text>` to add, `/ucla` to list, `/ucla --done N` to mark done. Use --due for a due date (auto-reminds 24h before); --for and --at add an extra one-shot reminder.',
+  mba: {
+    name: '/mba',
+    description: 'MBA to-do list. `/mba <text>` to add, `/mba` to list, `/mba --done N` to mark done. Use --due for a due date (auto-reminds 24h before); --for and --at add an extra one-shot reminder.',
     acceptedFlags: ['done', 'due', 'for', 'at'],
     requiredFlags: [],
   },
@@ -69,12 +69,6 @@ export const COMMANDS: Record<string, CommandDefinition> = {
   zone: {
     name: '/zone',
     description: 'Show or set the platform timezone. `/zone` to show, `/zone America/Santiago` or `/zone GMT-3` to set. Reschedules all digests.',
-    acceptedFlags: [],
-    requiredFlags: [],
-  },
-  mantis: {
-    name: '/mantis',
-    description: 'Quick-capture a networking note to the Mantis inbox for later classification.',
     acceptedFlags: [],
     requiredFlags: [],
   },

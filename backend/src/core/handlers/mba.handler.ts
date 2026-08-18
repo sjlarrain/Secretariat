@@ -2,11 +2,11 @@ import { ParsedCommand } from '../parser/command.parser';
 import { sendMessage } from '../../shared/kapso/client';
 import { Ctx } from '../../shared/ctx';
 import {
-  getUclaItems,
-  addUclaItem,
-  markUclaItemDone,
-  updateUclaItem,
-} from '../integrations/local/ucla';
+  getMbaItems,
+  addMbaItem,
+  markMbaItemDone,
+  updateMbaItem,
+} from '../integrations/local/mba';
 import { parseDate, combineDateAndTime, formatDate, formatTime } from '../../shared/utils/date';
 import { scheduleOnce, cancelMessage } from '../../shared/qstash/client';
 
@@ -34,8 +34,8 @@ async function scheduleDueReminder(
   const delaySeconds = Math.floor((fireAt - Date.now()) / 1000);
   if (delaySeconds <= 0) return undefined;
 
-  return scheduleOnce('/internal/ucla/due/fire', delaySeconds, {
-    uclaItemId: itemId,
+  return scheduleOnce('/internal/mba/due/fire', delaySeconds, {
+    mbaItemId: itemId,
     text,
     dueAt: dueAt.toISOString(),
     phoneNumber,
@@ -43,7 +43,7 @@ async function scheduleDueReminder(
   });
 }
 
-export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
+export async function mbaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void> {
   const from = ctx.userId;
   const text = parsed.extraArgs.join(' ').trim();
   const doneFlag = parsed.flags['done'];
@@ -59,20 +59,20 @@ export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
   try {
     const tz = ctx.timezone;
 
-    // /ucla --done N  →  mark item as done
+    // /mba --done N  →  mark item as done
     if (doneFlag !== undefined) {
       const n = parseInt(doneFlag, 10);
       if (isNaN(n)) {
-        await sendMessage(from, '❌ Use `/ucla --done N` where N is the item number from `/ucla`.');
+        await sendMessage(from, '❌ Use `/mba --done N` where N is the item number from `/mba`.');
         return;
       }
-      const items = await getUclaItems(ctx.userId);
+      const items = await getMbaItems(ctx.userId);
       const item = items[n - 1];
       if (!item) {
-        await sendMessage(from, `❌ No item #${n}. Send \`/ucla\` to see your list.`);
+        await sendMessage(from, `❌ No item #${n}. Send \`/mba\` to see your list.`);
         return;
       }
-      const done = await markUclaItemDone(ctx.userId, item.id);
+      const done = await markMbaItemDone(ctx.userId, item.id);
       // Cancel both the user's reminder and the automatic due reminder.
       for (const id of [done?.qstashMessageId, done?.dueReminderId]) {
         if (id) await cancelMessage(id).catch(() => null);
@@ -81,7 +81,7 @@ export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
       return;
     }
 
-    // /ucla <text> [--due date] [--for date --at time]  →  add item
+    // /mba <text> [--due date] [--for date --at time]  →  add item
     if (text) {
       let dueAt: Date | undefined;
       if (dueFlag) {
@@ -110,15 +110,15 @@ export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
         return;
       }
 
-      const item = await addUclaItem(ctx.userId, text, { dueDate: dueAt?.toISOString() });
+      const item = await addMbaItem(ctx.userId, text, { dueDate: dueAt?.toISOString() });
 
-      const lines = [`✅ Added to UCLA list! (#${item.id})`];
+      const lines = [`✅ Added to MBA list! (#${item.id})`];
 
       if (dueAt) {
         lines.push(`📅 Due ${formatDate(dueAt, true, tz)} at ${formatTime(dueAt, tz)}`);
         const dueReminderId = await scheduleDueReminder(ctx, item.id, text, dueAt, from);
         if (dueReminderId) {
-          await updateUclaItem(ctx.userId, item.id, { dueReminderId });
+          await updateMbaItem(ctx.userId, item.id, { dueReminderId });
           const remindAt = new Date(dueAt.getTime() - DUE_REMINDER_LEAD_MS);
           lines.push(`🔔 I'll remind you 24h before — ${formatDate(remindAt, true, tz)} at ${formatTime(remindAt, tz)}`);
         } else {
@@ -128,11 +128,11 @@ export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
 
       if (reminderAt) {
         const messageId = await scheduleOnce(
-          '/internal/ucla/reminder/fire',
+          '/internal/mba/reminder/fire',
           Math.floor((reminderAt.getTime() - Date.now()) / 1000),
-          { uclaItemId: item.id, text, phoneNumber: from, userId: ctx.userId }
+          { mbaItemId: item.id, text, phoneNumber: from, userId: ctx.userId }
         );
-        await updateUclaItem(ctx.userId, item.id, { reminderFor: reminderAt.toISOString(), qstashMessageId: messageId });
+        await updateMbaItem(ctx.userId, item.id, { reminderFor: reminderAt.toISOString(), qstashMessageId: messageId });
         lines.push(`⏰ Reminder set for ${formatDate(reminderAt, true, tz)} at ${formatTime(reminderAt, tz)}`);
       }
 
@@ -140,13 +140,13 @@ export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
       return;
     }
 
-    // /ucla  →  list pending items
-    const items = await getUclaItems(ctx.userId);
+    // /mba  →  list pending items
+    const items = await getMbaItems(ctx.userId);
     if (items.length === 0) {
-      await sendMessage(from, '✅ UCLA list is clear!');
+      await sendMessage(from, '✅ MBA list is clear!');
       return;
     }
-    const lines = ['🎓 *UCLA list:*\n'];
+    const lines = ['🎓 *MBA list:*\n'];
     items.forEach((item, i) => {
       const parts: string[] = [];
       if (item.dueDate) {
@@ -160,7 +160,7 @@ export async function uclaHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
       const suffix = parts.length ? ` _(${parts.join(' · ')})_` : '';
       lines.push(`${i + 1}. ${item.text}${suffix}`);
     });
-    lines.push('\n_Use `/ucla --done N` to mark an item done._');
+    lines.push('\n_Use `/mba --done N` to mark an item done._');
     await sendMessage(from, lines.join('\n'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

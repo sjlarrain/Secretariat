@@ -46,11 +46,9 @@ router.post('/reminder/fire', qstashVerify, async (req: Request, res: Response) 
   }
 });
 
-async function fireUclaReminder(req: Request, res: Response): Promise<void> {
-  // `workItemId` is the pre-v1.14 field name; one-shot reminders scheduled
-  // before the rename are still in flight with the old payload shape.
-  const body = req.body as { uclaItemId?: number; workItemId?: number; text?: string; phoneNumber?: string; userId?: string };
-  const itemId = body.uclaItemId ?? body.workItemId;
+async function fireMbaReminder(req: Request, res: Response): Promise<void> {
+  const body = req.body as { mbaItemId?: number; text?: string; phoneNumber?: string; userId?: string };
+  const itemId = body.mbaItemId;
   const { text, phoneNumber } = body;
   const owner = body.userId ?? phoneNumber;
 
@@ -62,33 +60,30 @@ async function fireUclaReminder(req: Request, res: Response): Promise<void> {
     if (itemId != null) {
       const waMessageId = await sendInteractiveButtons(
         phoneNumber,
-        `🎓 *UCLA reminder:* ${text}`,
+        `🎓 *MBA reminder:* ${text}`,
         [
-          { id: `done_ucla_${itemId}`, title: 'Done' },
-          { id: `s1d_ucla_${itemId}`, title: 'Snooze 1 day' },
-          { id: `smon_ucla_${itemId}`, title: 'Next Monday' },
+          { id: `done_mba_${itemId}`, title: 'Done' },
+          { id: `s1d_mba_${itemId}`, title: 'Snooze 1 day' },
+          { id: `smon_mba_${itemId}`, title: 'Next Monday' },
         ],
       );
-      await storeReplyTarget(waMessageId, { type: 'ucla', id: String(itemId), title: text, phoneNumber, userId: owner }).catch(() => null);
+      await storeReplyTarget(waMessageId, { type: 'mba', id: String(itemId), title: text, phoneNumber, userId: owner }).catch(() => null);
     } else {
-      await sendMessage(phoneNumber, `🎓 *UCLA reminder:* ${text}`);
+      await sendMessage(phoneNumber, `🎓 *MBA reminder:* ${text}`);
     }
     res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('UCLA reminder fire error:', err);
-    res.status(500).json({ error: 'Failed to send UCLA reminder' });
+    console.error('MBA reminder fire error:', err);
+    res.status(500).json({ error: 'Failed to send MBA reminder' });
   }
 }
 
-router.post('/ucla/reminder/fire', qstashVerify, fireUclaReminder);
-// Legacy alias (pre-v1.14 /work): reminders scheduled before the rename are
-// already queued in QStash against this path and would 404 if it were removed.
-router.post('/work/reminder/fire', qstashVerify, fireUclaReminder);
+router.post('/mba/reminder/fire', qstashVerify, fireMbaReminder);
 
-// Automatic "due in 24h" reminder for UCLA items.
-router.post('/ucla/due/fire', qstashVerify, async (req: Request, res: Response) => {
-  const { uclaItemId, text, dueAt, phoneNumber, userId } = req.body as {
-    uclaItemId?: number; text?: string; dueAt?: string; phoneNumber?: string; userId?: string;
+// Automatic "due in 24h" reminder for MBA items.
+router.post('/mba/due/fire', qstashVerify, async (req: Request, res: Response) => {
+  const { mbaItemId, text, dueAt, phoneNumber, userId } = req.body as {
+    mbaItemId?: number; text?: string; dueAt?: string; phoneNumber?: string; userId?: string;
   };
   const owner = userId ?? phoneNumber;
   if (!text || !phoneNumber || !owner) {
@@ -102,23 +97,23 @@ router.post('/ucla/due/fire', qstashVerify, async (req: Request, res: Response) 
       : '';
     const body = `🎓 *Due in 24 hours:* ${text}${dueLabel}`;
 
-    if (uclaItemId != null) {
+    if (mbaItemId != null) {
       const waMessageId = await sendInteractiveButtons(
         phoneNumber,
         body,
         [
-          { id: `done_ucla_${uclaItemId}`, title: 'Done' },
-          { id: `s1d_ucla_${uclaItemId}`, title: 'Snooze 1 day' },
+          { id: `done_mba_${mbaItemId}`, title: 'Done' },
+          { id: `s1d_mba_${mbaItemId}`, title: 'Snooze 1 day' },
         ],
       );
-      await storeReplyTarget(waMessageId, { type: 'ucla', id: String(uclaItemId), title: text, phoneNumber, userId: owner }).catch(() => null);
+      await storeReplyTarget(waMessageId, { type: 'mba', id: String(mbaItemId), title: text, phoneNumber, userId: owner }).catch(() => null);
     } else {
       await sendMessage(phoneNumber, body);
     }
     res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('UCLA due reminder fire error:', err);
-    res.status(500).json({ error: 'Failed to send UCLA due reminder' });
+    console.error('MBA due reminder fire error:', err);
+    res.status(500).json({ error: 'Failed to send MBA due reminder' });
   }
 });
 
@@ -155,7 +150,7 @@ router.post('/task/reminder/fire', qstashVerify, async (req: Request, res: Respo
 
 // The hourly sweeper (docs/v2-plan.md §C.5) — replaces the per-user QStash
 // cron schedules that used to hit /digest/morning, /digest/weekly,
-// /digest/ucla, /reminder/promote, /tasks/sync, and /health-check. Those
+// /digest/mba, /reminder/promote, /tasks/sync, and /health-check. Those
 // routes are gone: the sweeper calls the same job functions in-process,
 // across every registered user, instead of QStash calling one route per
 // user per job. The one QStash schedule that remains is this one, created

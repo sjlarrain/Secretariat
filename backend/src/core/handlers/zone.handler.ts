@@ -59,7 +59,7 @@ export async function zoneHandler(parsed: ParsedCommand, ctx: Ctx): Promise<void
     const active = [
       next.morningDigest.enabled && 'morning digest',
       next.weeklySummary.enabled && 'weekly summary',
-      next.uclaReminder?.enabled && 'UCLA reminder',
+      next.mbaReminder?.enabled && 'MBA reminder',
       next.healthCheck?.enabled && 'health check',
     ].filter(Boolean) as string[];
 

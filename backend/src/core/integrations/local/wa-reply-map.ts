@@ -3,14 +3,12 @@ import { env } from '../../../shared/env';
 import { pointKey } from '../../../shared/redis/keys';
 
 export interface WaReplyTarget {
-  /** 'work' is the pre-v1.14 name for 'ucla'; still read for targets stored
-   *  before the rename (48h TTL means they age out on their own). */
-  type: 'rem' | 'task' | 'ucla' | 'work' | 'link';
-  id: string; // UUID for rem, stringified number for task/ucla/link
+  type: 'rem' | 'task' | 'mba' | 'link';
+  id: string; // UUID for rem, stringified number for task/mba/link
   title: string;
   phoneNumber: string;
   /**
-   * Owning user id for the reminder/task/ucla item/link this reply targets.
+   * Owning user id for the reminder/task/mba item/link this reply targets.
    * Usually equal to `phoneNumber`, but not always — a third-party pending
    * event's cached target belongs to the owner who receives it, not to the
    * third party's own number. Callers must use this for data lookups, not

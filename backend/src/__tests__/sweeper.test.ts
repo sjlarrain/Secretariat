@@ -24,14 +24,14 @@ vi.mock('@upstash/redis', async () => {
 
 const fireMorningDigest = vi.fn(async (_userId: string) => {});
 const fireWeeklySummary = vi.fn(async (_userId: string) => {});
-const fireUclaReminder = vi.fn(async (_userId: string) => {});
+const fireMbaReminder = vi.fn(async (_userId: string) => {});
 const promoteDeferred = vi.fn(async (_userId: string) => ({ promoted: 0, skipped: 0 }));
 const syncGoogleTasks = vi.fn(async (_userId: string) => ({ pulled: 0, pushed: 0, skipped: false }));
 const runHealthCheck = vi.fn(async (_userId: string) => ({ alerts: 0, notified: false }));
 
 vi.mock('../core/cron/morning-digest', () => ({ fireMorningDigest: (userId: string) => fireMorningDigest(userId) }));
 vi.mock('../core/cron/weekly-summary', () => ({ fireWeeklySummary: (userId: string) => fireWeeklySummary(userId) }));
-vi.mock('../core/cron/ucla-reminder', () => ({ fireUclaReminder: (userId: string) => fireUclaReminder(userId) }));
+vi.mock('../core/cron/mba-reminder', () => ({ fireMbaReminder: (userId: string) => fireMbaReminder(userId) }));
 vi.mock('../core/cron/reminder-promoter', () => ({ promoteDeferred: (userId: string) => promoteDeferred(userId) }));
 vi.mock('../core/cron/google-tasks-sync', () => ({ syncGoogleTasks: (userId: string) => syncGoogleTasks(userId) }));
 vi.mock('../ops/cron/health-check', () => ({ runHealthCheck: (userId: string) => runHealthCheck(userId) }));
@@ -48,7 +48,7 @@ beforeEach(() => {
   resetFakeRedis();
   fireMorningDigest.mockClear();
   fireWeeklySummary.mockClear();
-  fireUclaReminder.mockClear();
+  fireMbaReminder.mockClear();
   promoteDeferred.mockClear();
   syncGoogleTasks.mockClear();
   runHealthCheck.mockClear();
@@ -108,14 +108,14 @@ describe('sweeper — due-time matching', () => {
     expect(fireWeeklySummary).toHaveBeenCalledExactlyOnceWith(ALICE);
   });
 
-  it('fires the UCLA reminder only on Monday', async () => {
-    await makeUser(ALICE, (s) => ({ ...s, uclaReminder: { enabled: true, time: '08:00' } }));
+  it('fires the MBA reminder only on Monday', async () => {
+    await makeUser(ALICE, (s) => ({ ...s, mbaReminder: { enabled: true, time: '08:00' } }));
 
     await runSweep(WED_0800);
-    expect(fireUclaReminder).not.toHaveBeenCalled();
+    expect(fireMbaReminder).not.toHaveBeenCalled();
 
     await runSweep(MON_0800);
-    expect(fireUclaReminder).toHaveBeenCalledExactlyOnceWith(ALICE);
+    expect(fireMbaReminder).toHaveBeenCalledExactlyOnceWith(ALICE);
   });
 
   it('fires the reminder promoter only on Sunday, regardless of the enabled flag (always on)', async () => {

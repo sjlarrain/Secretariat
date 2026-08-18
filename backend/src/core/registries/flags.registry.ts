@@ -101,7 +101,7 @@ export const FLAGS: Record<string, FlagDefinition> = {
     description: 'Mark item #N as done (e.g. --done 3 or -d 3)',
   },
   due: {
-    // -u, not -d: /ucla accepts --done (-d) too. Short aliases only need to be
+    // -u, not -d: /mba accepts --done (-d) too. Short aliases only need to be
     // unique within a command's acceptedFlags, which is why this can reuse the
     // letter --using takes on /schedule.
     name: '--due',

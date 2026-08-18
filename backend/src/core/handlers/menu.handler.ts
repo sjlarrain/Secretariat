@@ -4,6 +4,8 @@ import { Ctx } from '../../shared/ctx';
 
 const MENU = `🤖 *Secretariat — Commands*
 
+New here? Send */example* for worked examples you can copy.
+
 📅 *Calendar*
 */schedule* — Create a calendar event
   --title (-t)   name *(required)*
@@ -67,8 +69,9 @@ Reply _--name text_ after saving to name it right away
 */zone* America/Santiago  — Set timezone (city name tracks DST)
 */zone* GMT-3             — Set timezone by fixed offset
 */panel*                  — Get a one-time link to your panel
+*/example*                — Worked examples (/example schedule for one command)
 
-_Send /start to wake up the bot._`;
+_Send /example to see these in action._`;
 
 export async function menuHandler(_parsed: ParsedCommand, ctx: Ctx): Promise<void> {
   await sendMessage(ctx.userId, MENU);

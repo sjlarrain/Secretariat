@@ -18,6 +18,12 @@ export const COMMANDS: Record<string, CommandDefinition> = {
     acceptedFlags: [],
     requiredFlags: [],
   },
+  example: {
+    name: '/example',
+    description: 'Worked examples of what to actually type. `/example` for a short tour, `/example <command>` (e.g. `/example schedule`) for more on one command.',
+    acceptedFlags: [],
+    requiredFlags: [],
+  },
   schedule: {
     name: '/schedule',
     description: 'Create a calendar event on Google Calendar. Add -v for a Google Meet link, @day for an all-day event, -d for duration.',

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseCommand } from '../core/parser/command.parser';
+import { EXAMPLES } from '../core/registries/examples.registry';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -647,4 +648,47 @@ describe('/status', () => {
     expect(r.flags).toEqual({});
     expect(r.extraArgs).toEqual([]);
   });
+});
+
+// ─── /example ─────────────────────────────────────────────────────────────────
+
+describe('/example', () => {
+  it('succeeds with no args (short tour)', () => {
+    const r = ok('/example');
+    expect(r.command).toBe('example');
+    expect(r.extraArgs).toEqual([]);
+  });
+
+  it('takes a command name as a positional topic', () => {
+    const r = ok('/example schedule');
+    expect(r.command).toBe('example');
+    expect(r.extraArgs[0]).toBe('schedule');
+  });
+
+  it('accepts a slash-prefixed topic', () => {
+    const r = ok('/example /mba');
+    expect(r.extraArgs[0]).toBe('/mba');
+  });
+
+  it('rejects flags (it takes none)', () => {
+    expect(fail('/example --project Foo')).toMatch(/unknown flag/i);
+  });
+});
+
+// ─── Every worked example is a command that actually parses ──────────────────
+
+describe('EXAMPLES parse cleanly', () => {
+  // The whole point of /example is that a user can copy a line straight into
+  // WhatsApp. An example that fails the parser is worse than no example, and
+  // nothing else in the suite would catch it — the examples are prose to every
+  // other test.
+  for (const [key, rows] of Object.entries(EXAMPLES)) {
+    for (const [what, how] of rows) {
+      it(`/${key}: ${what}`, () => {
+        const r = parseCommand(how);
+        expect(r.success, `"${how}" failed to parse: ${r.error}`).toBe(true);
+        expect(r.data!.command).toBe(key);
+      });
+    }
+  }
 });

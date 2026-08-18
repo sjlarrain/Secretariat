@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FLAGS } from '../core/registries/flags.registry';
 import { COMMANDS } from '../core/registries/commands.registry';
+import { EXAMPLES } from '../core/registries/examples.registry';
 
 // ─── Flag registry integrity ──────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ describe('short aliases do not collide within a command', () => {
 // ─── Cross-registry: expected commands exist ──────────────────────────────────
 
 describe('expected commands are registered', () => {
-  const requiredCommands = ['start', 'menu', 'schedule', 'task', 'reminder', 'myschedule', 'ideas', 'links', 'mba', 'status', 'zone'];
+  const requiredCommands = ['start', 'menu', 'example', 'schedule', 'task', 'reminder', 'myschedule', 'ideas', 'links', 'mba', 'status', 'zone'];
 
   for (const cmd of requiredCommands) {
     it(`/${cmd} is in COMMANDS`, () => {
@@ -260,5 +261,34 @@ describe('required flags contract', () => {
 
   it('/links has no required flags', () => {
     expect(COMMANDS['links'].requiredFlags).toHaveLength(0);
+  });
+});
+
+// ─── /example's table tracks the registry ────────────────────────────────────
+
+describe('EXAMPLES table', () => {
+  // The examples are hand-written, so nothing stops them drifting after a
+  // rename — /ucla → /mba is exactly the kind of change that would strand a
+  // stale key here, and the handler would then advertise a topic that answers
+  // "No examples for ...".
+  it('every topic is a real command', () => {
+    for (const key of Object.keys(EXAMPLES)) {
+      expect(COMMANDS[key], `EXAMPLES.${key} is not in COMMANDS`).toBeDefined();
+    }
+  });
+
+  it('every example line invokes the command it illustrates', () => {
+    for (const [key, rows] of Object.entries(EXAMPLES)) {
+      for (const [, how] of rows) {
+        const invokesIt = how === `/${key}` || how.startsWith(`/${key} `);
+        expect(invokesIt, `EXAMPLES.${key} example does not invoke /${key}: ${how}`).toBe(true);
+      }
+    }
+  });
+
+  it('every topic has at least one example', () => {
+    for (const [key, rows] of Object.entries(EXAMPLES)) {
+      expect(rows.length, `EXAMPLES.${key} is empty`).toBeGreaterThan(0);
+    }
   });
 });

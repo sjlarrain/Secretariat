@@ -16,6 +16,7 @@ import { myscheduleHandler } from '../../core/handlers/myschedule.handler';
 import { ideasHandler } from '../../core/handlers/ideas.handler';
 import { linksHandler } from '../../core/handlers/links.handler';
 import { menuHandler } from '../../core/handlers/menu.handler';
+import { exampleHandler } from '../../core/handlers/example.handler';
 import { mbaHandler } from '../../core/handlers/mba.handler';
 import { statusHandler } from '../../core/handlers/status.handler';
 import { zoneHandler } from '../../core/handlers/zone.handler';
@@ -154,6 +155,9 @@ router.post('/', extractWebhookData, v1ProxyMiddleware, resolveSenderMiddleware,
       case 'menu':
         await menuHandler(data, ctx);
         break;
+      case 'example':
+        await exampleHandler(data, ctx);
+        break;
       case 'schedule':
         await scheduleHandler(data, ctx);
         break;
@@ -185,7 +189,7 @@ router.post('/', extractWebhookData, v1ProxyMiddleware, resolveSenderMiddleware,
         await panelHandler(data, ctx);
         break;
       default:
-        await sendMessage(from, `❌ Unknown command. Send /start to see available commands.`);
+        await sendMessage(from, `❌ Unknown command. Send /example for what you can type, or /menu for the full list.`);
     }
   } catch (err) {
     console.error('Webhook unhandled error:', err);

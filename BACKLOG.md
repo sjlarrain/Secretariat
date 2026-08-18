@@ -58,6 +58,7 @@
 | v2.0 | Remove `/mantis` — command, integration, and `MANTIS_API_*` env vars dropped from v2 | ✅ Done | Easy |
 | v2.0 | `/ucla` → `/mba` — full rename (command, Redis collection, settings field, internal routes, panel page); pre-v1.14 `/work` compat paths dropped with it | ✅ Done | Medium |
 | v2.0 | Landing page at `/` — public Welcome replaces the ops dashboard, which moves to `/dashboard` | ✅ Done | Easy |
+| v2.0 | `/example` — worked, copy-pasteable examples per command; every example is parser-tested | ✅ Done | Easy |
 | **v2.1 — Secretariat for Groups** | | | |
 | v2.1 | Group chat support — bot in WhatsApp group, @mention activation, shared ideas + group reminders | 🔒 Blocked | Hard |
 | v2.1 | _Blocked: WhatsApp Business Cloud API does not support sending to group chats. Revisit when Kapso/Meta adds group messaging to the API._ | | |

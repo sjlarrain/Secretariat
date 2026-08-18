@@ -136,14 +136,15 @@ All persistent state lives in Upstash Redis (not files). Redis keys:
 
 ### Registry-Driven Design
 
-Two registries are the single source of truth:
+Three registries are the single source of truth:
 
 - **`registries/flags.registry.ts`** — all flag definitions (`--title`, `--for`, `@`, `--plan`, etc.)
 - **`registries/commands.registry.ts`** — all commands with their `acceptedFlags` and `requiredFlags`
+- **`registries/examples.registry.ts`** — worked `[what it does, what you send]` pairs per command, rendered by `/example`. Deliberately import-free so `registry.test.ts` can load it without env.
 
 The parser reads from these. Adding a new flag or command requires updating the registries, adding the handler, and adding a `case` to the switch in `routes/webhook.ts` — a command in the registry with no `case` parses successfully and then falls through to "unknown command".
 
-Note the `/menu` handler does **not** build from the registries — it is a hand-maintained string in `menu.handler.ts` and must be updated by hand when commands or flags change.
+Note the `/menu` handler does **not** build from the registries — it is a hand-maintained string in `menu.handler.ts` and must be updated by hand when commands or flags change. `/example` is the discovery counterpart: `/menu` answers "what flags exist", `/example` answers "what do I actually type". Its table is hand-written too, but guarded — `registry.test.ts` asserts every topic is a real command, and `parser.test.ts` runs **every example line through the parser**, so a rename that strands an example fails the build rather than shipping a copy-paste that errors. `/start`, `/menu`, and the unknown-command reply all point at `/example`; keep those three in sync if it is ever renamed.
 
 Short aliases are resolved **per-command**, so two flags may share a letter globally as long as no single command accepts both (`--project`/`--plan` both use `-p`; `--using`/`--due` both use `-u`). A test in `registry.test.ts` enforces this.
 

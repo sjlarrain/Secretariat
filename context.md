@@ -38,7 +38,7 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │   ├── start.handler.ts
 │   │   │   ├── schedule.handler.ts
 │   │   │   ├── task.handler.ts
-│   │   │   ├── ucla.handler.ts         # /ucla — to-do list with due dates
+│   │   │   ├── mba.handler.ts          # /mba — to-do list with due dates
 │   │   │   ├── zone.handler.ts         # /zone — show/set timezone
 │   │   │   ├── status.handler.ts       # /status — connections, Kapso health, usage
 │   │   │   ├── reminder.handler.ts
@@ -65,7 +65,7 @@ A personal WhatsApp-based command bot that lets the owner send structured comman
 │   │   │       ├── ideas.ts          # Ideas + projects (secretariat:ideas, secretariat:projects)
 │   │   │       ├── links.ts          # Saved links (secretariat:links)
 │   │   │       ├── plans.ts          # Meeting plan types (secretariat:plans)
-│   │   │       ├── ucla.ts           # UCLA to-do list with due dates (secretariat:ucla)
+│   │   │       ├── mba.ts            # MBA to-do list with due dates (u:<userId>:mba)
 │   │   │       └── third-party.ts    # Third-party contacts + pending events (secretariat:third-party-*)
 │   │   ├── kapso/
 │   │   │   └── client.ts             # Kapso SDK wrapper — send WhatsApp messages

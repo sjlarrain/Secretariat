@@ -18,7 +18,7 @@ Send a command from WhatsApp and Secretariat handles the rest:
 | `/reminder` | Sets a WhatsApp reminder (fires at the scheduled time) |
 | `/ideas` | Saves ideas, lists them, filters by project |
 | `/links` | Saves a link for later, lists unread links, or archives one |
-| `/ucla` | Adds items to a UCLA to-do list; due dates auto-remind 24h before; Monday digest |
+| `/mba` | Adds items to an MBA to-do list; due dates auto-remind 24h before; Monday digest |
 | `/status` | Shows connections, Kapso health, and monthly message usage |
 | `/zone` | Shows or sets the platform timezone; reschedules all digests |
 | `/menu` | Shows all commands and syntax |
@@ -47,7 +47,7 @@ Third-party contacts (registered in the admin panel) have access to a limited co
 | [Google Cloud Console](https://console.cloud.google.com) | OAuth app for Calendar + Tasks | Free |
 | [Render](https://render.com) | Hosting | Free tier (cold starts ~50s) |
 
-> **QStash schedule budget.** Secretariat registers up to **six** recurring schedules: morning digest, weekly summary, UCLA Monday reminder, reminder promoter, Google Tasks sync (every 15 min), and the nightly health check. The free tier allows **10 active schedules**, so all six fit with room to spare. Each is individually toggleable in admin panel → Settings → Cron Manager.
+> **QStash schedule budget.** Secretariat registers up to **six** recurring schedules: morning digest, weekly summary, MBA Monday reminder, reminder promoter, Google Tasks sync (every 15 min), and the nightly health check. The free tier allows **10 active schedules**, so all six fit with room to spare. Each is individually toggleable in admin panel → Settings → Cron Manager.
 >
 > Message volume also fits: the 15-minute sync is the heaviest job at ~96 messages/day against a 1,000/day free-tier limit.
 >
@@ -120,7 +120,7 @@ NODE_ENV=production
 │       │   ├── menu.handler.ts
 │       │   ├── schedule.handler.ts
 │       │   ├── task.handler.ts        # /task — local task manager, two-way synced to Google Tasks
-│       │   ├── ucla.handler.ts        # /ucla — UCLA to-do list with due dates (was work.handler.ts)
+│       │   ├── mba.handler.ts         # /mba — MBA to-do list with due dates (was ucla.handler.ts)
 │       │   ├── zone.handler.ts        # /zone — show/set timezone, regenerates all schedules
 │       │   ├── status.handler.ts      # /status — connections, Kapso health, usage
 │       │   ├── reminder.handler.ts    # Saves pending reminder to Redis; fires via QStash
@@ -290,26 +290,26 @@ The reminder fires as a WhatsApp message at the scheduled time, delivered by QSt
 
 > The promoter is **always on and cannot be disabled** — deferred reminders have no queued message and depend entirely on it, so turning it off would silently strand them. It has no on/off toggle in the admin panel; only its run time (default Sunday 08:00) is configurable. The invariant is enforced in `token-store.ts` (on read and write) and in `reconcileSchedules()`, and the `enabled` field is typed as the literal `true` so the compiler rejects any code that tries to unset it.
 
-### `/ucla` — UCLA to-do list
+### `/mba` — MBA to-do list
 
 ```
-/ucla <text>                              → add item to UCLA list
-/ucla <text> --due <date>                → add item with a due date
-/ucla <text> -u <date>                   → same with short flag
-/ucla <text> --for <date> --at <HH:MM>   → add item with an extra one-shot reminder
-/ucla <text> -f <date> -a <HH:MM>        → same with short flags
-/ucla <text> -f <date> @<HH:MM>          → same with @ shorthand
-/ucla                                     → list pending items (numbered)
-/ucla —                                   → same (bare dash also lists)
-/ucla --done <N>                          → mark item #N as done
-/ucla -d <N>                              → same with short flag
+/mba <text>                              → add item to MBA list
+/mba <text> --due <date>                → add item with a due date
+/mba <text> -u <date>                   → same with short flag
+/mba <text> --for <date> --at <HH:MM>   → add item with an extra one-shot reminder
+/mba <text> -f <date> -a <HH:MM>        → same with short flags
+/mba <text> -f <date> @<HH:MM>          → same with @ shorthand
+/mba                                     → list pending items (numbered)
+/mba —                                   → same (bare dash also lists)
+/mba --done <N>                          → mark item #N as done
+/mba -d <N>                              → same with short flag
 ```
 
 ```
-/ucla Finish problem set 3
-/ucla Submit essay --due friday
-/ucla Read the Q1 report -f saturday @10:00
-/ucla --done 2
+/mba Finish problem set 3
+/mba Submit essay --due friday
+/mba Read the Q1 report -f saturday @10:00
+/mba --done 2
 ```
 
 Items stay in the list until explicitly marked done — they are **not** fire-and-forget. A Monday morning digest is sent automatically with all pending items (configurable in admin panel → Settings → Cron Manager).
@@ -369,7 +369,7 @@ Shows connected Google accounts (flagging any that are disconnected), Kapso heal
 /zone GMT-3                  → set by fixed offset (does NOT track DST)
 ```
 
-The timezone drives every date/time in WhatsApp replies and every recurring schedule. Changing it **immediately deletes and recreates** the morning digest, weekly summary, UCLA reminder, reminder promoter, and health check so they keep firing at the same local wall-clock time. Existing one-off reminders keep their original absolute time.
+The timezone drives every date/time in WhatsApp replies and every recurring schedule. Changing it **immediately deletes and recreates** the morning digest, weekly summary, MBA reminder, reminder promoter, and health check so they keep firing at the same local wall-clock time. Existing one-off reminders keep their original absolute time.
 
 Two input formats are accepted:
 
@@ -409,7 +409,7 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Accounts** | Connect Google Calendar / Google Tasks via OAuth; set default; select which sub-calendars to include; disconnect |
 | **Whitelist** | View owner numbers (edit via `WHITELISTED_NUMBERS` env var); manage third-party contacts with name + number |
 | **Reminders** | View, edit, snooze, and cancel pending one-off reminders (split out of Cron Manager in v1.14) |
-| **UCLA** | Add items with optional due dates, snooze, mark done (was the Work page) |
+| **MBA** | Add items with optional due dates, snooze, mark done (was the UCLA page) |
 | **Tasks** | Local task manager, two-way synced to Google Tasks |
 | **Plans** | Create and manage meeting plan types (name, days, time slots, duration, buffer) for `/myschedule --plan` |
 | **Ideas** | Folder-style view by project; create, edit, delete, reassign; trash with 30-day auto-purge |
@@ -417,7 +417,7 @@ Accessible at your deployment URL (e.g. `https://secretariat.onrender.com`). Log
 | **Commands** | Reference for all commands and flags |
 | **Settings** | Hub for Accounts, Whitelist, Plans, Commands, Time Configuration, and Cron Manager |
 | **Settings → Time Configuration** | Timezone (city name or `GMT±N`), live server clock, default task reminder time |
-| **Settings → Cron Manager** | Morning digest, weekly summary, UCLA Monday reminder, Google Tasks sync, and nightly health check — each individually toggleable. The reminder promoter also appears here but has no toggle: it is always on, and only its run time can be changed |
+| **Settings → Cron Manager** | Morning digest, weekly summary, MBA Monday reminder, Google Tasks sync, and nightly health check — each individually toggleable. The reminder promoter also appears here but has no toggle: it is always on, and only its run time can be changed |
 
 A **health banner** appears at the top of every page when the nightly health check finds a problem (disconnected Google account, Kapso degraded, a missing QStash schedule, Redis unreachable), with a link to resolve it. This banner is the reliable surface for health alerts — the WhatsApp notification is best-effort and can be dropped outside Meta's 24-hour session window.
 

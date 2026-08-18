@@ -90,7 +90,17 @@ Panel routes under `/app` resolve data from the session's `userId` only — neve
 - `auth/` — phone→user resolution, user sessions, admin sessions
 
 **8. v1 proxy shim**
-Unrecognized sender → if Santiago's number, forward to v1's webhook unchanged; otherwise ignore + notify admin. Deleted at cutover.
+Kapso allows **one** raw-webhook subscription per phone number (a second `Meta`-type one fails with `already has a meta webhook configured`), so exactly one service is the front door for the shared number. That service is v2 — it is the codebase under development, so making it the door means v1 needs no change at all.
+
+`platform/v1-proxy.ts` forwards a v1-owned sender's payload to v1's webhook byte-for-byte and stops; every other sender falls through to v2's own resolution. Deleted at cutover.
+
+- **The check runs before `resolveSenderMiddleware`, not inside its unrecognized branch** as this section originally specified. Once Santiago's number is also registered in v2 for testing, `resolveSender()` returns `kind: 'user'` and a check placed downstream never fires — v2 would answer and v1 would go silent, which is the failure the shim exists to prevent.
+- **Forward the raw `req.body`**, never reconstructed fields. v1 re-parses it with its own `normalizeWebhook()` and dedups on the message id inside it.
+- **Cutover is unsetting `V1_WEBHOOK_URL`** on the Render environment: the shim goes inert and v2 starts handling those senders too. No deploy, and the same switch rolls back. `V1_PROXY_NUMBERS` defaults to `WHITELISTED_NUMBERS`.
+- **No message is ever handled by both services.** A proxied sender returns without calling `next()`, so v2's handlers never see it; a non-proxied sender is never forwarded, so v1 never sees it (and so never replies `❌ Unauthorized number.` to a new v2 user).
+- **A failed forward answers 502, not 200** — the one deliberate exception to the always-200 rule. See the CLAUDE.md note; the dedup claim is released first so Kapso's retry isn't swallowed.
+
+**Rejected alternatives.** Two subscriptions fanning out to both services: needs v1's `whitelistMiddleware` edited so it stops replying to v2's users, which is a change to live production code, and the second subscription must be `Kapso (events)` type, whose envelope `normalizeWebhook()` does not parse. A Kapso Function doing the routing: moves the logic outside the repo — no tests, no git, no logs we control, a third deploy surface.
 
 **9. Encryption**
 Extend the existing AES-256-GCM pattern to sensitive per-user content. Encrypt values only, never keys. Never encrypt a field used for filtering or sorting.

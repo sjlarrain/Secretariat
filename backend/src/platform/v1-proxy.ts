@@ -155,6 +155,16 @@ async function deliver(id: string, body: unknown): Promise<void> {
  * the ack-first model, run once per hourly sweep. Sequential on purpose: these
  * only pile up when v1 is down or cold, and firing them in parallel at a
  * spinning-up instance helps nobody.
+ *
+ * Known and accepted: this can deliver a message to v1 twice. v1's dedup
+ * (`secretariat:dedup:<id>`) has a 5-minute TTL, and a redrive lands up to an
+ * hour later, so it does *not* cover a replay. The case is narrow — a forward
+ * only lands here after v1 failed to answer within `FORWARD_TIMEOUT_MS` twice,
+ * and a duplicate needs v1 to have actually processed the message and merely
+ * been slow to say so — but when it happens the user sees a doubled reply, or a
+ * reminder created twice. That is the deliberate trade: this whole module exists
+ * because the previous design lost messages silently, and a visible duplicate is
+ * the better failure. Do not "fix" it by dropping the redrive.
  */
 export async function redriveV1Forwards(): Promise<{
   delivered: number;
@@ -211,9 +221,10 @@ export async function v1ProxyMiddleware(
   const claimKey = messageId ? pointKey('dedup', messageId) : null;
 
   // Claim before anything else so two concurrent deliveries of the same message
-  // can't both reach v1. Fails open on a Redis error: v1 dedups the message id
-  // in its own database regardless, so a duplicate forward costs a wasted
-  // request, while dropping the message costs the message.
+  // can't both reach v1. Fails open on a Redis error: concurrent deliveries land
+  // seconds apart, comfortably inside v1's own 5-minute dedup window, so a
+  // duplicate forward costs a wasted request while dropping the message costs
+  // the message. (That window is why this is safe here and not in the redrive.)
   if (claimKey) {
     let alreadyClaimed = false;
     try {
@@ -229,8 +240,10 @@ export async function v1ProxyMiddleware(
   }
 
   // A message with no id can't be deduped or addressed in the pending hash, so
-  // synthesize one. Worst case a redrive delivers it twice and v1's own dedup
-  // absorbs the second.
+  // synthesize one. This is only a handle for our own bookkeeping — v1 still
+  // dedups on whatever id is inside the payload, so a synthesized key never
+  // makes a replay more likely than the redrive already does (see
+  // `redriveV1Forwards`).
   const pendingId = messageId ?? `noid:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   // Record before acking, never after: the ack forfeits Kapso's retries, so

@@ -38,7 +38,16 @@ app.use(
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'secretariat', timestamp: new Date().toISOString() });
+  res.json({
+    ok: true,
+    service: 'secretariat',
+    // Render injects RENDER_GIT_COMMIT on every deploy. Without it there is no
+    // way to tell which build is actually serving, which turns "did the fix
+    // deploy?" into guesswork.
+    commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'unknown',
+    v1Proxy: env.V1_WEBHOOK_URL ? 'on' : 'off',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // API routes

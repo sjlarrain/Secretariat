@@ -142,6 +142,7 @@ async function deliver(id: string, body: unknown): Promise<void> {
     console.error(`[v1-proxy] forward threw for ${id}:`, err);
   }
   if (ok) {
+    console.log(`[v1-proxy] v1 accepted ${id}`);
     await clearPending(id).catch((err) =>
       console.error(`[v1-proxy] could not clear pending ${id}:`, err)
     );
@@ -213,9 +214,19 @@ export async function v1ProxyMiddleware(
 ): Promise<void> {
   const phone = (req as WebhookRequest).senderPhone;
   if (!isProxiedToV1(phone)) {
+    // While the shim is live, a v1-owned sender falling through to v2 is the
+    // failure this module exists to prevent, and it is otherwise invisible —
+    // v2 just silently declines to answer. Print what was compared against what.
+    if (env.V1_WEBHOOK_URL && phone) {
+      console.log(
+        `[v1-proxy] not proxying ${phone}; V1_PROXY_NUMBERS=[${v1ProxyNumbers.join(', ')}]`
+      );
+    }
     next();
     return;
   }
+
+  console.log(`[v1-proxy] routing ${phone} to ${env.V1_WEBHOOK_URL}`);
 
   const messageId = (req as WebhookRequest).messageId;
   const claimKey = messageId ? pointKey('dedup', messageId) : null;

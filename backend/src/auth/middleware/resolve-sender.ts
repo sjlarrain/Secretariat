@@ -50,9 +50,14 @@ function normalizePhone(raw: string): string {
 // (`{ message, conversation, phone_number_id }` at the top level — normalizeWebhook()
 // only understands the Meta shape and silently returns messages: [] for this one).
 export function extractWebhookData(req: Request, _res: Response, next: NextFunction) {
+  // Which envelope branch handled this. Logged below: an inbound message that
+  // parses to no sender is dropped further down with no reply, and without this
+  // there is nothing anywhere saying what arrived or why it was ignored.
+  let shape = 'unknown';
   try {
     const body = req.body as { entry?: unknown; message?: Record<string, unknown> };
     if (Array.isArray(body?.entry)) {
+      shape = 'meta';
       const events = normalizeWebhook(req.body);
       const message = events.messages?.[0];
       (req as WebhookRequest).senderPhone = normalizePhone(message?.from ?? '');
@@ -67,6 +72,7 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
       (req as WebhookRequest).messageId = message?.id ?? null;
       (req as WebhookRequest).contextMessageId = message?.context?.id ?? null;
     } else if (body?.message && typeof body.message === 'object') {
+      shape = 'kapso-events';
       // Reaching here means a `Kapso (events)` subscription delivered this.
       // Per docs/v2-plan.md §C.8 v2 is fed by the single `Meta` subscription
       // and should only ever see the envelope above, so this is worth shouting
@@ -100,13 +106,21 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
       (req as WebhookRequest).contextMessageId =
         typeof message.context?.id === 'string' ? message.context.id : null;
     } else {
+      // Neither envelope matched. The top-level keys are the only clue to what
+      // Kapso actually posted, and without them this is an invisible drop.
+      console.warn(
+        '[inbound] unrecognized envelope; top-level keys:',
+        JSON.stringify(Object.keys((req.body as Record<string, unknown>) ?? {}))
+      );
       (req as WebhookRequest).senderPhone = '';
       (req as WebhookRequest).webhookText = null;
       (req as WebhookRequest).messageId = null;
       (req as WebhookRequest).buttonReplyId = null;
       (req as WebhookRequest).contextMessageId = null;
     }
-  } catch {
+  } catch (err) {
+    shape = 'parse-error';
+    console.error('[inbound] envelope parse threw:', err);
     (req as WebhookRequest).senderPhone = '';
     (req as WebhookRequest).webhookText = null;
     (req as WebhookRequest).messageId = null;
@@ -116,6 +130,14 @@ export function extractWebhookData(req: Request, _res: Response, next: NextFunct
   (req as WebhookRequest).isThirdParty = false;
   (req as WebhookRequest).thirdPartyAlias = '';
   (req as WebhookRequest).user = null;
+
+  const parsed = req as WebhookRequest;
+  console.log(
+    `[inbound] envelope=${shape} from=${parsed.senderPhone || '(none)'} ` +
+      `id=${parsed.messageId ?? '(none)'} ` +
+      `kind=${parsed.buttonReplyId ? 'button' : parsed.webhookText !== null ? 'text' : 'other'}`
+  );
+
   next();
 }
 
@@ -138,6 +160,7 @@ export async function resolveSenderMiddleware(
 ): Promise<void> {
   const phone = (req as WebhookRequest).senderPhone;
   if (!phone) {
+    console.warn('[inbound] dropped: no sender could be extracted from the payload');
     res.status(200).json({ ok: false, reason: 'no-sender' });
     return;
   }
@@ -151,6 +174,7 @@ export async function resolveSenderMiddleware(
   }
 
   if (resolved.kind === 'disabled') {
+    console.log(`[inbound] dropped ${phone}: user is disabled`);
     res.status(200).json({ ok: false, reason: 'disabled' });
     return;
   }
@@ -158,6 +182,7 @@ export async function resolveSenderMiddleware(
   // Blocked takes priority over the third-party check below — a blocked
   // number shouldn't get a foothold just by matching someone's contact list.
   if (await isBlocked(phone).catch(() => false)) {
+    console.log(`[inbound] dropped ${phone}: number is blocked`);
     res.status(200).json({ ok: false, reason: 'blocked' });
     return;
   }
@@ -181,6 +206,13 @@ export async function resolveSenderMiddleware(
     return;
   }
 
+  // Deliberately silent to the sender, but never silent in the logs: this is
+  // where a number that *should* have been proxied to v1, or registered in v2,
+  // disappears without a trace.
+  console.warn(
+    `[inbound] dropped ${phone}: not a registered v2 user, not a third-party contact, ` +
+      `and not routed to v1 — check V1_PROXY_NUMBERS / WHITELISTED_NUMBERS`
+  );
   await recordUnrecognizedSender(phone).catch(() => undefined);
   res.status(200).json({ ok: false, reason: 'unrecognized' });
 }

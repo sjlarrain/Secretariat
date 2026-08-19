@@ -138,12 +138,26 @@ All of the following exists only to serve the v2→v1 hop and is deleted with it
 
 ### Redis
 
-Delete the `sys:v1-pending` key from **v2's** Upstash database once any stranded
-messages in it are either delivered or written off. Check first:
+**Status: checked, deliberately left in place** (2026-08-18). `HLEN sys:v1-pending`
+returned **3** — all from Santiago's own number, two ~1h old and one ~5h. These are
+messages v2 acked to Kapso (so Kapso recorded them delivered) that never reached
+v1 and never got a reply.
+
+They were already unrecoverable before the cleanup: the redrive that was supposed
+to rescue them runs over the Render->Render hop, which is the 429 in §1, so every
+hourly sweep failed until the 24h expiry dropped them silently. Deleting the shim
+did not strand them; it removed the machinery that was failing to un-strand them.
+
+Nothing reads or writes this key now, so it is inert. Santiago's call was to leave
+it and decide later rather than write the payloads off. Delete when ready:
 
 ```bash
-HLEN sys:v1-pending
+HLEN sys:v1-pending   # confirm before destroying
+DEL  sys:v1-pending
 ```
+
+Do **not** try to replay them into v1: same 429, and a successful replay of 1-5h-old
+commands can duplicate whatever they created (a reminder, a task).
 
 ### Environment
 

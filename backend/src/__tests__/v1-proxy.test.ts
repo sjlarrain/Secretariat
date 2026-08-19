@@ -363,6 +363,60 @@ describe('v1 proxy shim, cold-start delivery', () => {
   });
 });
 
+// A 429 is not a cold start. It says the far side is already refusing volume,
+// so every extra attempt sustains the very limit that is blocking delivery.
+describe('v1 proxy shim, back-pressure', () => {
+  it('stops the retry ladder immediately on 429 instead of hammering', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async () => new Response('slow down', { status: 429 }));
+
+    const res = mockRes();
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.429', metaPayload(SANTIAGO, 'wamid.429')),
+      res as never,
+      vi.fn()
+    );
+    await vi.advanceTimersByTimeAsync(200_000);
+    await settleForwards();
+
+    // One attempt, not four.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    // Not delivered, so it stays for a later sweep.
+    expect(await readPending()).toHaveProperty('wamid.429');
+  });
+
+  it('stops the retry ladder on a 404, which no retry can fix', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async () => new Response('nope', { status: 404 }));
+
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.404', metaPayload(SANTIAGO, 'wamid.404')),
+      mockRes() as never,
+      vi.fn()
+    );
+    await vi.advanceTimersByTimeAsync(200_000);
+    await settleForwards();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('still walks the full ladder for a 503, which a cold start produces', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async () => new Response('booting', { status: 503 }));
+
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.503', metaPayload(SANTIAGO, 'wamid.503')),
+      mockRes() as never,
+      vi.fn()
+    );
+    await vi.advanceTimersByTimeAsync(200_000);
+    await settleForwards();
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('v1 forward redrive', () => {
   it('delivers a stranded message and clears its record', async () => {
     const payload = metaPayload(SANTIAGO, 'wamid.stranded');
@@ -387,6 +441,33 @@ describe('v1 forward redrive', () => {
 
     expect(result).toEqual({ delivered: 0, stillPending: 1, expired: 0 });
     expect(await readPending()).toHaveProperty('wamid.again');
+  });
+
+  it('abandons the rest of the batch when v1 starts rate limiting', async () => {
+    fetchMock.mockImplementation(async () => new Response('slow down', { status: 429 }));
+    for (let i = 0; i < 5; i++) {
+      await writePending(`wamid.q${i}`, metaPayload(SANTIAGO, `wamid.q${i}`), Date.now() - 60_000);
+    }
+
+    const result = await redriveV1Forwards();
+
+    // One attempt at one message, then stop — not 5 messages x 4 attempts.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ delivered: 0, stillPending: 5, expired: 0 });
+    // Nothing lost: all five are still owed.
+    expect(Object.keys((await readPending()) ?? {})).toHaveLength(5);
+  });
+
+  it('caps how many it replays in one sweep', async () => {
+    for (let i = 0; i < 25; i++) {
+      await writePending(`wamid.b${i}`, metaPayload(SANTIAGO, `wamid.b${i}`), Date.now() - 60_000);
+    }
+
+    const result = await redriveV1Forwards();
+
+    expect(fetchMock).toHaveBeenCalledTimes(20);
+    expect(result.delivered).toBe(20);
+    expect(result.stillPending).toBe(5);
   });
 
   it('drops a record older than 24h without forwarding it', async () => {

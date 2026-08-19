@@ -64,10 +64,18 @@ const PENDING_KEY = systemKey('v1-pending');
 // Past this, v1 has been unreachable for a day and the message is stale enough
 // that delivering it would confuse more than help. Dropped loudly.
 const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Ceiling on how many stranded messages one sweep will replay.
+const REDRIVE_MAX_PER_SWEEP = 20;
 
 interface PendingForward {
   body: unknown;
   firstSeenAt: number;
+}
+
+/** Result of one forward. `rateLimited` is why the batch should stop, not just this message. */
+export interface ForwardOutcome {
+  delivered: boolean;
+  rateLimited: boolean;
 }
 
 let _redis: Redis | null = null;
@@ -82,6 +90,37 @@ export function isProxiedToV1(phone: string): boolean {
   return Boolean(env.V1_WEBHOOK_URL) && Boolean(phone) && v1ProxyNumbers.includes(phone);
 }
 
+/** Carries v1's status code so `isRetryable` can act on it. */
+class ForwardError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Whether another attempt could plausibly succeed.
+ *
+ * 429 is the one that matters most here: it means the far side is already
+ * refusing volume, so retrying is not just useless but actively harmful — it is
+ * what keeps the limit tripped. Same reasoning as `shared/kapso/client.ts`,
+ * except there 429 is retryable because Kapso rate-limits per-second bursts;
+ * a 429 from v1's edge is a block, not a speed bump.
+ *
+ * A 404 (wrong V1_WEBHOOK_URL) will never succeed either, and failing fast
+ * surfaces the misconfiguration instead of burying it under four identical
+ * errors.
+ */
+function isRetryable(err: unknown): boolean {
+  const status = err instanceof ForwardError ? err.status : undefined;
+  if (status === undefined) return true; // timeout, abort, DNS, connection reset
+  if (status === 408) return true;
+  if (status === 429) return false;
+  return status >= 500;
+}
+
 async function postOnce(url: string, body: unknown): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FORWARD_TIMEOUT_MS);
@@ -92,7 +131,7 @@ async function postOnce(url: string, body: unknown): Promise<void> {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    if (!resp.ok) throw new Error(`v1 responded ${resp.status}`);
+    if (!resp.ok) throw new ForwardError(`v1 responded ${resp.status}`, resp.status);
   } finally {
     clearTimeout(timer);
   }
@@ -103,25 +142,33 @@ async function postOnce(url: string, body: unknown): Promise<void> {
  * fields — v1 parses it with its own `normalizeWebhook()` and must see the same
  * envelope Kapso sent, message id included, or its dedup stops working.
  *
- * Resolves true if v1 accepted it. Keeps trying across the whole cold-start
- * window: a fast 502 from Render's router means "still booting", not "no".
+ * Keeps trying across the whole cold-start window: a fast 502 from Render's
+ * router means "still booting", not "no". A 429 means the opposite and stops
+ * the ladder dead.
  */
-export async function forwardToV1(body: unknown): Promise<boolean> {
+export async function forwardToV1(body: unknown): Promise<ForwardOutcome> {
   const url = env.V1_WEBHOOK_URL;
-  if (!url) return false;
+  if (!url) return { delivered: false, rateLimited: false };
 
   const startedAt = Date.now();
   const maxAttempts = RETRY_DELAYS_MS.length + 1;
 
+  let rateLimited = false;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       await postOnce(url, body);
-      return true;
+      return { delivered: true, rateLimited: false };
     } catch (err) {
       // The status is in the message ("v1 responded 404"), which is how a
       // misconfigured V1_WEBHOOK_URL announces itself rather than looking like
       // a cold start.
       console.error(`[v1-proxy] forward attempt ${attempt}/${maxAttempts} failed:`, err);
+      rateLimited = err instanceof ForwardError && err.status === 429;
+      if (!isRetryable(err)) {
+        console.error('[v1-proxy] not retryable; abandoning this forward');
+        break;
+      }
     }
     if (attempt === maxAttempts) break;
 
@@ -132,7 +179,7 @@ export async function forwardToV1(body: unknown): Promise<boolean> {
     }
     await new Promise((r) => setTimeout(r, delay));
   }
-  return false;
+  return { delivered: false, rateLimited };
 }
 
 async function savePending(id: string, body: unknown): Promise<void> {
@@ -165,7 +212,7 @@ export async function settleForwards(): Promise<void> {
 async function deliver(id: string, body: unknown): Promise<void> {
   let ok = false;
   try {
-    ok = await forwardToV1(body);
+    ok = (await forwardToV1(body)).delivered;
   } catch (err) {
     console.error(`[v1-proxy] forward threw for ${id}:`, err);
   }
@@ -206,18 +253,39 @@ export async function redriveV1Forwards(): Promise<{
   const pending = await getRedis().hgetall<Record<string, PendingForward>>(PENDING_KEY);
   if (!pending) return result;
 
-  for (const [id, entry] of Object.entries(pending)) {
+  const entries = Object.entries(pending);
+  // A backlog that never drains would otherwise be replayed in full every hour,
+  // each entry walking the whole retry ladder — backlog x 4 requests an hour at
+  // a service that is already refusing them. That pressure keeps a rate limit
+  // tripped and grows the backlog that causes it. Cap the batch; the rest keep
+  // their place and go next sweep.
+  const batch = entries.slice(0, REDRIVE_MAX_PER_SWEEP);
+  result.stillPending = entries.length - batch.length;
+
+  for (let i = 0; i < batch.length; i++) {
+    const [id, entry] = batch[i];
     if (Date.now() - entry.firstSeenAt > PENDING_MAX_AGE_MS) {
       await clearPending(id);
       result.expired++;
       console.error(`[v1-proxy] dropping ${id}: undelivered to v1 for over 24h`);
       continue;
     }
-    if (await forwardToV1(entry.body)) {
+    const outcome = await forwardToV1(entry.body);
+    if (outcome.delivered) {
       await clearPending(id);
       result.delivered++;
-    } else {
-      result.stillPending++;
+      continue;
+    }
+    result.stillPending++;
+    if (outcome.rateLimited) {
+      // v1 is refusing volume. Every remaining entry would get the same answer,
+      // and sending them is what sustains the limit. Stop; try next sweep.
+      const skipped = batch.length - i - 1;
+      result.stillPending += skipped;
+      console.error(
+        `[v1-proxy] v1 is rate limiting; abandoning ${skipped} more in this redrive`
+      );
+      break;
     }
   }
   return result;

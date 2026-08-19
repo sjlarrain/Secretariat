@@ -1,10 +1,9 @@
 # Inbound routing fix — Kapso Function
 
-Status: **code cleanup done (§7); Kapso dashboard wiring (§4 secrets, §4 wiring)
-still owed by Santiago.** Until the Function is created and the Meta webhook is
-repointed at it, Kapso is still delivering to whatever it was pointed at before,
-and v2 no longer forwards anything to v1 — so Santiago's messages are handled by
-v2 (or dropped as unrecognized) rather than by v1.
+Status: **live** (2026-08-19). The Function is deployed with a public invoke
+URL, the Meta webhook is repointed at it, and routing is confirmed working —
+Santiago's number reaches v1, everyone else reaches v2. v2 no longer talks to v1
+at all. Cutover to v2 is §6.
 Supersedes the `platform/v1-proxy.ts` shim, now deleted; `docs/v2-plan.md` §C.8
 has been rewritten around the Function.
 
@@ -65,8 +64,20 @@ Notes:
 - **The body is forwarded byte-for-byte.** Both services re-parse the Meta
   envelope with their own `normalizeWebhook()` and dedup on the message id inside
   it. Never reconstruct fields.
-- **Payloads with no message** (status callbacks) have `from === ""` and go to v2,
-  which answers `200 {ok:false, reason:'no-sender'}`. Harmless.
+- **Status callbacks route on the human party, not on `from`.** They carry no
+  `from`, so keying only on that sent every delivery receipt to v2 regardless of
+  which service sent the message. `findParty()` falls back to
+  `contacts[].wa_id` / `statuses[].recipient_id`. A payload with no party at all
+  goes to v2, which answers `200 {ok:false, reason:'no-sender'}`. Harmless.
+- **One delivery routes to one target.** `findParty()` returns the first party in
+  the payload and the whole body follows it. Meta can batch messages from several
+  people into one delivery; a batch mixing Santiago with a v2 user would strand
+  one of them (v1's whitelist drops the stranger, v2 drops Santiago as
+  unrecognized). Not observed in practice, and both branches answer 200, so it
+  would fail silently — revisit if a message ever goes missing without a trace.
+- **No unit tests, deliberately.** The Function is exercised end-to-end through
+  the Kapso platform; it sits outside `backend/src`, so `tsc` and `vitest` do not
+  see it by design. Do not add a test harness for it.
 - **Multiple numbers** — if more numbers ever belong to v1, make `V1_NUMBER` a
   comma-separated secret and use `.split(",").includes(from)`.
 - **The dashboard is the only way to deploy it.** Neither the Kapso CLI nor the
@@ -193,8 +204,9 @@ Remove `V1_WEBHOOK_URL` and `V1_PROXY_NUMBERS` from the v2 Render service.
   Kapso retries.
 - **`ctx.waitUntil()` availability.** Not in the documented signature. Only
   matters if §5's rely-on-Kapso-retries approach proves insufficient.
-- **`public_endpoint: true`** makes the invoke URL callable without an API key.
-  Anyone who learns the URL can post a forged webhook. Both services validate the
-  sender against their own registries, so a forged payload from an unknown number
-  is dropped — but a payload forged *as Santiago* would be processed by v1.
-  Consider a shared secret header checked by the Function.
+- **`public_endpoint: true` — accepted, left open** (Santiago's call,
+  2026-08-19). The invoke URL is callable without an API key, so anyone who
+  learns it can post a forged webhook. Both services validate the sender against
+  their own registries, so a forged payload from an unknown number is dropped —
+  but one forged *as Santiago* would be processed by v1. The fix, if this is ever
+  revisited, is a shared secret header checked by the Function.

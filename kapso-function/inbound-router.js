@@ -32,22 +32,25 @@
  * (or repoint the Kapso webhook straight at v2 and delete the Function). The
  * same switch rolls back.
  */
-// Finds the sender regardless of how the payload is nested. Kapso wraps the
-// Meta envelope (its delivery log shows a top-level `type: "meta.messages"`,
-// which raw Meta never has), and the exact wrapper shape is not documented, so
-// pinning a fixed path here is how this silently routed everything to v2.
-function findSender(node, depth = 0) {
+// Identifies the human party of the conversation, whatever the payload kind and
+// however it is nested:
+//   inbound message  -> value.messages[].from
+//   status callback  -> value.contacts[].wa_id / value.statuses[].recipient_id
+// Statuses carry no `from`, so keying only on that sent every delivery receipt
+// to v2 regardless of which service actually sent the message.
+function findParty(node, depth = 0) {
   if (!node || typeof node !== "object" || depth > 8) return undefined;
 
-  // The Meta shape, wherever it turns up in the tree.
-  const msg = node?.value?.messages?.[0] ?? node?.messages?.[0];
-  if (msg && typeof msg.from === "string" && msg.from) return msg.from;
+  const v = node?.value ?? node;
+  const cand =
+    v?.messages?.[0]?.from ??
+    v?.contacts?.[0]?.wa_id ??
+    v?.statuses?.[0]?.recipient_id ??
+    node?.message?.from;
+  if (typeof cand === "string" && cand) return cand;
 
-  // Kapso's flat events shape: { message: { from, ... } }.
-  if (typeof node?.message?.from === "string" && node.message.from) return node.message.from;
-
-  for (const v of Array.isArray(node) ? node : Object.values(node)) {
-    const hit = findSender(v, depth + 1);
+  for (const child of Array.isArray(node) ? node : Object.values(node)) {
+    const hit = findParty(child, depth + 1);
     if (hit) return hit;
   }
   return undefined;
@@ -59,7 +62,7 @@ async function handler(request, env) {
   // Digits-only comparison, so a stray '+' or whitespace in the V1_NUMBER
   // secret cannot mis-route every message. Comma-separated V1_NUMBER works too.
   const digits = (v) => String(v ?? "").replace(/\D/g, "");
-  const from = digits(findSender(body));
+  const from = digits(findParty(body));
   const v1 = String(env.V1_NUMBER ?? "").split(",").map(digits).filter(Boolean);
 
   const isV1 = from !== "" && v1.includes(from);

@@ -78,7 +78,9 @@ async function handler(request, env) {
     body: JSON.stringify(body),
   });
 
-  return new Response(JSON.stringify({ ok: resp.ok, status: resp.status }), {
+  // `from`/`route` are echoed because Kapso's invocation log captures
+  // response_body but not console output — this is the only visible diagnostic.
+  return new Response(JSON.stringify({ ok: resp.ok, status: resp.status, from: from || null, route: isV1 ? "v1" : "v2" }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });

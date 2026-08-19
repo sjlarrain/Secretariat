@@ -32,30 +32,43 @@
  * (or repoint the Kapso webhook straight at v2 and delete the Function). The
  * same switch rolls back.
  */
+// Finds the sender regardless of how the payload is nested. Kapso wraps the
+// Meta envelope (its delivery log shows a top-level `type: "meta.messages"`,
+// which raw Meta never has), and the exact wrapper shape is not documented, so
+// pinning a fixed path here is how this silently routed everything to v2.
+function findSender(node, depth = 0) {
+  if (!node || typeof node !== "object" || depth > 8) return undefined;
+
+  // The Meta shape, wherever it turns up in the tree.
+  const msg = node?.value?.messages?.[0] ?? node?.messages?.[0];
+  if (msg && typeof msg.from === "string" && msg.from) return msg.from;
+
+  // Kapso's flat events shape: { message: { from, ... } }.
+  if (typeof node?.message?.from === "string" && node.message.from) return node.message.from;
+
+  for (const v of Array.isArray(node) ? node : Object.values(node)) {
+    const hit = findSender(v, depth + 1);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 async function handler(request, env) {
   const body = await request.json().catch(() => ({}));
 
-  // Two envelopes can arrive depending on how Kapso invokes this:
-  //   meta          -> entry[].changes[].value.messages[].from
-  //   kapso-events  -> message.from  (top level)
-  // The original design assumed only the first. If Kapso wraps the payload,
-  // the Meta path yields undefined, `from` is "", and EVERY message silently
-  // routes to v2 — which looks like "the function runs but never redirects".
-  const metaFrom = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
-  const eventsFrom = typeof body?.message?.from === "string" ? body.message.from : undefined;
-  const shape = metaFrom ? "meta" : eventsFrom ? "kapso-events" : "unknown";
-
-  // Compare on digits only, so a stray '+' or whitespace in the V1_NUMBER
-  // secret cannot silently mis-route every message.
+  // Digits-only comparison, so a stray '+' or whitespace in the V1_NUMBER
+  // secret cannot mis-route every message. Comma-separated V1_NUMBER works too.
   const digits = (v) => String(v ?? "").replace(/\D/g, "");
-  const from = digits(metaFrom ?? eventsFrom);
-  const v1 = env.V1_NUMBER.split(",").map(digits).filter(Boolean);
+  const from = digits(findSender(body));
+  const v1 = String(env.V1_NUMBER ?? "").split(",").map(digits).filter(Boolean);
 
   const isV1 = from !== "" && v1.includes(from);
   const target = isV1 ? env.V1_WEBHOOK : env.V2_WEBHOOK;
 
-  // Without this, a mis-route is invisible: both outcomes return 200.
-  console.log(`[route] shape=${shape} from=${from || "(none)"} -> ${isV1 ? "v1" : "v2"}`);
+  // Both outcomes return 200, so without this a mis-route is invisible. When no
+  // sender is found, dump the shape — that is the only way to learn the wrapper.
+  console.log(`[route] from=${from || "(none)"} v1=[${v1.join(",")}] -> ${isV1 ? "v1" : "v2"}`);
+  if (!from) console.log(`[route] NO SENDER; body=${JSON.stringify(body).slice(0, 1500)}`);
 
   // Forwarded byte-for-byte. Both services re-parse the envelope with their own
   // normalizeWebhook() and dedup on the message id inside it.

@@ -35,18 +35,30 @@
 async function handler(request, env) {
   const body = await request.json().catch(() => ({}));
 
-  // Meta envelope. `from` arrives without a '+', so V1_NUMBER is stored the
-  // same way. Payloads with no message (status callbacks) have from === "" and
-  // go to v2, which answers 200 {ok:false, reason:'no-sender'}. Harmless.
-  //
-  // If more numbers ever belong to v1, make V1_NUMBER comma-separated and use
-  // env.V1_NUMBER.split(",").includes(from).
-  const from = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ?? "";
-  const target = from && from === env.V1_NUMBER ? env.V1_WEBHOOK : env.V2_WEBHOOK;
+  // Two envelopes can arrive depending on how Kapso invokes this:
+  //   meta          -> entry[].changes[].value.messages[].from
+  //   kapso-events  -> message.from  (top level)
+  // The original design assumed only the first. If Kapso wraps the payload,
+  // the Meta path yields undefined, `from` is "", and EVERY message silently
+  // routes to v2 — which looks like "the function runs but never redirects".
+  const metaFrom = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+  const eventsFrom = typeof body?.message?.from === "string" ? body.message.from : undefined;
+  const shape = metaFrom ? "meta" : eventsFrom ? "kapso-events" : "unknown";
 
-  // Forwarded byte-for-byte. Both services re-parse the Meta envelope with
-  // their own normalizeWebhook() and dedup on the message id inside it.
-  // Never reconstruct fields.
+  // Compare on digits only, so a stray '+' or whitespace in the V1_NUMBER
+  // secret cannot silently mis-route every message.
+  const digits = (v) => String(v ?? "").replace(/\D/g, "");
+  const from = digits(metaFrom ?? eventsFrom);
+  const v1 = env.V1_NUMBER.split(",").map(digits).filter(Boolean);
+
+  const isV1 = from !== "" && v1.includes(from);
+  const target = isV1 ? env.V1_WEBHOOK : env.V2_WEBHOOK;
+
+  // Without this, a mis-route is invisible: both outcomes return 200.
+  console.log(`[route] shape=${shape} from=${from || "(none)"} -> ${isV1 ? "v1" : "v2"}`);
+
+  // Forwarded byte-for-byte. Both services re-parse the envelope with their own
+  // normalizeWebhook() and dedup on the message id inside it.
   const resp = await fetch(target, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

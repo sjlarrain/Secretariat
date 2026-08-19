@@ -67,6 +67,18 @@ const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // Ceiling on how many stranded messages one sweep will replay.
 const REDRIVE_MAX_PER_SWEEP = 20;
 
+// Waking v1 on demand, rather than keeping it awake on a schedule.
+//
+// v2 already knows exactly when Santiago is writing — it is holding his message.
+// So instead of POSTing the payload repeatedly at a sleeping instance (which is
+// the traffic Render's edge throttles, and what produced the 429s), v2 knocks:
+// a cheap GET to v1's /health, repeated until it answers, and only then a single
+// POST of the real payload. Costs nothing when v1 is already up, burns no free
+// instance hours when nobody is writing, and never replays the payload at a
+// service that cannot accept it yet.
+const HEALTH_POLL_INTERVAL_MS = 5_000;
+const WAKE_DEADLINE_MS = 90_000;
+
 interface PendingForward {
   body: unknown;
   firstSeenAt: number;
@@ -137,6 +149,61 @@ async function postOnce(url: string, body: unknown): Promise<void> {
   }
 }
 
+/** v1's health endpoint, derived from the configured webhook URL. */
+function healthUrlFor(webhookUrl: string): string | null {
+  try {
+    const u = new URL(webhookUrl);
+    u.pathname = '/health';
+    u.search = '';
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Knocks until v1 answers, or the deadline passes.
+ *
+ * The probe carries the same generous timeout as a forward, so it works whether
+ * Render holds the request through the spin-up (one probe, answers when up) or
+ * refuses it outright while booting (poll until it stops refusing).
+ */
+async function waitForV1Awake(): Promise<boolean> {
+  const healthUrl = env.V1_WEBHOOK_URL ? healthUrlFor(env.V1_WEBHOOK_URL) : null;
+  // Can't derive a health URL — don't let the probe become a new way to drop
+  // messages; just go straight to delivering.
+  if (!healthUrl) return true;
+
+  const startedAt = Date.now();
+  let probes = 0;
+
+  while (Date.now() - startedAt < WAKE_DEADLINE_MS) {
+    probes++;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FORWARD_TIMEOUT_MS);
+    try {
+      const resp = await fetch(healthUrl, { method: 'GET', signal: controller.signal });
+      if (resp.ok) {
+        if (probes > 1) {
+          console.log(
+            `[v1-proxy] v1 awake after ${probes} probes, ${Math.round((Date.now() - startedAt) / 1000)}s`
+          );
+        }
+        return true;
+      }
+      console.log(`[v1-proxy] v1 not ready yet (probe ${probes}, status ${resp.status})`);
+    } catch {
+      console.log(`[v1-proxy] v1 not ready yet (probe ${probes}, no response)`);
+    } finally {
+      clearTimeout(timer);
+    }
+    await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS));
+  }
+
+  console.error(`[v1-proxy] v1 did not wake within ${WAKE_DEADLINE_MS / 1000}s`);
+  return false;
+}
+
 /**
  * Forwards the untouched webhook payload to v1. Raw body, not reconstructed
  * fields — v1 parses it with its own `normalizeWebhook()` and must see the same
@@ -149,6 +216,12 @@ async function postOnce(url: string, body: unknown): Promise<void> {
 export async function forwardToV1(body: unknown): Promise<ForwardOutcome> {
   const url = env.V1_WEBHOOK_URL;
   if (!url) return { delivered: false, rateLimited: false };
+
+  // Knock before delivering. A sleeping v1 cannot accept the payload, and
+  // throwing it at the door is what got us rate limited.
+  if (!(await waitForV1Awake())) {
+    return { delivered: false, rateLimited: false };
+  }
 
   const startedAt = Date.now();
   const maxAttempts = RETRY_DELAYS_MS.length + 1;

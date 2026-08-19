@@ -86,13 +86,15 @@ function mockRes() {
  */
 function heldFetch(delayMs: number, status = 200) {
   return (_url: string, init: RequestInit) =>
-    new Promise<Response>((resolve, reject) => {
-      const timer = setTimeout(() => resolve(new Response('{}', { status })), delayMs);
-      init?.signal?.addEventListener('abort', () => {
-        clearTimeout(timer);
-        reject(new Error('aborted'));
-      });
-    });
+    init?.method === 'GET'
+      ? Promise.resolve(new Response('ok', { status: 200 }))
+      : new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(new Response('{}', { status })), delayMs);
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+          });
+        });
 }
 
 async function readPending(): Promise<Record<string, { firstSeenAt: number }> | null> {
@@ -107,11 +109,26 @@ async function writePending(id: string, body: unknown, firstSeenAt: number): Pro
   await redis.hset(systemKey('v1-pending'), { [id]: { body, firstSeenAt } });
 }
 
+function postCalls(): [string, RequestInit][] {
+  return (fetchMock.mock.calls as [string, RequestInit][]).filter(
+    ([, init]) => init?.method === 'POST'
+  );
+}
+
+function healthCalls(): [string, RequestInit][] {
+  return (fetchMock.mock.calls as [string, RequestInit][]).filter(
+    ([, init]) => init?.method === 'GET'
+  );
+}
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   resetFakeRedis();
   fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+  // Every forward is now preceded by a GET /health knock, so assertions count
+  // the POSTs — the actual deliveries — rather than raw fetch calls.
+  fetchMock.mockName('fetch');
   vi.stubGlobal('fetch', fetchMock);
 });
 
@@ -138,9 +155,9 @@ describe('v1 proxy shim', () => {
     // v2's handlers must never see it — next() is what would hand it onward.
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = postCalls()[0];
     expect(url).toBe(V1_URL);
     expect(init.method).toBe('POST');
     // Byte-identical body: v1 re-parses this envelope and dedups on its id.
@@ -158,7 +175,7 @@ describe('v1 proxy shim', () => {
     );
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(postCalls()).toHaveLength(0);
     expect(res.statusCode).toBe(0);
   });
 
@@ -173,7 +190,7 @@ describe('v1 proxy shim', () => {
     await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.dup', payload), second as never, next);
     await settleForwards();
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
     expect(first.payload).toEqual({ ok: true, reason: 'proxied-v1' });
     expect(second.payload).toEqual({ ok: true, reason: 'proxied-v1-duplicate' });
     expect(next).not.toHaveBeenCalled();
@@ -181,11 +198,15 @@ describe('v1 proxy shim', () => {
 
   it('retries once, then succeeds, without forwarding twice on success', async () => {
     vi.useFakeTimers();
-    fetchMock
-      .mockImplementationOnce(async () => {
-        throw new Error('ECONNRESET');
-      })
-      .mockImplementationOnce(async () => new Response('{}', { status: 200 }));
+    // Method-aware rather than call-ordered: the health knock comes first now,
+    // and would otherwise consume the ECONNRESET intended for the forward.
+    let forwards = 0;
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      if (init?.method === 'GET') return new Response('ok', { status: 200 });
+      forwards++;
+      if (forwards === 1) throw new Error('ECONNRESET');
+      return new Response('{}', { status: 200 });
+    });
 
     const res = mockRes();
     await v1ProxyMiddleware(
@@ -197,7 +218,7 @@ describe('v1 proxy shim', () => {
     await vi.advanceTimersByTimeAsync(11_000);
     await settleForwards();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(postCalls()).toHaveLength(2);
     expect(res.statusCode).toBe(200);
   });
 
@@ -205,7 +226,7 @@ describe('v1 proxy shim', () => {
     const res = mockRes();
     await v1ProxyMiddleware(mockReq(SANTIAGO, null, metaPayload(SANTIAGO, '')), res as never, vi.fn());
     await settleForwards();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
     expect(res.statusCode).toBe(200);
   });
 });
@@ -251,10 +272,10 @@ describe('v1 proxy shim, cold-start delivery', () => {
 
     await vi.advanceTimersByTimeAsync(KAPSO_ACK_DEADLINE_MS + 1_000);
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, init] = postCalls()[0];
     // The old budget aborted here, dropping the request Render was holding.
     expect(init.signal?.aborted).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(45_000);
     await settleForwards();
@@ -275,7 +296,7 @@ describe('v1 proxy shim, cold-start delivery', () => {
     await settleForwards();
 
     // One attempt, no abort, and v1 got it.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
     expect(res.statusCode).toBe(200);
     // Delivered, so nothing is owed any more.
     expect(await readPending()).toBeNull();
@@ -295,7 +316,7 @@ describe('v1 proxy shim, cold-start delivery', () => {
     await v1ProxyMiddleware(mockReq(SANTIAGO, 'wamid.inflight', payload), second as never, vi.fn());
 
     expect(second.payload).toEqual({ ok: true, reason: 'proxied-v1-duplicate' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(45_000);
     await settleForwards();
@@ -307,10 +328,10 @@ describe('v1 proxy shim, cold-start delivery', () => {
     // holding the connection. These fail in milliseconds, so the forward budget
     // never comes into play — only trying again later gets the message across.
     let calls = 0;
-    fetchMock.mockImplementation(async () => {
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      // Health knocks succeed; it is the forward that is refused while booting.
+      if (init?.method === 'GET') return new Response('ok', { status: 200 });
       calls++;
-      // Boots after roughly 50s: the attempts at 0s and 10s are refused, the
-      // one at 50s lands.
       if (calls <= 2) return new Response('service unavailable', { status: 502 });
       return new Response('{}', { status: 200 });
     });
@@ -352,7 +373,7 @@ describe('v1 proxy shim, cold-start delivery', () => {
     await vi.advanceTimersByTimeAsync(250_000);
     await settleForwards();
 
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(postCalls().length).toBeGreaterThan(1);
     // Kapso was told 200 up front and will not retry — so the record has to
     // survive for the sweeper.
     expect(res.statusCode).toBe(200);
@@ -368,7 +389,11 @@ describe('v1 proxy shim, cold-start delivery', () => {
 describe('v1 proxy shim, back-pressure', () => {
   it('stops the retry ladder immediately on 429 instead of hammering', async () => {
     vi.useFakeTimers();
-    fetchMock.mockImplementation(async () => new Response('slow down', { status: 429 }));
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) =>
+      init?.method === 'GET'
+        ? new Response('ok', { status: 200 })
+        : new Response('slow down', { status: 429 })
+    );
 
     const res = mockRes();
     await v1ProxyMiddleware(
@@ -380,7 +405,7 @@ describe('v1 proxy shim, back-pressure', () => {
     await settleForwards();
 
     // One attempt, not four.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
     expect(res.statusCode).toBe(200);
     // Not delivered, so it stays for a later sweep.
     expect(await readPending()).toHaveProperty('wamid.429');
@@ -388,7 +413,11 @@ describe('v1 proxy shim, back-pressure', () => {
 
   it('stops the retry ladder on a 404, which no retry can fix', async () => {
     vi.useFakeTimers();
-    fetchMock.mockImplementation(async () => new Response('nope', { status: 404 }));
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) =>
+      init?.method === 'GET'
+        ? new Response('ok', { status: 200 })
+        : new Response('nope', { status: 404 })
+    );
 
     await v1ProxyMiddleware(
       mockReq(SANTIAGO, 'wamid.404', metaPayload(SANTIAGO, 'wamid.404')),
@@ -398,12 +427,16 @@ describe('v1 proxy shim, back-pressure', () => {
     await vi.advanceTimersByTimeAsync(200_000);
     await settleForwards();
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
   });
 
   it('still walks the full ladder for a 503, which a cold start produces', async () => {
     vi.useFakeTimers();
-    fetchMock.mockImplementation(async () => new Response('booting', { status: 503 }));
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) =>
+      init?.method === 'GET'
+        ? new Response('ok', { status: 200 })
+        : new Response('booting', { status: 503 })
+    );
 
     await v1ProxyMiddleware(
       mockReq(SANTIAGO, 'wamid.503', metaPayload(SANTIAGO, 'wamid.503')),
@@ -413,7 +446,79 @@ describe('v1 proxy shim, back-pressure', () => {
     await vi.advanceTimersByTimeAsync(200_000);
     await settleForwards();
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(postCalls()).toHaveLength(4);
+  });
+});
+
+// Waking on demand: v2 knocks on /health and only delivers once v1 answers,
+// instead of throwing the payload at a sleeping instance until Render's edge
+// starts refusing it.
+describe('v1 proxy shim, wake on demand', () => {
+  it('knocks on /health before posting the payload', async () => {
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.knock', metaPayload(SANTIAGO, 'wamid.knock')),
+      mockRes() as never,
+      vi.fn()
+    );
+    await settleForwards();
+
+    expect(healthCalls()).toHaveLength(1);
+    expect(healthCalls()[0][0]).toBe('https://secretariat-r2on.onrender.com/health');
+    // Knock first, deliver second.
+    const methods = (fetchMock.mock.calls as [string, RequestInit][]).map(([, i]) => i?.method);
+    expect(methods).toEqual(['GET', 'POST']);
+  });
+
+  it('polls while v1 is asleep and delivers exactly once it wakes', async () => {
+    vi.useFakeTimers();
+    let probes = 0;
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      if (init?.method === 'GET') {
+        probes++;
+        // Boots on the fourth knock, ~15s in.
+        return probes < 4
+          ? new Response('waking', { status: 502 })
+          : new Response('ok', { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    });
+
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.wake', metaPayload(SANTIAGO, 'wamid.wake')),
+      mockRes() as never,
+      vi.fn()
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settleForwards();
+
+    expect(probes).toBe(4);
+    // The payload was posted once, and only after v1 answered.
+    expect(postCalls()).toHaveLength(1);
+    expect(await readPending()).toBeNull();
+  });
+
+  it('never posts the payload at a v1 that never wakes', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) =>
+      init?.method === 'GET'
+        ? new Response('still down', { status: 502 })
+        : new Response('{}', { status: 200 })
+    );
+
+    const res = mockRes();
+    await v1ProxyMiddleware(
+      mockReq(SANTIAGO, 'wamid.nowake', metaPayload(SANTIAGO, 'wamid.nowake')),
+      res as never,
+      vi.fn()
+    );
+    await vi.advanceTimersByTimeAsync(120_000);
+    await settleForwards();
+
+    // The whole point: no payload traffic at a service that can't take it.
+    expect(postCalls()).toHaveLength(0);
+    expect(res.statusCode).toBe(200);
+    // Still owed, so the sweep will try again later.
+    expect(await readPending()).toHaveProperty('wamid.nowake');
   });
 });
 
@@ -425,14 +530,18 @@ describe('v1 forward redrive', () => {
     const result = await redriveV1Forwards();
 
     expect(result).toEqual({ delivered: 1, stillPending: 0, expired: 0 });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual(payload);
+    expect(postCalls()).toHaveLength(1);
+    expect(JSON.parse(postCalls()[0][1].body as string)).toEqual(payload);
     expect(await readPending()).toBeNull();
   });
 
   it('leaves it pending when v1 is still unreachable', async () => {
     vi.useFakeTimers();
-    fetchMock.mockImplementation(async () => new Response('boom', { status: 503 }));
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) =>
+      init?.method === 'GET'
+        ? new Response('ok', { status: 200 })
+        : new Response('boom', { status: 503 })
+    );
     await writePending('wamid.again', metaPayload(SANTIAGO, 'wamid.again'), Date.now() - 60_000);
 
     const run = redriveV1Forwards();
@@ -444,7 +553,11 @@ describe('v1 forward redrive', () => {
   });
 
   it('abandons the rest of the batch when v1 starts rate limiting', async () => {
-    fetchMock.mockImplementation(async () => new Response('slow down', { status: 429 }));
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) =>
+      init?.method === 'GET'
+        ? new Response('ok', { status: 200 })
+        : new Response('slow down', { status: 429 })
+    );
     for (let i = 0; i < 5; i++) {
       await writePending(`wamid.q${i}`, metaPayload(SANTIAGO, `wamid.q${i}`), Date.now() - 60_000);
     }
@@ -452,7 +565,7 @@ describe('v1 forward redrive', () => {
     const result = await redriveV1Forwards();
 
     // One attempt at one message, then stop — not 5 messages x 4 attempts.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postCalls()).toHaveLength(1);
     expect(result).toEqual({ delivered: 0, stillPending: 5, expired: 0 });
     // Nothing lost: all five are still owed.
     expect(Object.keys((await readPending()) ?? {})).toHaveLength(5);
@@ -465,7 +578,7 @@ describe('v1 forward redrive', () => {
 
     const result = await redriveV1Forwards();
 
-    expect(fetchMock).toHaveBeenCalledTimes(20);
+    expect(postCalls()).toHaveLength(20);
     expect(result.delivered).toBe(20);
     expect(result.stillPending).toBe(5);
   });
@@ -480,13 +593,13 @@ describe('v1 forward redrive', () => {
     const result = await redriveV1Forwards();
 
     expect(result).toEqual({ delivered: 0, stillPending: 0, expired: 1 });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(postCalls()).toHaveLength(0);
     expect(await readPending()).toBeNull();
   });
 
   it('is a no-op with nothing pending', async () => {
     expect(await redriveV1Forwards()).toEqual({ delivered: 0, stillPending: 0, expired: 0 });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(postCalls()).toHaveLength(0);
   });
 });
 
@@ -512,7 +625,7 @@ describe('v1 proxy shim, disabled (post-cutover)', () => {
       next
     );
     expect(next).toHaveBeenCalledTimes(1);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(postCalls()).toHaveLength(0);
 
     // The redrive goes quiet too, rather than replaying a backlog into a
     // service that is no longer the destination.
@@ -522,7 +635,7 @@ describe('v1 proxy shim, disabled (post-cutover)', () => {
       stillPending: 0,
       expired: 0,
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(postCalls()).toHaveLength(0);
 
     vi.doUnmock('../shared/env');
   });

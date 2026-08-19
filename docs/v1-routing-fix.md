@@ -54,29 +54,11 @@ change on `main` is needed.
 
 ## 4. The Function
 
+Source of truth: **`kapso-function/inbound-router.js`** — deployable as-is, with
+the design notes below kept as comments beside the code they explain.
+
 Runtime contract: Kapso wraps the code and calls `handler(request, env)`. No
 `export default`.
-
-```javascript
-async function handler(request, env) {
-  const body = await request.json().catch(() => ({}));
-
-  // Meta envelope. `from` arrives without a '+', so V1_NUMBER is stored the same way.
-  const from = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ?? "";
-  const target = from && from === env.V1_NUMBER ? env.V1_WEBHOOK : env.V2_WEBHOOK;
-
-  const resp = await fetch(target, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  return new Response(JSON.stringify({ ok: resp.ok, status: resp.status }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-```
 
 Notes:
 
@@ -87,6 +69,9 @@ Notes:
   which answers `200 {ok:false, reason:'no-sender'}`. Harmless.
 - **Multiple numbers** — if more numbers ever belong to v1, make `V1_NUMBER` a
   comma-separated secret and use `.split(",").includes(from)`.
+- **The dashboard is the only way to deploy it.** Neither the Kapso CLI nor the
+  Kapso MCP manages functions, so the repo copy and the deployed copy are kept in
+  step by hand. Edit one, edit the other.
 
 ### Secrets (Function page → Secrets tab)
 

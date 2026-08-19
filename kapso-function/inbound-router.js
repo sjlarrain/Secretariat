@@ -44,9 +44,11 @@ function findParty(node, depth = 0) {
   const v = node?.value ?? node;
   const cand =
     v?.messages?.[0]?.from ??
+    v?.messages?.[0]?.phone_number ??
     v?.contacts?.[0]?.wa_id ??
     v?.statuses?.[0]?.recipient_id ??
-    node?.message?.from;
+    node?.message?.from ??
+    node?.message?.phone_number;
   if (typeof cand === "string" && cand) return cand;
 
   for (const child of Array.isArray(node) ? node : Object.values(node)) {

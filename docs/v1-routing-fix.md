@@ -1,7 +1,12 @@
 # Inbound routing fix — Kapso Function
 
-Status: **designed, not implemented.** Reviewed by Santiago before work starts.
-Supersedes the `platform/v1-proxy.ts` shim described in `docs/v2-plan.md` §C.8.
+Status: **code cleanup done (§7); Kapso dashboard wiring (§4 secrets, §4 wiring)
+still owed by Santiago.** Until the Function is created and the Meta webhook is
+repointed at it, Kapso is still delivering to whatever it was pointed at before,
+and v2 no longer forwards anything to v1 — so Santiago's messages are handled by
+v2 (or dropped as unrecognized) rather than by v1.
+Supersedes the `platform/v1-proxy.ts` shim, now deleted; `docs/v2-plan.md` §C.8
+has been rewritten around the Function.
 
 ---
 

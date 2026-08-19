@@ -45,7 +45,6 @@ app.get('/health', (_req, res) => {
     // way to tell which build is actually serving, which turns "did the fix
     // deploy?" into guesswork.
     commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'unknown',
-    v1Proxy: env.V1_WEBHOOK_URL ? 'on' : 'off',
     timestamp: new Date().toISOString(),
   });
 });

@@ -3,7 +3,6 @@ import { Redis } from '@upstash/redis';
 import { env } from '../../shared/env';
 import { parseCommand } from '../../core/parser/command.parser';
 import { extractWebhookData, resolveSenderMiddleware, WebhookRequest } from '../../auth/middleware/resolve-sender';
-import { v1ProxyMiddleware } from '../v1-proxy';
 import { sendMessage } from '../../shared/kapso/client';
 import { getSettings } from '../../core/integrations/token-store';
 import { Ctx } from '../../shared/ctx';
@@ -60,10 +59,7 @@ async function isDuplicate(messageId: string | null): Promise<boolean> {
   }
 }
 
-// v1ProxyMiddleware sits ahead of sender resolution on purpose: a v1-owned
-// number must reach v1 even once it is also registered here for testing, which
-// is exactly when a check placed after resolveSender would stop firing.
-router.post('/', extractWebhookData, v1ProxyMiddleware, resolveSenderMiddleware, async (req: Request, res: Response) => {
+router.post('/', extractWebhookData, resolveSenderMiddleware, async (req: Request, res: Response) => {
   // Always return 200 — Kapso retries on non-200
   res.status(200).json({ ok: true });
 

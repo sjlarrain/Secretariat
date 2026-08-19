@@ -89,24 +89,24 @@ Panel routes under `/app` resolve data from the session's `userId` only — neve
 - `ops/` — admin console
 - `auth/` — phone→user resolution, user sessions, admin sessions
 
-**8. v1 proxy shim**
-Kapso allows **one** raw-webhook subscription per phone number (a second `Meta`-type one fails with `already has a meta webhook configured`), so exactly one service is the front door for the shared number. That service is v2 — it is the codebase under development, so making it the door means v1 needs no change at all.
+**8. Inbound routing — Kapso Function**
+Kapso allows **one** raw-webhook subscription per phone number (a second `Meta`-type one fails with `already has a meta webhook configured`), so exactly one thing is the front door for the shared number. That front door is a **Kapso Function**, which routes by sender:
 
-`platform/v1-proxy.ts` forwards a v1-owned sender's payload to v1's webhook byte-for-byte and stops; every other sender falls through to v2's own resolution. Deleted at cutover.
+```
+WhatsApp -> Kapso -> Kapso Function (Cloudflare)
+                       |- sender is Santiago -> v1 /webhook/whatsapp
+                       `- everyone else      -> v2 /webhook/whatsapp
+```
 
-- **The check runs before `resolveSenderMiddleware`, not inside its unrecognized branch** as this section originally specified. Once Santiago's number is also registered in v2 for testing, `resolveSender()` returns `kind: 'user'` and a check placed downstream never fires — v2 would answer and v1 would go silent, which is the failure the shim exists to prevent.
-- **Forward the raw `req.body`**, never reconstructed fields. v1 re-parses it with its own `normalizeWebhook()` and dedups on the message id inside it.
-- **Cutover is unsetting `V1_WEBHOOK_URL`** on the Render environment: the shim goes inert and v2 starts handling those senders too. No deploy, and the same switch rolls back. `V1_PROXY_NUMBERS` defaults to `WHITELISTED_NUMBERS`.
-- **No message is ever handled by both services.** A proxied sender returns without calling `next()`, so v2's handlers never see it; a non-proxied sender is never forwarded, so v1 never sees it (and so never replies `❌ Unauthorized number.` to a new v2 user).
-- **Ack first, deliver after.** This section originally had a failed forward answer 502 so Kapso's retries would carry the message across v1's cold start. That was wrong twice over, and it lost messages in production:
-  - Render does not retry a request to a spun-down free-tier service — its router **holds** the request for the 30–60s spin-up. Nothing retries the v2→v1 hop, so the forward's own timeout is the only thing that matters, and it was 10s. Every first message after 15 minutes of v1 idle triggered the spin-up and was then discarded.
-  - The dedup claim was held across the whole 22s forward budget, so Kapso's first retry (+10s) landed inside it and got `200 proxied-v1-duplicate` — recorded upstream as a successful delivery, ending the retry chain. The 502 was then written to a connection Kapso had already abandoned at its 10s deadline.
+Full design, function source, secrets, and wiring: **`docs/v1-routing-fix.md`**.
 
-  The shape now: claim → record in `sys:v1-pending` → **ack 200 inside 10s** → forward in the background on a 75s budget. The claim is held deliberately (post-ack, a redelivery genuinely is a duplicate), and the 502 path is gone — it only fed Kapso's auto-pause counter.
-- **`sys:v1-pending` replaces the upstream retry.** Acking forfeits Kapso's retries, so an undelivered payload lives in that hash until `redriveV1Forwards()` — one step of the hourly sweep — gets it into v1, or gives up at 24h.
-- **A redrive can deliver twice, and that is the accepted trade.** v1's dedup (`secretariat:dedup:<id>`) has a 5-minute TTL; a redrive lands up to an hour later, so it does not cover a replay. v2 cannot distinguish "v1 never received it" from "v1 received it and took longer than 75s to answer" — both look like a timeout. The narrow second case produces a doubled reply or a duplicated reminder. Chosen deliberately over the alternative (redrive only on connection-level errors), because the bug this design replaced lost messages *silently*, and a visible duplicate is the better failure. Regression coverage is in `__tests__/v1-proxy.test.ts` under "cold-start delivery": those tests fail if the forward budget is ever cut back to Kapso's 10s window.
+- **The routing hop is Cloudflare->Render, not Render->Render.** That is the whole point. v2 previously owned the webhook and forwarded Santiago's messages to v1 itself (`platform/v1-proxy.ts`); Render's edge refused that hop with **429 on every attempt**, instantly, regardless of timeout, retry ladder, or waking v1 first. `GET /health` on v1 from an ordinary client returned 200 throughout. The failing hop no longer exists rather than being worked around.
+- **Forward the raw body**, never reconstructed fields. Both services re-parse the Meta envelope with their own `normalizeWebhook()` and dedup on the message id inside it. The webhook stays Meta-kind for the same reason.
+- **No message is ever handled by both services.** The Function picks exactly one target. v1 never sees v2's users, so v1's `whitelistMiddleware` needs no change on `main` and never replies `❌ Unauthorized number.` to a new v2 user.
+- **Cold starts are Kapso's problem, and Kapso already solves them.** If v1 is spun down, the Function's `fetch` is held ~50s by Render's router, past Kapso's 10s deadline, so the delivery is recorded failed and retried at +10s/+40s/+90s. By the second or third retry v1 is warm. v1's own dedup (`secretariat:dedup:<id>`, 5-minute TTL) absorbs the duplicate. This is how v1 behaved for months before v2 existed — which is why **no pending-payload store, redrive, or retry ladder exists on either side**. Do not ack early inside the Function to dodge the 10s deadline: the documented signature is `handler(request, env)` with no `ctx`, so `ctx.waitUntil()` is likely unavailable and post-response work may be killed.
+- **Cutover is one line in the Function** — `const target = env.V2_WEBHOOK;` — or repointing the Kapso webhook straight at v2 and deleting the Function. The same switch rolls back. No deploy of either service.
 
-**Rejected alternatives.** Two subscriptions fanning out to both services: needs v1's `whitelistMiddleware` edited so it stops replying to v2's users, which is a change to live production code, and the second subscription must be `Kapso (events)` type, whose envelope `normalizeWebhook()` does not parse. A Kapso Function doing the routing: moves the logic outside the repo — no tests, no git, no logs we control, a third deploy surface.
+**Rejected alternatives.** Two subscriptions fanning out to both services: needs v1's `whitelistMiddleware` edited so it stops replying to v2's users, which is a change to live production code, and the second subscription must be `Kapso (events)` type, whose envelope `normalizeWebhook()` does not parse. v2 proxying to v1 in-process: implemented, then deleted — Render->Render is the 429 above, and no amount of timeout, retry, or wake logic reaches it. Relaying through Upstash QStash: works, but adds a third platform, a fixed ~60s delay, and keeps the whole pending/redrive apparatus alive.
 
 **9. Encryption**
 Extend the existing AES-256-GCM pattern to sensitive per-user content. Encrypt values only, never keys. Never encrypt a field used for filtering or sorting.

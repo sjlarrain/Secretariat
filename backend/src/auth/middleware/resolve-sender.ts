@@ -207,11 +207,11 @@ export async function resolveSenderMiddleware(
   }
 
   // Deliberately silent to the sender, but never silent in the logs: this is
-  // where a number that *should* have been proxied to v1, or registered in v2,
-  // disappears without a trace.
+  // where a number that *should* have been registered in v2 disappears without
+  // a trace.
   console.warn(
-    `[inbound] dropped ${phone}: not a registered v2 user, not a third-party contact, ` +
-      `and not routed to v1 — check V1_PROXY_NUMBERS / WHITELISTED_NUMBERS`
+    `[inbound] dropped ${phone}: not a registered v2 user, not a third-party contact ` +
+      `— check WHITELISTED_NUMBERS`
   );
   await recordUnrecognizedSender(phone).catch(() => undefined);
   res.status(200).json({ ok: false, reason: 'unrecognized' });

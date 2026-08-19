@@ -10,7 +10,6 @@ import { fireMbaReminder } from '../core/cron/mba-reminder';
 import { promoteDeferred } from '../core/cron/reminder-promoter';
 import { syncGoogleTasks } from '../core/cron/google-tasks-sync';
 import { runHealthCheck } from '../ops/cron/health-check';
-import { redriveV1Forwards } from './v1-proxy';
 
 // Replaces the five (six, counting the MBA Monday reminder) per-user QStash
 // cron schedules v1/early-v2 created via reconcileSchedules — see
@@ -120,8 +119,6 @@ export interface SweepResult {
   usersProcessed: number;
   fired: Record<string, number>;
   errors: number;
-  /** Undelivered v1 forwards re-driven this tick. Absent once the shim is gone. */
-  v1Redrive?: { delivered: number; stillPending: number; expired: number };
 }
 
 /** Entry point for POST /internal/tick. `now` is injectable for tests. */
@@ -138,22 +135,9 @@ export async function runSweep(now: Date = new Date()): Promise<SweepResult> {
     )
   );
 
-  // Not per-user and not schedule-driven: the v1 proxy acks Kapso before it has
-  // delivered, which forfeits Kapso's retries, so this sweep is the only thing
-  // that will ever pick a stranded message back up. Runs after the per-user
-  // work so a slow, cold v1 can't delay anyone's digest.
-  let v1Redrive: SweepResult['v1Redrive'];
-  try {
-    v1Redrive = await redriveV1Forwards();
-  } catch (err) {
-    counters.errors++;
-    console.error('Sweeper: v1 forward redrive failed:', err);
-  }
-
   return {
     usersProcessed: users.length,
     fired: counters.fired,
     errors: counters.errors,
-    ...(v1Redrive ? { v1Redrive } : {}),
   };
 }

@@ -34,7 +34,7 @@ function escapeHtml(str: string): string {
  * single-use token before the recipient ever taps it. Consumption happens
  * only on the POST the button below fires.
  */
-function loginPage(token: string): string {
+export function loginPage(token: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -88,10 +88,16 @@ function loginPage(token: string): string {
           btn.remove();
           return;
         }
+        // The SPA picks which panel to render from the URL alone (App.tsx:
+        // pathname.startsWith('/app') → user panel), not from the session. So
+        // the operator has to be sent to /dashboard explicitly or their
+        // admin-capable session lands in the user tree with no way across.
+        var destination = body.operator ? '/dashboard' : '/app';
         document.getElementById('title').textContent = 'Signed in';
-        document.getElementById('message').textContent = "You're signed in as " + body.name + ". Taking you to your panel…";
+        document.getElementById('message').textContent =
+          "You're signed in as " + body.name + '. Taking you to ' + (body.operator ? 'the console' : 'your panel') + '…';
         btn.remove();
-        setTimeout(function () { window.location.href = '/app'; }, 800);
+        setTimeout(function () { window.location.href = destination; }, 800);
       } catch (err) {
         document.getElementById('title').textContent = 'Something went wrong';
         document.getElementById('message').textContent = 'Check your connection and try again.';

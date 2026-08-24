@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { env, whitelistedNumbers } from '../shared/env';
+import { operatorId } from '../auth/operator';
 import {
   getAllAccounts,
   getAccount,
@@ -61,7 +62,7 @@ const router = Router();
 // one whitelisted owner's namespace, the same fallback used by crons and
 // third-party handling.
 function ownerId(): string {
-  return whitelistedNumbers[0];
+  return operatorId();
 }
 
 const loginRateLimit = rateLimit({
@@ -84,12 +85,34 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
 // --- Auth ---
 router.post('/login', loginRateLimit, (req: Request, res: Response) => {
   const { username, password } = req.body as { username?: string; password?: string };
-  if (username === env.ADMIN_USERNAME && password === env.ADMIN_PASSWORD) {
-    (req.session as { authenticated?: boolean }).authenticated = true;
-    res.json({ ok: true });
-  } else {
+  if (username !== env.ADMIN_USERNAME || password !== env.ADMIN_PASSWORD) {
     res.status(401).json({ error: 'Invalid credentials' });
+    return;
   }
+
+  // Regenerate the session id on sign-in, matching the panel login: a session
+  // id issued before authentication must not be fixable by an attacker and
+  // ride along afterward.
+  req.session.regenerate((err) => {
+    if (err) {
+      res.status(500).json({ error: 'Could not start a session.' });
+      return;
+    }
+    // The password is itself the credential, so this grant is unconditional —
+    // deliberately not routed through `grantFor()`, which answers a different
+    // question ("is this userId the operator?") and would make admin access
+    // depend on WHITELISTED_NUMBERS being set correctly.
+    (req.session as { authenticated?: boolean }).authenticated = true;
+
+    // Additionally scope a user session to the operator's own namespace, so
+    // /app/* shows the same profile after a password login as it does after a
+    // panel link. Absent only when WHITELISTED_NUMBERS is unset, in which case
+    // the ops session still stands on its own. See auth/operator.ts.
+    const owner = operatorId();
+    if (owner) (req.session as { userId?: string }).userId = owner;
+
+    res.json({ ok: true });
+  });
 });
 
 router.post('/logout', (req: Request, res: Response) => {

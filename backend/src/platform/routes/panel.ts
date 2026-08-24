@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { consumePanelLoginToken } from '../../auth/panel-sessions';
 import { getRegisteredUser } from '../../auth/users';
+import { grantFor } from '../../auth/operator';
 
 // Public, unauthenticated — the entry point for the per-user panel
 // (docs/v2-plan.md §B.4). There is no password: the one-time link a `/panel`
@@ -127,8 +128,13 @@ router.post('/login/:token', panelRateLimit, async (req: Request, res: Response)
       res.status(500).json({ ok: false, error: 'Could not start a session.' });
       return;
     }
-    (req.session as { userId?: string }).userId = userId;
-    res.json({ ok: true, name: escapeHtml(user.name) });
+    // The operator's link also unlocks the ops console. Their number is a
+    // normal user id, so this is one profile reached through another door —
+    // not an elevation to some separate admin account. See auth/operator.ts.
+    const grant = grantFor(userId);
+    (req.session as { userId?: string }).userId = grant.userId;
+    if (grant.authenticated) (req.session as { authenticated?: boolean }).authenticated = true;
+    res.json({ ok: true, name: escapeHtml(user.name), operator: grant.authenticated });
   });
 });
 

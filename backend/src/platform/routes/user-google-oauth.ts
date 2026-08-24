@@ -6,7 +6,18 @@ import { saveAccount, encryptTokens, getAllAccounts } from '../../core/integrati
 import { env } from '../../shared/env';
 import { pointKey } from '../../shared/redis/keys';
 import { requireUserSession, UserSessionRequest } from '../../auth/middleware/user-session';
-import { escapeHtml, callbackPage } from '../../shared/oauth-callback-page';
+import {
+  escapeHtml,
+  callbackPage,
+  USER_RETURN,
+  type CallbackPageVariant,
+} from '../../shared/oauth-callback-page';
+
+// Every page rendered by this router belongs to the per-user flow, so it must
+// return the visitor to their own panel — not the ops console the shared
+// default points at.
+const userCallbackPage = (variant: CallbackPageVariant, title: string, message: string) =>
+  callbackPage(variant, title, message, USER_RETURN);
 
 // The per-user counterpart to ops/routes/google-oauth.ts's admin-gated OAuth flow
 // (docs/v2-plan.md: "Per-user OAuth belongs in the user panel, not ops").
@@ -62,18 +73,18 @@ router.get('/google/callback', requireUserSession, async (req: Request, res: Res
   const error = req.query['error'] as string | undefined;
 
   if (error) {
-    res.status(400).send(callbackPage('error', 'OAuth Error', `Google returned: <strong>${escapeHtml(String(error))}</strong>`));
+    res.status(400).send(userCallbackPage('error', 'OAuth Error', `Google returned: <strong>${escapeHtml(String(error))}</strong>`));
     return;
   }
 
   if (!code || !state) {
-    res.status(400).send(callbackPage('error', 'Missing Parameters', 'The OAuth callback is missing a code or state parameter.'));
+    res.status(400).send(userCallbackPage('error', 'Missing Parameters', 'The OAuth callback is missing a code or state parameter.'));
     return;
   }
 
   const pending = await getRedis().get<{ alias: string; type: typeof ALLOWED_TYPES[number]; userId: string }>(stateKey(state));
   if (!pending) {
-    res.status(400).send(callbackPage('error', 'Session Expired', 'This OAuth link has expired or already been used. Please start the connection flow again from your panel.'));
+    res.status(400).send(userCallbackPage('error', 'Session Expired', 'This OAuth link has expired or already been used. Please start the connection flow again from your panel.'));
     return;
   }
 
@@ -84,7 +95,7 @@ router.get('/google/callback', requireUserSession, async (req: Request, res: Res
   // one that requested it, on top of the state id itself being unguessable.
   const sessionUserId = (req as UserSessionRequest).userCtx.userId;
   if (pending.userId !== sessionUserId) {
-    res.status(403).send(callbackPage('error', 'Session Mismatch', 'This connection link was requested from a different session. Please start again from your panel.'));
+    res.status(403).send(userCallbackPage('error', 'Session Mismatch', 'This connection link was requested from a different session. Please start again from your panel.'));
     return;
   }
 
@@ -107,14 +118,14 @@ router.get('/google/callback', requireUserSession, async (req: Request, res: Res
       isDisconnected: false,
     });
 
-    res.send(callbackPage(
+    res.send(userCallbackPage(
       'success',
       'Connected!',
       `Google <strong>${escapeHtml(pending.type)}</strong> account <strong>"${escapeHtml(pending.alias)}"</strong> was connected successfully.`,
     ));
   } catch (err) {
     console.error('Google OAuth callback error (user flow):', err);
-    res.status(500).send(callbackPage('error', 'Connection Failed', 'Something went wrong on the server. Check the server logs for details.'));
+    res.status(500).send(userCallbackPage('error', 'Connection Failed', 'Something went wrong on the server. Check the server logs for details.'));
   }
 });
 

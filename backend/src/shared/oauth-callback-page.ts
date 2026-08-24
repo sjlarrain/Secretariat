@@ -14,7 +14,27 @@ export function escapeHtml(str: string): string {
 
 export type CallbackPageVariant = 'success' | 'error';
 
-export function callbackPage(variant: CallbackPageVariant, title: string, message: string): string {
+/** Where the page's button sends the visitor once they're done reading it. */
+export interface CallbackReturn {
+  href: string;
+  label: string;
+}
+
+/**
+ * The two flows finish in different places, and neither is `/`. That was the v1
+ * destination, when `/` *was* the dashboard; v2.0 moved the console to
+ * /dashboard and made `/` the public Welcome page, which left this button
+ * dropping people on the landing page after a successful connect.
+ */
+export const OPS_RETURN: CallbackReturn = { href: '/settings/accounts', label: 'Back to the console' };
+export const USER_RETURN: CallbackReturn = { href: '/app/settings/accounts', label: 'Back to your panel' };
+
+export function callbackPage(
+  variant: CallbackPageVariant,
+  title: string,
+  message: string,
+  back: CallbackReturn = OPS_RETURN
+): string {
   const isSuccess = variant === 'success';
   const icon = isSuccess ? '✓' : '✕';
   const iconColor = isSuccess ? '#4ade80' : '#f87171';
@@ -63,7 +83,7 @@ export function callbackPage(variant: CallbackPageVariant, title: string, messag
     <div class="icon">${icon}</div>
     <h1>${escapeHtml(title)}</h1>
     <p>${message}</p>
-    <a class="btn" href="/">Back to admin panel</a>
+    <a class="btn" href="${escapeHtml(back.href)}">${escapeHtml(back.label)}</a>
     <div class="brand">SECRETARIAT</div>
   </div>
 </body>

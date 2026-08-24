@@ -227,9 +227,32 @@ function MobileHome({ onLogout, navLinks, tagline }: {
   );
 }
 
+/**
+ * Where the back arrow goes: one level up the URL, or the panel's home when
+ * already at the top level. Deliberately not `navigate(-1)` — history-based
+ * back lands wherever the user happened to come from, so arriving at a page
+ * from the public Welcome page (or straight from the panel sign-in redirect)
+ * sent "back" to Welcome instead of the console.
+ *
+ * `/app` prefixed paths are the per-user panel and keep that prefix, matching
+ * how AppInner picks which API client to use.
+ */
+function parentPath(pathname: string): string {
+  const inUserPanel = pathname.startsWith('/app');
+  const home = inUserPanel ? '/app' : '/dashboard';
+
+  const segments = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+  // The panel prefix itself is not a level you can go up from.
+  const topLevel = inUserPanel ? 2 : 1;
+  if (segments.length <= topLevel) return home;
+
+  return '/' + segments.slice(0, -1).join('/');
+}
+
 // ── Mobile sub-page layout ─────────────────────────────────
 function MobileLayout({ children, title }: { children: React.ReactNode; title: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
@@ -241,7 +264,7 @@ function MobileLayout({ children, title }: { children: React.ReactNode; title: s
         background: 'var(--bg-nav)', borderBottom: '1px solid var(--border)',
       }}>
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate(parentPath(location.pathname))}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--blue-bright)', fontSize: 24, padding: '8px 10px',

@@ -26,6 +26,16 @@ function getRedis(): Redis {
   return _redis;
 }
 
+/**
+ * Where Google sends the user back for *this* flow. The ops flow keeps
+ * `GOOGLE_REDIRECT_URI`; this one finishes at its own callback, so it must say
+ * so on both the auth request and the token exchange (see getOAuthClient).
+ * Register this exact URI on the OAuth client in the Google console.
+ */
+function userRedirectUri(): string {
+  return `${env.BASE_URL.replace(/\/$/, '')}/auth/user/google/callback`;
+}
+
 function stateKey(id: string) {
   return pointKey('oauth-state', id);
 }
@@ -43,7 +53,7 @@ router.get('/google/start', requireUserSession, async (req: Request, res: Respon
   const state = uuidv4();
   await getRedis().set(stateKey(state), { alias, type, userId }, { ex: STATE_TTL_SECONDS });
 
-  res.redirect(getAuthUrl(state));
+  res.redirect(getAuthUrl(state, userRedirectUri()));
 });
 
 router.get('/google/callback', requireUserSession, async (req: Request, res: Response) => {
@@ -79,7 +89,7 @@ router.get('/google/callback', requireUserSession, async (req: Request, res: Res
   }
 
   try {
-    const tokens = await exchangeCode(code);
+    const tokens = await exchangeCode(code, userRedirectUri());
     const existingAccounts = await getAllAccounts(pending.userId);
     const existing = existingAccounts.find((a) => a.alias === pending.alias && a.type === pending.type);
     const isFirstOfType = !existingAccounts.some((a) => a.type === pending.type);

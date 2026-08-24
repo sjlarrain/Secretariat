@@ -1,16 +1,29 @@
 import { google } from 'googleapis';
 import { env } from '../../../shared/env';
 
-export function getOAuthClient() {
+/**
+ * `redirectUri` overrides `GOOGLE_REDIRECT_URI` for flows that finish somewhere
+ * else. There are two callbacks — `/auth/google/callback` (ops) and
+ * `/auth/user/google/callback` (the per-user panel) — and a single env var can
+ * only name one, so without this the per-user flow sent users to the ops
+ * callback, which demands an admin session. Both URIs must be registered on the
+ * OAuth client in the Google console.
+ *
+ * Google requires the `redirect_uri` at token exchange to match the one used to
+ * obtain the code, so whatever is passed to `getAuthUrl()` must also be passed
+ * to `exchangeCode()`. Refreshing a token does not use it, so
+ * `getAuthenticatedClient()` needs no override.
+ */
+export function getOAuthClient(redirectUri?: string) {
   return new google.auth.OAuth2(
     env.GOOGLE_CLIENT_ID,
     env.GOOGLE_CLIENT_SECRET,
-    env.GOOGLE_REDIRECT_URI
+    redirectUri ?? env.GOOGLE_REDIRECT_URI
   );
 }
 
-export function getAuthUrl(state: string): string {
-  const client = getOAuthClient();
+export function getAuthUrl(state: string, redirectUri?: string): string {
+  const client = getOAuthClient(redirectUri);
   return client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -22,12 +35,14 @@ export function getAuthUrl(state: string): string {
   });
 }
 
-export async function exchangeCode(code: string): Promise<{
+export async function exchangeCode(code: string, redirectUri?: string): Promise<{
   access_token: string;
   refresh_token: string;
   expiry_date: number;
 }> {
-  const client = getOAuthClient();
+  // Must be the same value `getAuthUrl()` was given, or Google rejects the
+  // exchange with redirect_uri_mismatch.
+  const client = getOAuthClient(redirectUri);
   const { tokens } = await client.getToken(code);
   if (!tokens.access_token || !tokens.refresh_token) {
     throw new Error('Missing tokens from Google OAuth response');

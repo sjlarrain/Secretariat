@@ -258,6 +258,56 @@ async function resolveQueued(
   };
 }
 
+// ── Account inspection ────────────────────────────────────────────────────────
+
+export interface AccountRow {
+  id: string;
+  alias: string;
+  type: string;
+  isDefault: boolean;
+  calendars: number;
+  /** Present in v1 too, so this row is the migrated one. */
+  fromV1: boolean;
+}
+
+/**
+ * Connected accounts are keyed by a UUID minted at connect time, not by the
+ * Google identity — the record has no email field at all. So an account linked
+ * directly in v2 and the same Google account migrated from v1 are two rows with
+ * two different ids and, usually, the same alias. The UI shows no ids, which
+ * makes the pair impossible to tell apart by eye.
+ *
+ * Matching v2's ids against v1's resolves it: an id v1 also has came from the
+ * migration and carries the sub-calendar selection configured there; anything
+ * else was linked in v2 and is the redundant copy.
+ */
+export function classifyAccounts(
+  v1Accounts: V1Account[],
+  v2Accounts: Record<string, Record<string, unknown>>
+): AccountRow[] {
+  const v1Ids = new Set(v1Accounts.map((a) => a.id));
+
+  return Object.values(v2Accounts).map((a) => ({
+    id: String(a.id),
+    alias: String(a.alias ?? ''),
+    type: String(a.type ?? ''),
+    isDefault: a.isDefault === true,
+    calendars: Array.isArray(a.enabledCalendarIds) ? a.enabledCalendarIds.length : 0,
+    fromV1: v1Ids.has(String(a.id)),
+  }));
+}
+
+/** Read-only: lists v2's accounts and says which came from v1. Writes nothing. */
+export async function inspectAccounts(deps: {
+  v1Redis: RedisLike;
+  v2Redis: RedisLike;
+  userId: string;
+}): Promise<AccountRow[]> {
+  const v1Accounts = (await deps.v1Redis.get<V1Account[]>(V1_ACCOUNTS_KEY)) ?? [];
+  const v2Accounts = (await deps.v2Redis.hgetall<Record<string, unknown>>(userKey(deps.userId, 'accounts'))) ?? {};
+  return classifyAccounts(v1Accounts, v2Accounts);
+}
+
 // ── Migration ─────────────────────────────────────────────────────────────────
 
 export interface MigrationDeps {
@@ -521,6 +571,7 @@ interface Args {
   to: string;
   apply: boolean;
   skipQstash: boolean;
+  inspect: boolean;
 }
 
 export function parseArgs(argv: string[]): Args {
@@ -529,6 +580,7 @@ export function parseArgs(argv: string[]): Args {
     const arg = argv[i];
     if (arg === '--apply') out.apply = true;
     else if (arg === '--skip-qstash') out.skipQstash = true;
+    else if (arg === '--inspect') out.inspect = true;
     else if (arg.startsWith('--')) out[arg.slice(2)] = argv[++i] ?? '';
   }
 
@@ -537,7 +589,9 @@ export function parseArgs(argv: string[]): Args {
   const to = String(out.to ?? '');
 
   if (!user || !from || !to) {
-    throw new Error('Usage: migrate-v1-user.ts --user <+E164> --from <v1.env> --to <v2.env> [--apply] [--skip-qstash]');
+    throw new Error(
+      'Usage: migrate-v1-user.ts --user <+E164> --from <v1.env> --to <v2.env> [--apply] [--skip-qstash] [--inspect]'
+    );
   }
   // Every runtime path normalizes an inbound number to a leading '+' before it
   // becomes a userId (auth/middleware/resolve-sender.ts, platform/routes/register.ts).
@@ -546,7 +600,14 @@ export function parseArgs(argv: string[]): Args {
     throw new Error(`--user must be E.164 with a leading '+' (e.g. +56991296313); got "${user}"`);
   }
 
-  return { user, from, to, apply: out.apply === true, skipQstash: out.skipQstash === true };
+  return {
+    user,
+    from,
+    to,
+    apply: out.apply === true,
+    skipQstash: out.skipQstash === true,
+    inspect: out.inspect === true,
+  };
 }
 
 /** Parses a dotenv file without touching `process.env`. Values are never logged. */
@@ -598,9 +659,40 @@ async function main(): Promise<void> {
     console.log('');
   }
 
+  const v1Redis = new Redis({ url: v1Env.UPSTASH_REDIS_REST_URL, token: v1Env.UPSTASH_REDIS_REST_TOKEN });
+  const v2Redis = new Redis({ url: v2Env.UPSTASH_REDIS_REST_URL, token: v2Env.UPSTASH_REDIS_REST_TOKEN });
+
+  if (args.inspect) {
+    const rows = await inspectAccounts({ v1Redis, v2Redis, userId: args.user });
+    if (rows.length === 0) {
+      console.log('  No connected accounts in v2.');
+      console.log('');
+      return;
+    }
+    console.log('  origin      alias                type      default  calendars  id');
+    for (const r of rows) {
+      console.log(
+        `  ${(r.fromV1 ? 'migrated' : 'v2-only ').padEnd(11)} ${r.alias.padEnd(20)} ${r.type.padEnd(9)} ` +
+          `${(r.isDefault ? 'yes' : '-').padEnd(8)} ${String(r.calendars).padEnd(10)} ${r.id}`
+      );
+    }
+    const duplicates = rows.filter((r) => !r.fromV1);
+    console.log('');
+    if (duplicates.length) {
+      console.log(`  ${duplicates.length} account(s) were linked in v2 directly, not migrated.`);
+      console.log('  Where an alias appears twice, the "v2-only" row is the redundant copy —');
+      console.log("  the migrated one carries v1's sub-calendar selection. Disconnect the");
+      console.log('  v2-only one from ops -> Accounts, then re-set the default.');
+    } else {
+      console.log('  Every account came from the migration; nothing is duplicated.');
+    }
+    console.log('');
+    return;
+  }
+
   const result = await runMigration({
-    v1Redis: new Redis({ url: v1Env.UPSTASH_REDIS_REST_URL, token: v1Env.UPSTASH_REDIS_REST_TOKEN }),
-    v2Redis: new Redis({ url: v2Env.UPSTASH_REDIS_REST_URL, token: v2Env.UPSTASH_REDIS_REST_TOKEN }),
+    v1Redis,
+    v2Redis,
     v1Queue: wrapQueue(new QStash({ token: v1Env.QSTASH_TOKEN, ...(v1Env.QSTASH_URL ? { baseUrl: v1Env.QSTASH_URL } : {}) })),
     v2Queue: wrapQueue(new QStash({ token: v2Env.QSTASH_TOKEN, ...(v2Env.QSTASH_URL ? { baseUrl: v2Env.QSTASH_URL } : {}) })),
     userId: args.user,

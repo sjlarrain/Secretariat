@@ -60,6 +60,8 @@
 | v2.0 | Landing page at `/` — public Welcome replaces the ops dashboard, which moves to `/dashboard` | ✅ Done | Easy |
 | v2.0 | `/example` — worked, copy-pasteable examples per command; every example is parser-tested | ✅ Done | Easy |
 | **v2.1 — Secretariat for Groups** | | | |
+| v2.1 | Canary flag — `canary: true` on `RegisteredUser`, gating a risky feature to Santiago's number only until it is flipped on for everyone | ⬜ Pending | Easy |
+| v2.1 | _Deliberately not built in v2.0: per-user namespacing already means a feature only Santiago has data for only affects Santiago. Add this when a change is risky enough to need staging, not before._ | | |
 | v2.1 | Group chat support — bot in WhatsApp group, @mention activation, shared ideas + group reminders | 🔒 Blocked | Hard |
 | v2.1 | _Blocked: WhatsApp Business Cloud API does not support sending to group chats. Revisit when Kapso/Meta adds group messaging to the API._ | | |
 | **v2.2 — Admin Secrets Manager** | | | |

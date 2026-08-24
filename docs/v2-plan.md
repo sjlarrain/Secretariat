@@ -12,7 +12,8 @@ Transform Secretariat from a single-user bot into a multi-user platform serving 
 
 - One repo, one branch (`multiuser`), **one deployable** — four directories inside a single Express app, not four Render services.
 - v1 stays on its current Render service and Upstash DB. v2 gets its own of each.
-- One shared WhatsApp number. v2 owns the Kapso webhook; Santiago's own number is proxied to v1 until cutover.
+- One shared WhatsApp number. v2 owns the Kapso webhook; Santiago's own number is routed to v1 by the Kapso Function until cutover.
+- **No feature is ever built on v1 and ported forward.** Santiago's number moves onto v2 and `master` goes fixes-only; v2 is then the only place features are written. A v1 canary was considered and rejected — the branches no longer share the storage, scheduling, or identity layers, so a feature debugged on v1 arrives in v2 as never-run code. Moving the number also gives v2 the daily user it otherwise would not have before real users arrive. Prerequisite is the data migration, `backend/src/scripts/migrate-v1-user.ts`.
 - Merge direction is one-way: `main → multiuser`. Never the reverse.
 
 ---

@@ -16,6 +16,7 @@ This branch converts Secretariat from a single-user bot into a multi-user platfo
 - **Never merge, rebase, or cherry-pick.** These are Santiago's to run.
 - Never commit to or push to `main`. `main` deploys to the live v1 service that is in daily use.
 - Push to `origin multiuser` only.
+- **v1 is fixes-only, and no feature is ported forward from it.** Features are written on `multiuser` and nowhere else — see `docs/v2-plan.md` ground rules. If a request implies building something on v1 first and moving it over, stop and report.
 
 ### Hard constraints
 
